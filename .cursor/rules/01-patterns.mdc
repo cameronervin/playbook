@@ -1,0 +1,50 @@
+---
+description: SOLID principles and design patterns for all code
+globs: 
+alwaysApply: true
+---
+# Patterns & SOLID
+
+## DO
+- **S** Single Responsibility → One reason to change per class
+- **O** Open/Closed → Extend via new classes, not if/elif chains
+- **D** Dependency Inversion → Inject abstractions via `Depends()`
+- **Repository** → All DB access through repository classes
+- **Factory** → Use when object creation varies by config
+
+## DON'T
+- Create interfaces "for future flexibility"
+- Use Factory if only one implementation exists
+- Use Observer if only one subscriber
+- Abstract everything - start simple, refactor when needed
+- Inherit when composition works
+
+## Anti-Patterns
+| Smell | Fix |
+|-------|-----|
+| God class | Split by responsibility |
+| Logic in routes | Move to services |
+| Hard-coded deps | Use DI (`Depends()`) |
+| Deep nesting | Early returns |
+| Copy-paste | Extract function |
+| Magic strings | Named constants |
+
+## Pattern Decision
+```
+DB access?        → Repository (always)
+Creation varies?  → Factory
+Event → N actions?→ Observer  
+Swappable algo?   → Strategy
+Testable code?    → Dependency Injection (always)
+None of above?    → Keep it simple
+```
+
+## Always Remember
+- **Security**: Validate input, never log secrets, no `*` CORS
+- **Errors**: Use custom exceptions, proper HTTP codes
+- **Types**: All functions have return types
+- **TDD**: Non-trivial features → write failing test first
+
+## Before Implementing
+1. **ASK** → Use `AskUserQuestion` tool when ambiguous. Never assume.
+2. **TDD** → Non-trivial? Write failing test before implementation.

@@ -1,0 +1,35 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+node_modules/
+dist/
+build/
+.next/
+.idea/
+.vscode/
+.DS_Store
+*.log
+.coverage
+.pytest_cache/
+coverage/
+
+# Environment files - never commit secrets
+deploy/envs/.env.*
+!deploy/envs/.env.*.example
+!deploy/envs/.env.prod.example
+deploy/compose/.env
+
+# Local dev startup scripts (not for CI/prod)
+*.ps1
+
+# Local MCP and editor/agent settings (machine-specific)
+.mcp.json
+settings.local.json
+
+# Celery beat schedule persistence (runtime state, machine-specific)
+celerybeat-schedule
+celerybeat-schedule.bak
+celerybeat-schedule.dir
+celerybeat-schedule.dat

@@ -1,0 +1,76 @@
+# Local development overrides — bind mounts, hot reload, exposed ports.
+# Usage: docker compose -f base.yml -f local.yml up
+
+services:
+  db:
+    ports:
+      - "5433:5432"
+    env_file:
+      - ../envs/.env.local
+    environment:
+      - POSTGRES_USER=app
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-localpass}
+      - POSTGRES_DB=appdb
+
+  valkey:
+    ports:
+      - "6379:6379"
+    env_file:
+      - ../envs/.env.local
+
+  backend:
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../envs/.env.local
+    volumes:
+      - ../../backend:/app/backend
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  frontend:
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../envs/.env.local
+    volumes:
+      - ../../frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+
+  # Local S3 via LocalStack (see docs/guides/localstack_setup.md).
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  celery-worker:
+    env_file:
+      - ../envs/.env.local
+    volumes:
+      - ../../backend:/app/backend
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+volumes:
+  localstack_data:

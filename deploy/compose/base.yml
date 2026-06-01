@@ -1,0 +1,77 @@
+# Base configuration — shared across all environments.
+# Usage: docker compose -f base.yml -f <env>.yml up
+#
+# Environment-specific values (ports, volumes, replicas, env files) live in the
+# override files (local.yml / dev.yml / prod.yml).
+
+services:
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Valkey — broker/result backend for Celery (optional async work).
+  valkey:
+    image: valkey/valkey:7-alpine
+    command: valkey-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - valkey_data:/data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: ../deploy/docker/Dockerfile.backend
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: ../deploy/docker/Dockerfile.frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Optional async worker. Enable with the "worker" profile:
+  #   docker compose -f base.yml -f <env>.yml --profile worker up
+  celery-worker:
+    build:
+      context: ../../backend
+      dockerfile: ../deploy/docker/Dockerfile.backend
+    command: celery -A app.infrastructure.tasks.celery_app worker --concurrency=2 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - worker
+
+volumes:
+  postgres_data:
+  valkey_data:
+
+networks:
+  default:
+    name: agentic-app-network

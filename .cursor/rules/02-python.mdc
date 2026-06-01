@@ -1,0 +1,47 @@
+---
+description: Python FastAPI and SQLAlchemy coding standards
+globs: backend/**/*.py
+alwaysApply: false
+---
+# Python Rules (FastAPI + SQLAlchemy)
+
+## Layers
+```
+Route (max 10 lines) → Service (logic) → Repository (data) → Model
+```
+
+## DO
+- Routes: Parse request, call service, return response
+- Services: Business logic, orchestrate repos, raise domain errors
+- Repos: CRUD only, use `select()` not `query()`, eager load relations
+- Models: `Mapped[]` types, `ForeignKey(..., ondelete="CASCADE")`
+- Always: async, type hints, Pydantic for DTOs
+
+## DON'T
+- SQL or business logic in routes
+- HTTP concerns in services
+- Business decisions in repositories
+- Return ORM models from services (return DTOs)
+- Block event loop (`time.sleep`, `requests`)
+
+## Anti-Patterns
+| Smell | Fix |
+|-------|-----|
+| Fat route | Extract to service |
+| N+1 queries | `selectinload()` |
+| No types | Add `-> ReturnType` |
+| Raw SQL in service | Move to repository |
+| `db.query()` | Use `select()` (SQLAlchemy 2.0) |
+
+## Example
+```python
+# Route - thin
+@router.post("/items", response_model=ItemResponse)
+async def create(data: ItemCreate, service: ItemService = Depends()):
+    return await service.create(data)
+
+# Service - logic + DI
+class ItemService:
+    def __init__(self, repo: ItemRepository = Depends()):
+        self.repo = repo
+```

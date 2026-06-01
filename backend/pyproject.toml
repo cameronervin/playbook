@@ -1,0 +1,36 @@
+[project]
+name = "agentic-app-scaffold-backend"
+version = "0.1.0"
+description = "Reusable FastAPI + LangGraph backend scaffold (Anthropic-first)."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests requiring external services",
+    "db: marks tests that require the test database",
+]
+
+[tool.coverage.run]
+branch = false
+source = ["app"]
+omit = [
+    "app/db/base.py",
+    "*/migrations/*",
+    "*/alembic/*",
+    # Celery/worker entrypoints and thin pass-through repositories are better
+    # covered by integration tests than the unit suite.
+    "app/tasks/session.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

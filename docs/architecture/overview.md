@@ -1,0 +1,124 @@
+# Architecture Overview
+
+> Template — replace the `Example` domain entity and any placeholder names with your product's concepts.
+
+## System Diagram
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Frontend                              │
+│  Next.js (App Router) + TypeScript + Tailwind v4            │
+│  TanStack Query (server state) + Zustand (client state)     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     API Gateway (nginx)                      │
+│  Serves frontend, proxies /api → backend                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      FastAPI Backend                         │
+│  API → Services → Repositories → Models                     │
+│  Agents (LangGraph) → Chains → Nodes → Graphs → Executors   │
+└─────────────────────────────────────────────────────────────┘
+              │                               │
+    ┌─────────┴─────────┬─────────────────────┴───────────────┐
+    ▼                   ▼                                     ▼
+┌──────────────┐  ┌──────────────┐       ┌─────────────────────────────┐
+│  PostgreSQL  │  │  AWS S3 /    │       │   LLM Providers             │
+│ Data storage │  │  LocalStack  │       │   Direct (Anthropic-first)  │
+│              │  │ File storage │       │   or Gateway (LiteLLM)      │
+└──────────────┘  └──────────────┘       └─────────────────────────────┘
+       │
+       ▼
+┌──────────────┐   (optional async)
+│ Valkey + Celery │  background jobs / long-running agent runs
+└──────────────┘
+```
+
+## Layers
+
+### Backend
+```
+app/
+├── api/v1/            # HTTP endpoints (thin — parse, call service, return)
+├── services/          # Business logic, orchestration
+├── repositories/      # Data access (all DB access goes through here)
+├── models/            # SQLAlchemy 2.0 ORM (Mapped[] types)
+├── schemas/           # Pydantic DTOs (request/response)
+├── agents/            # LangGraph orchestration
+│   ├── chains/        # Per-task LLM chains
+│   ├── nodes/         # Graph nodes (load/save state, router, etc.)
+│   ├── graphs/        # Graph assembly (wires nodes into a runnable graph)
+│   ├── executors/     # Run/resume a graph, manage checkpoints
+│   ├── context/       # Context injection policies and serializers
+│   ├── prompts/       # Task-specific prompts
+│   └── tools/         # Agent tools (e.g. example_tool)
+└── infrastructure/    # External integrations
+    ├── storage/       # S3 client (boto3)
+    ├── llm/           # LLM providers (direct + gateway)
+    └── tasks/         # Celery app + tasks (optional)
+```
+
+### Frontend
+```
+src/
+├── app/             # Next.js App Router routes (layouts, pages, route handlers)
+├── features/        # Feature modules
+│   └── [feature]/
+│       ├── components/  # Feature-specific components
+│       ├── hooks/       # Feature-specific hooks
+│       └── index.ts     # Public exports
+├── components/      # Reusable UI (ui/, layout/)
+├── hooks/           # App-wide hooks
+├── store/           # Zustand stores (client state)
+├── lib/             # API client, constants, utils
+└── types/           # TypeScript type definitions
+```
+
+## Tech Stack
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js (App Router), TypeScript, Tailwind v4, TanStack Query, Zustand |
+| Backend | FastAPI, SQLAlchemy 2.0 (async), Pydantic, Alembic |
+| Agents | LangGraph, LangChain |
+| LLM | Anthropic (direct, default); LiteLLM (gateway, optional) |
+| Database | PostgreSQL |
+| Storage | AWS S3, LocalStack (dev) |
+| Async (optional) | Valkey (broker/backend) + Celery |
+| Observability | structlog |
+| Deploy | Docker Compose, nginx |
+
+## Provider / Factory Pattern
+
+LLM access is abstracted behind a provider factory so the rest of the app never
+imports a vendor SDK directly:
+
+- A `BaseLLMProvider` exposes `get_chat_model()` (and streaming/structured
+  variants). Application code and agents depend on this abstraction, not on a
+  concrete client.
+- Transport is selected by `LLM_PROVIDER_MODE`:
+  - `direct` — call the provider SDK directly (Anthropic-first default).
+  - `gateway` — route through a LiteLLM proxy (OpenAI-compatible) for
+    multi-provider routing, fallbacks, and centralized cost/rate controls.
+- Swapping a model or provider is a config change, not a code change. See
+  [ADR 0002](decisions/0002-llm-provider-modes.md).
+
+The same pattern applies to storage (an S3-compatible client that points at
+LocalStack in dev and real S3 in prod) and any other swappable infrastructure.
+
+## Request Lifecycle
+
+1. **Frontend** issues a request via the typed API client (TanStack Query).
+2. **nginx** routes `/api/*` to the backend.
+3. **Route** (`api/v1/`) validates input with a Pydantic schema, then calls a
+   service. Routes stay thin (no business logic, no SQL).
+4. **Service** runs business logic, orchestrates repositories, and — for LLM
+   work — invokes an agent graph through an **executor**.
+5. **Repository** performs data access via SQLAlchemy `select()` statements.
+6. **Agent executor** (when involved) runs/resumes a LangGraph graph, persisting
+   checkpoints to Postgres so long runs can resume by `thread_id`.
+7. **Service** returns a DTO; the **route** serializes it via `response_model`.
+8. Long-running work can be offloaded to a **Celery** worker (Valkey broker) and
+   polled by the frontend.

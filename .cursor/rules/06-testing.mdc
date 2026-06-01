@@ -1,0 +1,109 @@
+---
+description: Testing standards for pytest (backend) and Vitest + React Testing Library (frontend)
+globs: "**/tests/**, **/*_test.py, **/*.test.tsx"
+alwaysApply: false
+---
+# Testing Rules
+
+> **TDD First**: For non-trivial features, follow `@.claude/rules/00-tdd.md` (RED → GREEN → REFACTOR)
+
+## Backend Structure (pytest)
+```
+tests/
+├── unit/          # Fast, isolated
+├── integration/   # DB, external services
+└── conftest.py    # Shared fixtures
+```
+
+## DO
+- **Write test first** for new features (TDD)
+- Name: `test_<module>.py`
+- One assert per test (usually)
+- Use `pytest.mark.asyncio` for async
+- Mock external services
+- Use factories for test data
+
+## DON'T
+- Implement before writing test (for non-trivial)
+- Test implementation details
+- Share state between tests
+- Skip tests without reason
+- Mock everything (test real DB in integration)
+
+## TDD Quick Reference
+```bash
+# 1. Write failing test
+pytest tests/unit/test_feature.py -v  # Should FAIL
+
+# 2. Implement minimal solution
+# 3. Run again
+pytest tests/unit/test_feature.py -v  # Should PASS
+
+# 4. Refactor, keep tests green
+pytest -v  # All tests PASS
+```
+
+## Backend Example
+```python
+@pytest.mark.asyncio
+async def test_create_session(db: AsyncSession):
+    repo = ChatRepository(db)
+    session = await repo.create(user_id=uuid4(), title="Test")
+    assert session.title == "Test"
+```
+
+---
+
+## Frontend Testing (Vitest + React Testing Library)
+
+Use **Vitest** as the test runner and **React Testing Library** for component tests.
+
+### Structure
+```
+frontend/
+├── src/
+│   └── **/__tests__/      # Co-located component/hook tests
+│       └── *.test.tsx
+└── vitest.config.ts
+```
+
+### DO
+- Test behavior, not implementation (query by role/label/text, not class)
+- Use `@testing-library/react` queries: `getByRole`, `getByLabelText`, `getByText`
+- Use `@testing-library/user-event` for interactions (not `fireEvent` where possible)
+- Mock network with MSW or by mocking the API module
+- Test custom hooks with `renderHook`
+- Assert with `@testing-library/jest-dom` matchers (`toBeInTheDocument`, `toHaveTextContent`)
+
+### DON'T
+- Query by CSS class or test internal state
+- `await` arbitrary timeouts — use `findBy*` / `waitFor`
+- Render the whole app to test one component
+- Leave `console.log` or `screen.debug()` in committed tests
+
+### Commands
+```bash
+cd frontend
+npm test              # Run all tests (vitest run)
+npm run test:watch    # Watch mode
+npm run test:coverage # Coverage report
+```
+
+### Frontend Example
+```tsx
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, it, expect, vi } from 'vitest'
+import { SubmitButton } from '../SubmitButton'
+
+describe('SubmitButton', () => {
+  it('calls onSubmit when clicked', async () => {
+    const onSubmit = vi.fn()
+    render(<SubmitButton onSubmit={onSubmit}>Send</SubmitButton>)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(onSubmit).toHaveBeenCalledOnce()
+  })
+})
+```

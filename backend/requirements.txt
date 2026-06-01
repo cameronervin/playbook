@@ -1,0 +1,57 @@
+# =============================================================================
+# Agentic App Scaffold — Backend Runtime Dependencies
+# =============================================================================
+# Pinned to recent-but-reasonable minimums. Anthropic-first LLM stack with a
+# LiteLLM gateway option, LangGraph orchestration, Postgres checkpointing,
+# and S3/LocalStack storage.
+
+# --- FastAPI and Core ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# --- Database ---
+sqlalchemy[asyncio]>=2.0.25
+asyncpg>=0.29.0
+alembic>=1.13.0
+
+# --- Authentication ---
+# fastapi-users gives us the auth backend; python-jose is the lightweight
+# alternative for projects that only need to decode/issue JWTs.
+fastapi-users[sqlalchemy,oauth]>=13.0.0
+pyjwt>=2.8.0
+
+# --- LangGraph + LangChain (agent orchestration) ---
+langgraph>=0.2.0
+langgraph-checkpoint-postgres>=1.0.0
+psycopg[binary]>=3.1.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# --- LLM Providers (Anthropic-first) ---
+anthropic>=0.39.0
+langchain-anthropic>=0.3.0
+# LiteLLM gateway is reached via the OpenAI-compatible client.
+litellm>=1.50.0
+langchain-openai>=0.2.0
+# Optional alternative direct providers (uncomment if used in DIRECT mode):
+# langchain-google-genai>=2.0.0
+
+# --- File Storage (S3 / LocalStack) ---
+boto3>=1.35.0
+
+# --- Logging ---
+structlog>=24.1.0
+
+# --- HTTP Client ---
+httpx>=0.27.0
+
+# --- Testing ---
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# --- Code Quality ---
+ruff>=0.6.0
