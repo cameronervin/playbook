@@ -1,0 +1,466 @@
+"""Repository for kb.langchain_pg_* vector persistence + similarity search.
+
+Two flavours, same SQL building blocks:
+  * ``VectorRepository``      — sync; takes a sync ``Engine``; used by Celery
+                                workers during ingestion (load-vector stage).
+  * ``AsyncVectorRepository`` — async; takes an ``AsyncSession``; used by the
+                                FastAPI search/ingest routes.
+
+Both share the module-level ``_build_search_statement`` / ``_iter_chunk_records``
+helpers so the cosine-distance similarity query is defined exactly once.
+"""
+from __future__ import annotations
+
+import uuid
+from typing import Any, TYPE_CHECKING
+
+from sqlalchemy import Integer, cast, delete, func, insert, select
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from app.models.configuration import Configuration
+from app.models.vector_collection import VectorCollection
+from app.models.vector_embedding import VectorEmbedding
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _build_chunk_records(
+    *,
+    document_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    chunks: list[dict],
+    embeddings: list[list[float]],
+) -> list[dict[str, Any]]:
+    """Eager list builder retained for non-streaming callers (search path, tests)."""
+    if len(chunks) != len(embeddings):
+        raise ValueError("chunks and embeddings must have the same length")
+    return list(_iter_chunk_records(
+        document_id=document_id,
+        collection_id=collection_id,
+        chunks=chunks,
+        embeddings=embeddings,
+    ))
+
+
+def _iter_chunk_records(
+    *,
+    document_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    chunks,
+    embeddings,
+):
+    """Yield insertable record dicts one-at-a-time.
+
+    Generator-based to keep peak memory low during bulk INSERT: SQLAlchemy can
+    feed records straight from the iterator into `conn.execute(insert(...))`
+    batches without us first building the full records list. Pairs with
+    `_slice_iter` which slices the generator into KB_VECTOR_INSERT_BATCH_SIZE
+    sub-batches.
+
+    Validation is per-element rather than upfront length check so the generator
+    fails fast on bad input instead of after materialising everything.
+    """
+    chunks_iter = iter(chunks)
+    embeds_iter = iter(embeddings)
+    index = 0
+    for chunk in chunks_iter:
+        try:
+            embedding = next(embeds_iter)
+        except StopIteration:
+            raise ValueError(
+                f"chunks/embeddings length mismatch — exhausted embeddings at chunk index {index}"
+            )
+
+        chunk_text = chunk.get("text")
+        chunk_metadata = chunk.get("metadata", {})
+        if not isinstance(chunk_text, str):
+            raise TypeError("Each chunk must contain a string text field")
+        if not isinstance(chunk_metadata, dict):
+            raise TypeError("Each chunk metadata field must be a dict")
+
+        metadata = {
+            **chunk_metadata,
+            "document_id": str(document_id),
+            "chunk_index": index,
+        }
+        yield {
+            "collection_id": collection_id,
+            "embedding": embedding,
+            "document": chunk_text,
+            "cmetadata": metadata,
+        }
+        index += 1
+
+    # Tail check: embeddings shouldn't have leftovers.
+    leftover = next(embeds_iter, _SENTINEL)
+    if leftover is not _SENTINEL:
+        raise ValueError(
+            f"chunks/embeddings length mismatch — {index} chunks consumed but embeddings still has data"
+        )
+
+
+_SENTINEL = object()
+
+
+def _slice_iter(iterator, batch_size: int):
+    """Yield successive lists of up to `batch_size` elements drained from an iterator.
+
+    Lets `conn.execute(insert(...), batch)` consume a stream without ever
+    materialising the full record list. Empty trailing batch is suppressed.
+    """
+    batch: list = []
+    for item in iterator:
+        batch.append(item)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+def _map_search_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Map a raw search result row to the SearchChunk-compatible dict shape.
+
+    Renames the storage columns to the API contract: document -> text,
+    cmetadata -> metadata. Returns None for rows without a document_id.
+    """
+    doc_id = row.get("document_id")
+    if doc_id is None:
+        return None
+    return {
+        "document_id": uuid.UUID(str(doc_id)),
+        "text": row.get("document", ""),
+        "score": float(row.get("score", 0.0)),
+        "metadata": row.get("cmetadata") or {},
+    }
+
+
+def _build_search_statement(
+    *,
+    collection_id: uuid.UUID,
+    query_vector: list[float],
+    max_docs: int,
+    score_threshold: float,
+    metadata_filter: dict[str, Any] | None,
+):
+    """Build the cosine-distance similarity SELECT shared by both repos.
+
+    score = 1 - cosine_distance, so a score_threshold maps to a maximum
+    allowable distance of (1 - score_threshold). Rows are ordered by ascending
+    distance (most similar first) and capped at max_docs.
+    """
+    distance_expr = VectorEmbedding.embedding.cosine_distance(query_vector)
+    distance_threshold = max(0.0, 1.0 - score_threshold)
+
+    conditions = [
+        VectorEmbedding.collection_id == collection_id,
+        distance_expr <= distance_threshold,
+    ]
+    if metadata_filter:
+        conditions.append(VectorEmbedding.cmetadata.contains(metadata_filter))
+
+    score_expr = (1.0 - distance_expr).label("score")
+    return (
+        select(
+            func.cast(VectorEmbedding.cmetadata["document_id"].astext, UUID(as_uuid=True)).label(
+                "document_id"
+            ),
+            VectorEmbedding.document.label("document"),
+            VectorEmbedding.cmetadata.label("cmetadata"),
+            score_expr,
+        )
+        .where(*conditions)
+        .order_by(distance_expr)
+        .limit(max_docs)
+    )
+
+
+class VectorRepository:
+    """Sync vector persistence + search — used by Celery worker tasks.
+
+    Takes a sync SQLAlchemy ``Engine`` (workers run on a threads pool, not an
+    asyncio loop, so sync I/O is the natural fit here).
+    """
+
+    def __init__(self, pg_engine: "Engine") -> None:
+        self._pg_engine = pg_engine
+
+    def get_or_create_collection_id(self, collection_name: str) -> uuid.UUID:
+        with self._pg_engine.begin() as conn:
+            statement = (
+                pg_insert(VectorCollection)
+                .values(name=collection_name, cmetadata={})
+                .on_conflict_do_update(
+                    index_elements=[VectorCollection.name],
+                    set_={"name": collection_name},
+                )
+                .returning(VectorCollection.uuid)
+            )
+            collection_row = conn.execute(statement).mappings().first()
+            if not collection_row:
+                raise RuntimeError("Could not resolve vector collection id")
+            return collection_row["uuid"]
+
+    def resolve_collection_id_for_configuration(self, configuration_id: uuid.UUID) -> uuid.UUID:
+        with self._pg_engine.begin() as conn:
+            config_row = conn.execute(
+                select(Configuration.collection_name).where(
+                    Configuration.id == configuration_id
+                )
+            ).mappings().first()
+            if not config_row:
+                raise LookupError(f"Configuration not found: {configuration_id}")
+            collection_name = config_row["collection_name"]
+        return self.get_or_create_collection_id(collection_name)
+
+    def upsert_document_embeddings(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        document_id: uuid.UUID,
+        chunks: list[dict],
+        embeddings: list[list[float]],
+    ) -> int:
+        """Wipe-and-rewrite of all vectors for a document.
+
+        Uses a streaming generator + sliced sub-batches so peak memory is
+        bounded by KB_VECTOR_INSERT_BATCH_SIZE records, not the full chunks list.
+        """
+        from app.core.config import settings
+
+        collection_id = self.resolve_collection_id_for_configuration(configuration_id)
+        records_iter = _iter_chunk_records(
+            document_id=document_id,
+            collection_id=collection_id,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
+        batch_size = settings.KB_VECTOR_INSERT_BATCH_SIZE
+        inserted = 0
+        with self._pg_engine.begin() as conn:
+            conn.execute(
+                delete(VectorEmbedding).where(
+                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                )
+            )
+            for sub_batch in _slice_iter(records_iter, batch_size):
+                conn.execute(insert(VectorEmbedding), sub_batch)
+                inserted += len(sub_batch)
+        return inserted
+
+    def insert_batch_embeddings(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        document_id: uuid.UUID,
+        chunks: list[dict],
+        embeddings: list[list[float]],
+        chunk_index_offset: int = 0,
+    ) -> int:
+        """Insert a single batch of embeddings.
+
+        Idempotent per-batch: first deletes any existing rows whose chunk_index
+        falls inside this batch's range, then inserts fresh. Safe under retry.
+
+        chunk_index_offset is the global index of the first chunk in `chunks` —
+        the embed stage assigns these so that batches don't overlap.
+        """
+        from app.core.config import settings
+
+        collection_id = self.resolve_collection_id_for_configuration(configuration_id)
+        # Stream records lazily — generator yields one record at a time.
+        records_iter = _iter_chunk_records(
+            document_id=document_id,
+            collection_id=collection_id,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
+
+        def _with_global_chunk_index():
+            # Shift chunk_index from per-batch local index to global index as records flow by.
+            for offset_within_batch, record in enumerate(records_iter):
+                record["cmetadata"]["chunk_index"] = chunk_index_offset + offset_within_batch
+                yield record
+
+        batch_size = settings.KB_VECTOR_INSERT_BATCH_SIZE
+        # We must know the range to clear before inserting → use chunk count.
+        # `chunks` is a small per-batch list (≤ KB_EMBED_BATCH_SIZE), so len() is cheap.
+        chunk_count = len(chunks) if hasattr(chunks, "__len__") else None
+        if chunk_count is None:
+            # If caller passed a generator, materialise once for the range computation.
+            # Per-batch chunks are bounded (~100) so this is fine.
+            chunks = list(chunks)
+            chunk_count = len(chunks)
+            records_iter = _iter_chunk_records(
+                document_id=document_id,
+                collection_id=collection_id,
+                chunks=chunks,
+                embeddings=embeddings,
+            )
+
+        batch_end_exclusive = chunk_index_offset + chunk_count
+        inserted = 0
+        with self._pg_engine.begin() as conn:
+            # Idempotency: clear our own slice before re-inserting.
+            conn.execute(
+                delete(VectorEmbedding).where(
+                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id),
+                    cast(
+                        VectorEmbedding.cmetadata["chunk_index"].astext, Integer
+                    ).between(chunk_index_offset, batch_end_exclusive - 1),
+                )
+            )
+            for sub_batch in _slice_iter(_with_global_chunk_index(), batch_size):
+                conn.execute(insert(VectorEmbedding), sub_batch)
+                inserted += len(sub_batch)
+        return inserted
+
+    def count_document_embeddings(self, document_id: uuid.UUID) -> int:
+        """Count vector rows for a document — used by load_vector to verify completeness."""
+        with self._pg_engine.begin() as conn:
+            row = conn.execute(
+                select(func.count())
+                .select_from(VectorEmbedding)
+                .where(
+                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                )
+            ).scalar_one()
+            return int(row or 0)
+
+    def get_existing_chunk_indices(self, document_id: uuid.UUID) -> set[int]:
+        """Return the set of chunk_index values currently persisted for a document.
+
+        Used by the reissue-missing-batches recovery path in the load_vector
+        stage: compare against `range(0, expected_total)` to find the chunks
+        whose embed batch exhausted retries (e.g. an extended provider outage).
+        Each missing index is then re-dispatched as a fresh single-chunk batch.
+        """
+        with self._pg_engine.begin() as conn:
+            result = conn.execute(
+                select(
+                    cast(VectorEmbedding.cmetadata["chunk_index"].astext, Integer)
+                ).where(
+                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                )
+            )
+            return {row[0] for row in result if row[0] is not None}
+
+    def search(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        query_vector: list[float],
+        max_docs: int,
+        score_threshold: float,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> list[dict]:
+        if max_docs <= 0:
+            return []
+        collection_id = self.resolve_collection_id_for_configuration(configuration_id)
+        statement = _build_search_statement(
+            collection_id=collection_id,
+            query_vector=query_vector,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+        )
+        with self._pg_engine.begin() as conn:
+            rows = conn.execute(statement).mappings().all()
+
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            mapped = _map_search_row(row)
+            if mapped is not None:
+                results.append(mapped)
+        return results
+
+    def delete_document_embeddings(self, document_id: uuid.UUID) -> int:
+        """Delete all vector embeddings for a document. Returns row count."""
+        with self._pg_engine.begin() as conn:
+            result = conn.execute(
+                delete(VectorEmbedding).where(
+                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                )
+            )
+            return result.rowcount or 0
+
+
+class AsyncVectorRepository:
+    """Async counterpart to VectorRepository — for FastAPI routes via asyncpg / AsyncSession.
+
+    Never touches the sync engine; all I/O goes through await session.execute().
+    """
+
+    def __init__(self, session: "AsyncSession") -> None:
+        self._session = session
+
+    async def get_or_create_collection_id(self, collection_name: str) -> uuid.UUID:
+        statement = (
+            pg_insert(VectorCollection)
+            .values(name=collection_name, cmetadata={})
+            .on_conflict_do_update(
+                index_elements=[VectorCollection.name],
+                set_={"name": collection_name},
+            )
+            .returning(VectorCollection.uuid)
+        )
+        result = await self._session.execute(statement)
+        row = result.mappings().first()
+        if not row:
+            raise RuntimeError("Could not resolve vector collection id")
+        return row["uuid"]
+
+    async def resolve_collection_id_for_configuration(
+        self, configuration_id: uuid.UUID
+    ) -> uuid.UUID:
+        result = await self._session.execute(
+            select(Configuration.collection_name).where(
+                Configuration.id == configuration_id
+            )
+        )
+        row = result.mappings().first()
+        if not row:
+            raise LookupError(f"Configuration not found: {configuration_id}")
+        return await self.get_or_create_collection_id(row["collection_name"])
+
+    async def search(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        query_vector: list[float],
+        max_docs: int,
+        score_threshold: float,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> list[dict]:
+        if max_docs <= 0:
+            return []
+        collection_id = await self.resolve_collection_id_for_configuration(
+            configuration_id
+        )
+        statement = _build_search_statement(
+            collection_id=collection_id,
+            query_vector=query_vector,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+        )
+        result = await self._session.execute(statement)
+        rows = result.mappings().all()
+        mapped_rows: list[dict[str, Any]] = []
+        for row in rows:
+            mapped = _map_search_row(row)
+            if mapped is not None:
+                mapped_rows.append(mapped)
+        return mapped_rows
+
+    async def delete_document_embeddings(self, document_id: uuid.UUID) -> int:
+        result = await self._session.execute(
+            delete(VectorEmbedding).where(
+                VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+            )
+        )
+        await self._session.commit()
+        return result.rowcount or 0

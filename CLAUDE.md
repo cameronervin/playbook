@@ -30,7 +30,13 @@ Ask before deciding when: multiple approaches exist, requirements are ambiguous,
 ```
 backend/app/ api/v1/ -> services/ -> repositories/ -> models/
 frontend/ app/ -> features/ -> components/ -> hooks -> lib/store
+kb-service/ api/ -> services/ -> repositories/ -> models/   (+ workers/ Celery pipeline)
 ```
+
+The backend reaches `kb-service` over HTTP via `LocalKBProvider`
+(`backend/app/infrastructure/knowledgebase/`). `kb-service` is the RAG pipeline:
+docling parsing -> tiktoken chunking -> OpenAI/LiteLLM embeddings -> pgvector
+similarity search. See `kb-service/README.md` and `kb-service/app/infrastructure/STUBS.md`.
 
 ---
 
@@ -57,6 +63,10 @@ frontend/ app/ -> features/ -> components/ -> hooks -> lib/store
 | Client state | Zustand |
 | LLM orchestration | LangGraph + LangChain |
 | LLM gateway | LiteLLM |
+| Document parsing | Docling (+ python-docx / openpyxl / python-pptx / PyMuPDF) |
+| Embeddings | OpenAI (`text-embedding-3-small`) via direct or LiteLLM gateway |
+| Vector store | pgvector (`vector(1536)`, HNSW cosine) |
+| RAG task queue | Celery + Valkey (`kb-service/app/workers/`) |
 
 ---
 

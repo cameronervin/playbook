@@ -33,6 +33,8 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      kb-api:
+        condition: service_healthy
 
   frontend:
     ports:
@@ -71,6 +73,31 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+
+  kb-api:
+    ports:
+      - "8001:8001"
+    env_file:
+      - ../envs/.env.kb-service.local
+    volumes:
+      - ../../kb-service:/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+
+  kb-valkey:
+    ports:
+      - "6380:6379"
+
+  kb-worker-cpu:
+    env_file:
+      - ../envs/.env.kb-service.local
+    volumes:
+      - ../../kb-service:/app
+
+  kb-worker-io:
+    env_file:
+      - ../envs/.env.kb-service.local
+    volumes:
+      - ../../kb-service:/app
 
 volumes:
   localstack_data:

@@ -19,9 +19,10 @@ pattern-match against real architecture instead of starting from an empty repo.
 | LLM gateway | LiteLLM (optional `gateway` mode) |
 | Storage | S3 / LocalStack (boto3) |
 | Frontend | Next.js (App Router), Tailwind CSS v4, Zustand, TanStack Query |
+| KB / RAG | `kb-service`: docling → OpenAI embeddings → pgvector (FastAPI + Celery) |
 | Async | Celery + Valkey (optional) |
 | Logging | structlog |
-| Tests | pytest (backend), Vitest + React Testing Library (frontend) |
+| Tests | pytest (backend / kb-service), Vitest + React Testing Library (frontend) |
 
 ---
 
@@ -48,6 +49,7 @@ frontend/     app/ -> features/ -> components/ -> hooks -> lib/store
 | `.claude/` `.cursor/` | Rules, skills, style guides, commands, MCP config |
 | `backend/app/infrastructure/` | LLM / KB / storage providers + LangGraph checkpointer (see `INFRASTRUCTURE.md`) |
 | `backend/app/agents/` | LangGraph orchestration (see `agents/STUBS.md`) |
+| `kb-service/` | Standalone RAG service: docling → OpenAI embeddings → pgvector. The backend's `LocalKBProvider` is its HTTP client (see `kb-service/README.md`) |
 | `frontend/` | Next.js skeleton (see `FRONTEND.md`) |
 | `docs/` | Architecture, API, guides, ADRs |
 | `prd/` | Product requirements skeleton (user stories, tech docs, phases) |

@@ -1,0 +1,57 @@
+# =============================================================
+# Ruff Configuration — KB Service
+# =============================================================
+# Curated for: Python 3.12 / FastAPI / async / Celery workers
+# Mirrors the scaffold backend's ruff.toml conventions.
+#
+# Run manually:   ruff check app/
+# Auto-fix:       ruff check app/ --fix
+
+target-version = "py312"
+
+# Only lint source code, not tests (tests have their own conventions).
+include = ["app/**/*.py", "alembic/**/*.py"]
+
+[lint]
+# ── Rule Groups ──────────────────────────────────────────────
+#   F        pyflakes          — unused imports, undefined names
+#   E / W    pycodestyle       — whitespace, formatting basics
+#   I        isort             — import ordering
+#   B        flake8-bugbear    — common Python pitfalls
+#   BLE      flake8-blind-except — catch specific exceptions
+#   SIM      flake8-simplify   — unnecessary code patterns
+#   PIE      flake8-pie        — unnecessary pass, prefer ...
+#   RET      flake8-return     — superfluous else-after-return
+#   FAST     FastAPI           — Annotated deps, redundant response_model
+#   DTZ      flake8-datetimez  — timezone-aware datetimes
+#   PLC      pylint-convention — import placement, missing maxsplit
+#   TRY      tryceratops       — exception handling best practices
+select = [
+    "F", "E", "W", "I", "B", "BLE", "SIM", "PIE", "RET", "FAST", "DTZ", "PLC", "TRY",
+]
+
+ignore = [
+    "E501",    # line length — let the formatter handle this
+    "TRY003",  # long exception messages — acceptable in app code
+    "TRY301",  # raise within try — common pattern
+    "B008",    # function-call-in-default-arg — FastAPI Depends() pattern
+    "RET504",  # unnecessary assignment before return — sometimes aids readability
+    "SIM108",  # ternary instead of if/else — can reduce readability
+]
+
+[lint.isort]
+known-first-party = ["app"]
+force-single-line = false
+combine-as-imports = true
+
+[lint.per-file-ignores]
+# Infrastructure modules use lazy imports inside factory functions (PLC0415).
+"app/infrastructure/**/*.py" = ["PLC0415", "BLE001"]
+# Service files with complex async patterns.
+"app/services/*.py" = ["PLC0415", "BLE001"]
+# Worker tasks: heavy lazy imports inside tasks + broad excepts for resilience.
+"app/workers/*.py" = ["PLC0415", "BLE001", "TRY"]
+# Main module uses deferred imports in lifespan + module-level E402 for logging init.
+"app/main.py" = ["PLC0415", "E402"]
+# Alembic migrations are generated; relax import + style rules.
+"alembic/**/*.py" = ["E402", "F401", "I001"]

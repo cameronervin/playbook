@@ -6,7 +6,9 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector image (Postgres 16 + the `vector` extension) — required by
+    # kb-service for embedding similarity search. Drop-in for plain postgres:16.
+    image: pgvector/pgvector:pg16
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -68,9 +70,77 @@ services:
     profiles:
       - worker
 
+  # ---------------------------------------------------------------------------
+  # KB Service — RAG ingestion & retrieval (docling → OpenAI embeddings →
+  # pgvector). The backend talks to it over HTTP via LocalKBProvider
+  # (KB_LOCAL_BASE_URL=http://kb-api:8001). Needs Postgres with the pgvector
+  # extension; it manages its own "kb" schema via its own Alembic migrations.
+  # ---------------------------------------------------------------------------
+  kb-api:
+    build:
+      context: ../../kb-service
+      dockerfile: ../deploy/docker/Dockerfile.kb-service
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # Dedicated broker/result backend for the KB ingest pipeline (kept separate
+  # from the backend's valkey so heavy ingest load can't starve app tasks).
+  kb-valkey:
+    image: valkey/valkey:7-alpine
+    command: valkey-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - kb_valkey_data:/data
+    restart: unless-stopped
+
+  # KB ingest workers — CPU queue (parse/chunk/embed dispatch) and IO queue
+  # (embedding HTTP + vector writes). Enable with the "worker" profile.
+  kb-worker-cpu:
+    build:
+      context: ../../kb-service
+      dockerfile: ../deploy/docker/Dockerfile.kb-service
+    command: celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - worker
+
+  kb-worker-io:
+    build:
+      context: ../../kb-service
+      dockerfile: ../deploy/docker/Dockerfile.kb-service
+    command: celery -A app.workers.app worker -Q kb-io,kb-notify --pool=threads --concurrency=50 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - worker
+
 volumes:
   postgres_data:
   valkey_data:
+  kb_valkey_data:
 
 networks:
   default:

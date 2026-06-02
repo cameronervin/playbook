@@ -1,0 +1,66 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+**/__pycache__
+
+# Type-checker / linter caches
+.mypy_cache/
+**/.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.dev
+.env.example
+.env.test
+.env.production
+
+# Docker-related files
+.docker/
+docker-compose.yml
+.dockerignore
+Dockerfile
+
+# Python virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Test artifacts
+tests/
+pytest.ini
+
+# Documentation
+docs/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+
+# VCS
+.git
+.gitignore
+
+# Misc
+.DS_Store
+local_data/

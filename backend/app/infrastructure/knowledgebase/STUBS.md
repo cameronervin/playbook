@@ -36,12 +36,22 @@ Every provider implements:
 `MockProvider.resolve_configuration()` returns a static ID and never touches
 the network, so it stays trivially simple.
 
-## Phase B — ingestion / pipeline provisioning (NOT YET IMPLEMENTED)
+## Phase B — ingestion / pipeline provisioning (IMPLEMENTED → see `kb-service/`)
 
-These were intentionally kept off the base ABC so the Mock/Local providers stay
-lean. When an ingestion backend is added, introduce them as **provider-specific**
-methods (or a separate `IngestingKnowledgebaseProvider` mix-in), not abstract
-methods on `BaseKnowledgebaseProvider`:
+The ingestion backend now exists as a standalone microservice at the repo root:
+**`kb-service/`** (FastAPI + Celery, docling → OpenAI embeddings → pgvector). The
+`LocalKBProvider` here is its HTTP client:
+
+- `search()` → `POST /api/kb/embed/search` (returns `{chunks, query, total}`).
+- `resolve_configuration()` → `GET /api/kb/configuration/?name=<KB_CONFIG_NAME>`.
+- Auth: `Authorization: Bearer <KB_API_SECRET>` on every call.
+- `KB_LOCAL_BASE_URL` (default `http://kb-api:8001`) points at the service.
+
+Ingestion itself (submit document URL, poll task status, delete) is driven by
+calling `kb-service` endpoints (`/api/kb/ingest/url`, `/api/kb/status/{task_id}`,
+`/api/kb/document/...`). When you add those calls here, introduce them as
+**provider-specific** methods (or a separate `IngestingKnowledgebaseProvider`
+mix-in), not abstract methods on `BaseKnowledgebaseProvider`:
 
 - `provision_pipeline(name, collection_name) -> str` — create a new collection/
   pipeline configuration.

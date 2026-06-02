@@ -68,14 +68,16 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         if metadata_filter:
             payload["metadata_filter"] = metadata_filter
 
-        data = await self._post("/api/kb/search", payload)
+        # Matches the kb-service contract: POST /api/kb/embed/search returns
+        # {"chunks": [{document_id, text, score, metadata}], "query", "total"}.
+        data = await self._post("/api/kb/embed/search", payload)
 
-        raw_items = data.get("result", []) if isinstance(data, dict) else []
+        raw_items = data.get("chunks", []) if isinstance(data, dict) else []
         chunks = [
             RetrievedChunk(
                 text=item.get("text", ""),
                 metadata=item.get("metadata", {}),
-                similarity_score=item.get("similarity_score"),
+                similarity_score=item.get("score"),
             )
             for item in raw_items
         ]
@@ -104,11 +106,13 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         if self._config_id is not None:
             return self._config_id
 
-        data = await self._post(
-            "/api/kb/configuration/resolve",
-            {"name": settings.KB_CONFIG_NAME},
+        # The kb-service has no dedicated resolve endpoint; configurations are
+        # looked up by name via the list route (GET /api/kb/configuration/?name=).
+        data = await self._get(
+            "/api/kb/configuration/", params={"name": settings.KB_CONFIG_NAME}
         )
-        config_id = data.get("configuration_id") if isinstance(data, dict) else None
+        rows = data if isinstance(data, list) else []
+        config_id = rows[0].get("id") if rows else None
         if not config_id:
             raise KBConfigError(
                 f"KB configuration '{settings.KB_CONFIG_NAME}' could not be resolved"
@@ -132,6 +136,22 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         except httpx.HTTPError as exc:
             raise KBConnectionError(f"KB request to {path} failed: {exc}") from exc
 
+        return self._handle_response(path, response)
+
+    async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        """GET and map transport/HTTP errors to KB exceptions."""
+        try:
+            response = await self._client.get(path, params=params)
+        except httpx.TimeoutException as exc:
+            raise KBTimeoutError(f"KB request to {path} timed out") from exc
+        except httpx.HTTPError as exc:
+            raise KBConnectionError(f"KB request to {path} failed: {exc}") from exc
+
+        return self._handle_response(path, response)
+
+    @staticmethod
+    def _handle_response(path: str, response: httpx.Response) -> Any:
+        """Map HTTP status codes to KB exceptions, else return parsed JSON."""
         if response.status_code in (401, 403):
             raise KBAuthError(f"KB auth failed ({response.status_code}) for {path}")
         if response.status_code == 422:
