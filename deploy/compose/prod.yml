@@ -1,6 +1,10 @@
 # Production overrides — no volumes, replicas, internal DB, resource limits.
 # Usage: docker compose -f base.yml -f prod.yml up -d
 # Note: supply secrets via a secrets manager, not committed env files.
+#
+# The referenced ../envs/.env.prod is gitignored. Before deploying, create it
+# from the template:  cp deploy/envs/.env.prod.example deploy/envs/.env.prod
+# then fill in real values (or inject them from your secrets manager).
 
 services:
   db:

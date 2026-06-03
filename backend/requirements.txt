@@ -55,3 +55,7 @@ pytest-cov>=4.1.0
 
 # --- Code Quality ---
 ruff>=0.6.0
+
+# --- Eval harness (optional) ---
+# Not part of the runtime image. Install the extra to run backend/evals:
+#   pip install -e ".[evals]"   — pulls ragas, langfuse, click

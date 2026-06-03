@@ -2,7 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-.env
 node_modules/
 dist/
 build/
@@ -16,10 +15,18 @@ build/
 coverage/
 
 # Environment files - never commit secrets
-deploy/envs/.env.*
-!deploy/envs/.env.*.example
-!deploy/envs/.env.prod.example
-deploy/compose/.env
+.env
+.env.*
+*.env
+*.env.*
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+!**/.env.example
+!**/.env.*.example
+!**/*.env.example
+!**/*.env.*.example
 
 # Local dev startup scripts (not for CI/prod)
 *.ps1

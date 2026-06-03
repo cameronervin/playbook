@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Reusable FastAPI + LangGraph backend scaffold (Anthropic-first)."
 requires-python = ">=3.12"
 
+[project.optional-dependencies]
+evals = ["ragas>=0.4.3,<0.5", "langfuse>=3.0.0", "click>=8.1"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

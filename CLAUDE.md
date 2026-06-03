@@ -188,6 +188,7 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 | Context / agent engineering | [.claude/skills/context-engineering/SKILL.md](.claude/skills/context-engineering/SKILL.md) | [reference](.claude/skills/context-engineering/references/reference.md), [examples](.claude/skills/context-engineering/references/examples.md) |
 | Sprint progress / status | [.claude/skills/sprint-progress/SKILL.md](.claude/skills/sprint-progress/SKILL.md) | -- |
 | Harness / agent setup | [.claude/skills/harness-v2/SKILL.md](.claude/skills/harness-v2/SKILL.md) | -- |
+| Handoff / EOD note | [.claude/skills/handoff-note-builder/SKILL.md](.claude/skills/handoff-note-builder/SKILL.md) | [voice-and-structure](.claude/skills/handoff-note-builder/references/voice-and-structure.md), [common-scenarios](.claude/skills/handoff-note-builder/references/common-scenarios.md), [team-and-products](.claude/skills/handoff-note-builder/references/team-and-products.md) |
 
 ---
 

@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
 
+    # --- Eval harness (dev/CI only — see backend/evals) ---
+    # Judge LLM for the eval harness; falls back to LLM_CHAT_MODEL when empty.
+    EVAL_JUDGE_MODEL: str = ""
+    # Embeddings model for Ragas answer_relevancy (routed through the gateway).
+    EVAL_EMBEDDINGS_MODEL: str = "text-embedding-3-small"
+
     # =========================================================================
     # Knowledgebase Provider Mode
     # =========================================================================
@@ -134,6 +140,13 @@ class Settings(BaseSettings):
     # Observability (optional)
     # =========================================================================
     TRACING_ENABLED: bool = False
+
+    # Langfuse — LLM tracing + eval dataset/score sync (used by evals/).
+    # Install the extra: pip install -e ".[evals]"
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
     # -------------------------------------------------------------------------
     # Validators

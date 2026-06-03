@@ -116,7 +116,7 @@ Create `docs/sprint-reports/YYYY-MM-DD/sprint-progress.md` using template:
 2. Run the infographic generation script with `--per-phase` flag (recommended):
 
 ```bash
-python .Codex/skills/sprint-progress/scripts/generate_infographic.py \
+python .claude/skills/sprint-progress/scripts/generate_infographic.py \
   --implementation-dir implementation/ \
   --output "docs/sprint-reports/YYYY-MM-DD/sprint-progress.png" \
   --per-phase
@@ -156,7 +156,7 @@ Generates sprint board images via Gemini API using `gemini-3-pro-image-preview` 
 
 **Recommended Usage:**
 ```bash
-python .Codex/skills/sprint-progress/scripts/generate_infographic.py \
+python .claude/skills/sprint-progress/scripts/generate_infographic.py \
   --implementation-dir implementation/ \
   --output "docs/sprint-reports/YYYY-MM-DD/sprint-progress.png" \
   --per-phase

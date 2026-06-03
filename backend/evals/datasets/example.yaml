@@ -1,0 +1,12 @@
+- input:
+    question: "Summarize the key points of the provided context."
+  expected_output: "A concise, well-structured summary grounded in the source."
+  metadata: {category: general}
+- input:
+    question: "What are the main risks described in the source material?"
+  expected_output: "An accurate list of the risks present in the context, with no invented items."
+  metadata: {category: analysis}
+- input:
+    question: "Explain the recommended next steps based on the documentation."
+  expected_output: "A clear, actionable set of next steps derived only from the provided context."
+  metadata: {category: planning}

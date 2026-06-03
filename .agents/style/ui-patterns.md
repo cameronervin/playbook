@@ -1,0 +1,318 @@
+# Modern UI Component Patterns
+
+This file contains **component styling patterns** for a sleek, modern UI. For color, spacing, radius, and typography tokens, see `design-tokens.md`.
+
+---
+
+## Elevation & Depth System
+
+Use layered shadows to create visual hierarchy and depth. Never use flat, single-layer shadows.
+
+### Shadow Scale (Tailwind theme)
+
+```css
+/* Tailwind v4: define in @theme, or Tailwind 3: tailwind.config */
+--shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+--shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+--shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+--shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+--shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+```
+
+### When to Use Each Level
+
+| Level | Use Case | Example |
+|-------|----------|---------|
+| xs | Subtle lift, inset effects | Input fields, chat bubbles |
+| sm | Cards at rest, buttons | Card, secondary button |
+| md | Hover states, active elements | Card hover, dropdown |
+| lg | Floating elements | Tooltips, popovers |
+| xl | Modals, overlays | Modal dialogs |
+
+---
+
+## Gradient Backgrounds
+
+Replace flat white backgrounds with subtle gradients for sophistication.
+
+### Page Backgrounds
+```tsx
+className="bg-gradient-to-br from-gray-50 via-white to-gray-50"
+```
+
+### Content Pane Background
+```tsx
+className="bg-gradient-to-b from-gray-50/50 to-white"
+```
+
+### Primary Pane
+```tsx
+className="bg-white"  // Clean white, contrast against gradient page bg
+```
+
+---
+
+## Card Patterns
+
+Modern cards use subtle borders, layered shadows, and smooth hover transitions.
+
+### Default Card
+```tsx
+className={cn(
+  'bg-white rounded-xl border border-black/[0.06]',
+  'shadow-sm hover:shadow-md',
+  'transition-all duration-200 ease-out',
+  'hover:-translate-y-0.5'
+)}
+```
+
+### Interactive Card (Clickable)
+```tsx
+className={cn(
+  'bg-white rounded-xl border border-black/[0.06]',
+  'shadow-sm hover:shadow-md',
+  'transition-all duration-200 ease-out',
+  'hover:-translate-y-0.5',
+  'cursor-pointer',
+  'active:translate-y-0 active:shadow-sm'  // Pressed state
+)}
+```
+
+### Card Padding
+- Default: `p-6` (24px)
+- Compact: `p-4` (16px)
+- Spacious: `p-8` (32px)
+
+---
+
+## Button Patterns
+
+Buttons use the primary token color with satisfying hover/press interactions.
+
+### Primary Button
+```tsx
+className={cn(
+  'bg-primary',
+  'text-white font-medium',
+  'px-4 py-2 rounded-lg',
+  'shadow-sm',
+  'transition-all duration-200 ease-out',
+  'hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5',
+  'active:translate-y-0 active:shadow-sm',
+  'focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2'
+)}
+```
+
+### Secondary Button
+```tsx
+className={cn(
+  'bg-white border border-gray-200',
+  'text-gray-900 font-medium',
+  'px-6 py-3 rounded-lg',
+  'shadow-xs hover:shadow-sm',
+  'transition-all duration-200 ease-out',
+  'hover:bg-gray-50 hover:-translate-y-0.5',
+  'active:translate-y-0',
+  'focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2'
+)}
+```
+
+### Ghost Button
+```tsx
+className={cn(
+  'bg-transparent',
+  'text-gray-700 font-medium',
+  'px-4 py-2 rounded-lg',
+  'transition-colors duration-150',
+  'hover:bg-gray-100/80',
+  'focus:outline-none focus:ring-2 focus:ring-primary/40'
+)}
+```
+
+---
+
+## Input & Form Patterns
+
+Inputs have subtle inset shadows and prominent focus states.
+
+### Text Input
+```tsx
+className={cn(
+  'w-full px-4 py-3 rounded-lg',
+  'bg-white border border-gray-200',
+  'shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]',
+  'transition-all duration-200',
+  'placeholder:text-gray-400',
+  'focus:outline-none focus:border-primary',
+  'focus:ring-2 focus:ring-primary/20'
+)}
+```
+
+### Error State
+```tsx
+className="border-red-500 focus:border-red-500 focus:ring-red-500/20"
+```
+
+---
+
+## Tab Patterns
+
+Tabs use pill-shaped backgrounds instead of simple underlines.
+
+### Tab Container
+```tsx
+className="flex gap-1 border-b border-gray-200 bg-gray-50/50 px-2 pt-2"
+```
+
+### Active Tab
+```tsx
+className={cn(
+  'px-4 py-2.5 rounded-t-lg',
+  'text-sm font-medium',
+  'bg-white border border-gray-200 border-b-white',
+  'text-primary',
+  '-mb-px',  // Overlap bottom border
+  'shadow-sm'
+)}
+```
+
+### Inactive Tab
+```tsx
+className={cn(
+  'px-4 py-2.5 rounded-t-lg',
+  'text-sm font-medium text-gray-600',
+  'transition-colors duration-150',
+  'hover:text-gray-900 hover:bg-gray-100/50'
+)}
+```
+
+### Locked Tab
+```tsx
+// Use lucide-react Lock icon, NOT emoji
+import { Lock } from 'lucide-react';
+
+className={cn(
+  'px-4 py-2.5 rounded-t-lg',
+  'text-sm font-medium text-gray-400',
+  'cursor-not-allowed opacity-50'
+)}
+// Icon: <Lock className="h-3.5 w-3.5 ml-1.5" />
+```
+
+---
+
+## Chat Message Patterns
+
+Modern chat bubbles with clear visual distinction between user and agent messages.
+
+### User Message (Right-aligned) — White Background
+```tsx
+className={cn(
+  'max-w-[80%] px-4 py-3',
+  'bg-white',
+  'rounded-2xl rounded-br-md',  // Tail effect
+  'border border-gray-200'
+)}
+// Text: text-gray-900 text-sm   |   Timestamp: text-gray-500 text-xs
+```
+
+### Agent Message (Left-aligned) — Grey Background
+```tsx
+className={cn(
+  'max-w-[80%] px-4 py-3',
+  'bg-gray-100',
+  'rounded-2xl rounded-bl-md',  // Tail effect
+  'border border-gray-200'
+)}
+// Text: text-gray-900 text-sm   |   Timestamp: text-gray-500 text-xs
+```
+
+### Custom Scrollbar
+```css
+.chat-scrollbar::-webkit-scrollbar { width: 6px; }
+.chat-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+.chat-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.2); }
+```
+
+---
+
+## Motion & Animation
+
+Use the `motion` library (Framer Motion) for smooth transitions.
+
+### Page Transition Wrapper
+```tsx
+import { motion } from 'motion/react';
+
+<motion.div
+  initial={{ opacity: 0, y: 8 }}
+  animate={{ opacity: 1, y: 0 }}
+  exit={{ opacity: 0, y: -8 }}
+  transition={{ duration: 0.15, ease: 'easeOut' }}
+>
+  {children}
+</motion.div>
+```
+
+### Staggered List Animation
+```tsx
+<motion.div
+  initial="hidden"
+  animate="visible"
+  variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+>
+  {items.map(item => (
+    <motion.div
+      key={item.id}
+      variants={{
+        hidden: { opacity: 0, y: 10 },
+        visible: { opacity: 1, y: 0 }
+      }}
+    >
+      <Card>{item.content}</Card>
+    </motion.div>
+  ))}
+</motion.div>
+```
+
+### Tab Content Crossfade
+```tsx
+import { AnimatePresence, motion } from 'motion/react';
+
+<AnimatePresence mode="wait">
+  <motion.div
+    key={activeTab}
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.15 }}
+  >
+    {tabContent}
+  </motion.div>
+</AnimatePresence>
+```
+
+---
+
+## DO
+
+- Use the `cn()` helper for all conditional classes
+- Apply `transition-all duration-200 ease-out` for interactive elements
+- Use `rounded-xl` (12px) for cards, `rounded-lg` (8px) for buttons/inputs
+- Prefer `border-black/[0.06]` over hard gray borders for cards
+- Use Tailwind's opacity modifiers (e.g., `bg-primary/10`)
+- Add `:active` states for buttons (pressed feel)
+- Use lucide-react icons, not emoji
+
+## DON'T
+
+- Use flat shadows like `shadow-sm` without hover states
+- Use emoji for UI elements (locks, arrows)
+- Use `border-gray-200` for card borders where a softer `border-black/[0.06]` reads better
+- Skip focus states on interactive elements
+- Use abrupt transitions (always animate)
+- Hardcode hex colors when a design token exists

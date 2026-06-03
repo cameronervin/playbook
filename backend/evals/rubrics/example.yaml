@@ -1,0 +1,26 @@
+name: example
+description: >
+  Content-quality rubric for the example workflow, scored by the LLM judge. The
+  shared RAG rubrics (rag_retrieval, rag_generation) own retrieval and grounding;
+  this rubric covers the qualities of the produced answer itself. Replace these
+  criteria with the ones that matter for your product.
+criteria:
+  - name: coherence
+    description: >
+      Does the answer read as a clear, non-redundant narrative free of generic
+      filler? 1 = repetitive, padded, or disjointed; 3 = readable but some
+      redundancy or filler; 5 = concise, specific, every sentence adds value.
+    scale: [1, 5]
+  - name: factual_grounding
+    description: >
+      Are all facts grounded in the provided context, with no invented numbers,
+      names, or claims? 1 = contains fabricated facts not in the source;
+      3 = mostly grounded but one or two unsupported claims; 5 = every fact traces
+      to the source material with nothing invented.
+    scale: [1, 5]
+  - name: completeness
+    description: >
+      Does the answer cover the full scope the question asked for? 1 = misses the
+      core of the question or major points; 3 = addresses the question but omits a
+      meaningful point; 5 = complete coverage, nothing material missing.
+    scale: [1, 5]

@@ -617,15 +617,15 @@ mv prd prd-v1-unstructured
 ```
 
 Do NOT archive or modify:
-- AGENTS.md (updated in place in section 3.4)
-- .Codex/rules/ (dev team's rules carry forward)
-- .Codex/settings.json (carries forward)
+- CLAUDE.md (updated in place in section 3.4)
+- .claude/rules/ (dev team's rules carry forward)
+- .claude/settings.json (carries forward)
 
 ### Generation order
 1. User stories (_master + epic files)
 2. Technical docs (fresh from V1 codebase analysis)
 3. Implementation plan (master scope + Phase 1 detail)
-4. Update AGENTS.md (update PRD pointers, keep everything else)
+4. Update CLAUDE.md (update PRD pointers, keep everything else)
 5. prd/README.md (V2 landing page)
 
 ### 3.1 — User stories
@@ -749,15 +749,15 @@ End with Definition of Done — same format as V1:
 - [ ] Full test suite passes
 ```
 
-No bootstrap tasks needed — project is already scaffolded, AGENTS.md
+No bootstrap tasks needed — project is already scaffolded, CLAUDE.md
 configured, rules exist, settings set.
 
-### 3.4 — Update AGENTS.md
+### 3.4 — Update CLAUDE.md
 
-**If HARNESSED (AGENTS.md exists):**
+**If HARNESSED (CLAUDE.md exists):**
 
-Do NOT regenerate AGENTS.md from scratch. The dev team has a working
-AGENTS.md with real Stack, Commands, ALWAYS/NEVER rules, and
+Do NOT regenerate CLAUDE.md from scratch. The dev team has a working
+CLAUDE.md with real Stack, Commands, ALWAYS/NEVER rules, and
 configured verification steps. Update ONLY the PRD section to point
 to the new V2 docs:
 
@@ -774,14 +774,14 @@ V1 reference (archived):
 - V1 implementation: prd-v1-archive/03-implementation/_implementation-plan.md
 ```
 
-Also update the product description at the top of AGENTS.md if the
+Also update the product description at the top of CLAUDE.md if the
 product scope has changed for V2.
 
 Leave everything else (Stack, Commands, ALWAYS/NEVER) exactly as-is.
 
-**If UNHARNESSED (no AGENTS.md or incomplete AGENTS.md):**
+**If UNHARNESSED (no CLAUDE.md or incomplete CLAUDE.md):**
 
-Generate a AGENTS.md using the same template as harness-init. Replace
+Generate a CLAUDE.md using the same template as harness-init. Replace
 {CURLY BRACES} with actual values discovered from codebase analysis
 and the interview. Leave [SQUARE BRACKETS] as placeholders only for
 things the codebase analysis couldn't determine.
@@ -827,7 +827,7 @@ Specification docs live in prd/.
 - Never add dependencies without checking existing packages first
 ```
 
-Also create `.Codex/rules/README.md` and `.Codex/settings.json`
+Also create `.claude/rules/README.md` and `.claude/settings.json`
 using the same templates as harness-init if they don't already exist.
 
 ### 3.5 — prd/README.md
@@ -854,7 +854,7 @@ hardening.
 
 **Quick start:**
 ```
-The project is already set up — repo, AGENTS.md, rules all carry
+The project is already set up — repo, CLAUDE.md, rules all carry
 forward from V1.
 
 1. Open prd/03-implementation/phase-1-hardening.md
@@ -910,9 +910,9 @@ forward and items dropped, with product owner's reasoning.
      product owner said "fine as-is")
    - (HARNESSED) All DRIFT items resolved (either in Phase 1 tasks
      or spec updated to match code)
-   - AGENTS.md PRD section lists all V2 tech doc files
+   - CLAUDE.md PRD section lists all V2 tech doc files
    - (HARNESSED) V1 archive is intact at prd-v1-archive/
-   - (UNHARNESSED) AGENTS.md, .Codex/rules/, and .Codex/settings.json
+   - (UNHARNESSED) CLAUDE.md, .claude/rules/, and .claude/settings.json
      all exist and are populated
 3. Format alignment check:
    - User stories use multi-line "As a / I want to / So that" format
@@ -933,7 +933,7 @@ Say:
 "V2 harness complete. {N} files created.
 
 V1 docs are archived at prd-v1-archive/. Fresh V2 specs are in prd/.
-AGENTS.md has been updated to point to V2 docs. Your rules and
+CLAUDE.md has been updated to point to V2 docs. Your rules and
 settings carry forward unchanged.
 
 Phase 1 is hardening — stabilize before adding features. Open
@@ -943,7 +943,7 @@ prd/03-implementation/phase-1-hardening.md to get started."
 "V2 harness complete. {N} files created.
 
 This is the first structured harness for this project. Fresh specs
-are in prd/. AGENTS.md, rules, and settings have been created.
+are in prd/. CLAUDE.md, rules, and settings have been created.
 
 Phase 1 is hardening — stabilize the existing codebase before adding
 features. Open prd/03-implementation/phase-1-hardening.md to get

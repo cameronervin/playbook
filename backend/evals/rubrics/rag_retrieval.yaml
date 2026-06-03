@@ -1,0 +1,12 @@
+name: rag_retrieval
+description: >
+  Shared KB retrieval-quality rubric, scored by the Ragas judge for every KB-using
+  spec. Criterion names MUST match Ragas native metric names exactly, or the judge
+  falls back to AspectCritic using the description.
+criteria:
+  - name: context_precision
+    description: Retrieved chunks are relevant to the question (signal-to-noise of retrieval).
+    scale: [0, 1]
+  - name: context_recall
+    description: Retrieval found the evidence needed to answer (coverage of relevant context).
+    scale: [0, 1]

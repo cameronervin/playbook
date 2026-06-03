@@ -1,0 +1,16 @@
+name: rag_generation
+description: >
+  Shared KB-grounded generation-quality rubric, scored by the Ragas judge for every
+  KB-using spec. Owns grounding/faithfulness so content rubrics need not re-score it.
+  Criterion names MUST match Ragas native metric names exactly, or the judge falls
+  back to AspectCritic.
+criteria:
+  - name: faithfulness
+    description: The answer's claims are grounded in the retrieved context (no hallucination).
+    scale: [0, 1]
+  - name: answer_relevancy
+    description: >
+      The answer addresses the question asked. Needs EVAL_EMBEDDINGS_MODEL set (routed
+      through the LiteLLM gateway); if blank, this metric is skipped and faithfulness
+      still covers generation grounding.
+    scale: [0, 1]
