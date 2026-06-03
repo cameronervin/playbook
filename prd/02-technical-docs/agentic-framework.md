@@ -1,134 +1,182 @@
 # Agentic Framework
 
-> Defines the agent runtime: how LLM work is structured and run. The framework
-> is built on LangGraph + LangChain with an Anthropic-first provider layer. This
-> is a generic template — adapt the steps and schemas to your product.
+This document defines Playbook MVP agent workflows, context contracts, safety behavior, and evaluation requirements.
 
-## Building Blocks
+## Baseline
 
-| Concept | Responsibility |
-|---------|----------------|
-| **Chain** | A single LLM unit of work: a prompt + model + (optional) tools + structured output schema. Built with LangChain's `create_agent`. |
-| **Node** | A step in a graph. May be a chain invocation or deterministic logic (load state, save state, route, validate). |
-| **Graph** | A LangGraph state machine wiring nodes together with edges/conditions. |
-| **Executor** | Runs/resumes a graph for a given input, manages checkpoints, and surfaces results. |
-| **Tool** | A typed callable the model can invoke mid-run (see `docs/agents/tools.md`). |
+The scaffold already includes:
+- LangGraph-style agent chains, nodes, graphs, executors, prompts, states, tools, retry, and guardrails.
+- LLM provider abstraction for direct provider mode or LiteLLM gateway mode.
+- Knowledgebase provider abstraction that can call the local KB service.
+- Observability hooks and token-budgeting utilities.
 
-```
-Executor ──runs──► Graph ──contains──► Nodes ──invoke──► Chains ──may use──► Tools
-                                  │
-                                  └── deterministic nodes (load/save/route/validate)
-```
+<!-- V2 CHANGE: Replace example agent with Playbook athlete chat and admin insight agents. -->
 
-## Runtime
+## Runtime Matrix
 
-- All graphs use a **PostgreSQL-backed checkpointer**, so a long run can resume
-  by `thread_id` after a crash or restart.
-- The LLM is obtained through `BaseLLMProvider.get_chat_model()`. Transport
-  (`direct` vs `gateway`) follows `LLM_PROVIDER_MODE` config — the framework is
-  vendor-agnostic. Default is Anthropic via `direct`.
-- Long-running runs may be executed inline (request/response or streamed) or
-  offloaded to a Celery worker and polled.
+| Workflow | Runtime | Trigger | Primary Output |
+|----------|---------|---------|----------------|
+| Athlete chat agent | LangGraph | Athlete message | Streamed cited answer or refusal |
+| Conversation file context | Parser/retrieval helper | Athlete file upload + message | Conversation-scoped extracted context |
+| Admin query insights agent | LangGraph or LangChain agent | Nightly cron or admin action | Query/topic/risk insight summary |
+| Talk-to-your-data side panel | LangGraph or LangChain agent | Admin dashboard question | Analytics-grounded answer |
+| Evaluation harness | pytest + LLM/RAG evals | CI/release validation | Retrieval, answer, and safety scores |
 
-## Example Flow: Generate Example Content (US-03)
+## Athlete Chat Agent
 
-```
-input prompt
-     │
-     ▼
-[load_state node]  ── read the Example and any prior data
-     │
-     ▼
-[generate node]    ── invoke the generation chain (prompt + model + schema)
-     │
-     ▼
-[validate node]    ── check structured output against the schema
-     │
-     ▼
-[save_state node]  ── persist generated content onto Example.data
-     │
-     ▼
-result
-```
-
-### Chain Definition
-
-```python
-from langchain.agents import create_agent
-from app.agents.prompts.generate import GENERATE_PROMPT
-from app.agents.schemas import GeneratedContent
-
-
-def create_generate_chain(chat_model):
-    return create_agent(
-        model=chat_model,
-        system_prompt=GENERATE_PROMPT,
-        response_format=GeneratedContent,   # structured output
-    )
-```
-
-### Structured Output
-
-Chains that produce data return a typed schema, not free text:
+### Inputs
 
 ```json
 {
-  "title": "string",
-  "body": "string",
-  "tags": ["string"]
+  "conversation_id": "uuid",
+  "athlete_user_id": "uuid",
+  "message": "Can I accept this NIL deal?",
+  "attached_file_ids": ["uuid"],
+  "organization_id": "uuid"
 }
 ```
 
-The `validate` node rejects malformed output and triggers a bounded retry before
-failing the run.
+### Context Sources
 
-## Context Engineering
+1. Current user question.
+2. Bounded conversation history.
+3. Conversation-scoped uploaded file extractions.
+4. KB search results from ready, visible documents.
+5. Safety policy configuration.
 
-What each step receives is governed by a policy-driven middleware layer
-(serializers + policies + a middleware factory). See
-`docs/agents/context-engineering.md`. Prefer compact, retrieval-style context
-over loading whole records.
+Policy/process guidance must be grounded in KB or conversation file context. General model knowledge may only supply harmless background phrasing, not authoritative policy claims.
 
-## Safety and Validation Gates
+### Flow
 
-1. Structured outputs are schema-validated at node boundaries; invalid output
-   triggers a bounded repair/retry, then a clean failure.
-2. Tool inputs/outputs are typed; tools never receive unvalidated free-form
-   instructions from untrusted content.
-3. Runs that fail leave no partial persisted state (write only on success).
-4. Per-step context limits and truncation policy are enforced.
+1. Save user message.
+2. Classify topic/risk labels for analytics.
+3. Run safety pre-check for emergency, medical, legal, mental-health, harassment/reporting, recruiting, NIL, and compliance risk.
+4. Retrieve KB context using organization and visibility filters.
+5. Retrieve conversation file context if file IDs are present.
+6. Rank context using freshness, official-source, and priority metadata.
+7. Generate streamed answer.
+8. Attach bottom citations for grounded answers.
+9. Persist assistant message, citations, topic/risk labels, and safety outcome.
 
-## Token Efficiency and Prompt Caching
+### Output Contract
 
-1. Track token usage per step and per run.
-2. Keep a stable prompt prefix (instructions + schema) and append dynamic
-   context at the end to maximize cache reuse.
-3. Version the cacheable prefix (e.g. `prompt_version`) so changes invalidate
-   stale cache entries deterministically.
-4. Validate provider/transport caching compatibility before enabling it in
-   production.
+```json
+{
+  "answer": "string",
+  "answer_type": "grounded_answer | refusal | emergency_instruction | unsupported",
+  "citations": [
+    {
+      "document_id": "uuid",
+      "chunk_id": "uuid",
+      "source_title": "string",
+      "source_date": "date",
+      "is_official": true,
+      "rank": 1
+    }
+  ],
+  "topic_labels": ["nil"],
+  "risk_labels": ["compliance"],
+  "safety_outcome": null
+}
+```
+
+## Retrieval and Conflict Rules
+
+1. Retrieve only documents with `processing_status = ready`.
+2. Apply active visibility policy; MVP policy is all athletes.
+3. Rank by semantic score first, then official/priority metadata, then source date.
+4. If sources conflict, prefer newest applicable document by default.
+5. Official or priority metadata may override freshness.
+6. If conflict cannot be resolved, explain that guidance appears conflicting and direct the athlete to the athletic department.
+7. Never fabricate citations.
+
+## Refusal and Emergency Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| No KB support for policy/process answer | Decline and direct athlete to athletic department |
+| Emergency request | Refuse advice and show emergency instructions |
+| Medical/legal/mental-health request | Decline and direct to appropriate official support |
+| NIL/compliance/recruiting without source support | Decline and direct athlete to athletic department |
+| Harassment/reporting topic | Provide only approved reporting path if present in KB; otherwise decline |
+
+## Admin Query Insights Agent
+
+### Purpose
+
+Summarize recent user questions and queries for admins, focusing on:
+- query volume,
+- common topics,
+- unanswered/declined questions,
+- NIL/compliance/recruiting risk questions,
+- response gaps.
+
+The insights agent is not primarily a document drafting tool for MVP.
+
+### Inputs
+
+```json
+{
+  "organization_id": "uuid",
+  "window_start": "timestamp",
+  "window_end": "timestamp",
+  "trigger_type": "nightly | manual"
+}
+```
+
+### Output
+
+```json
+{
+  "summary": "string",
+  "topic_breakdown": [
+    { "label": "NIL", "count": 42, "examples": ["anonymized query text"] }
+  ],
+  "unanswered_questions": [
+    { "message_id": "uuid", "text": "string", "reason": "no_kb_support" }
+  ],
+  "risk_breakdown": [
+    { "label": "recruiting", "count": 3 }
+  ],
+  "recommended_attention_areas": [
+    "Clarify NIL disclosure timing in athlete-facing guidance."
+  ]
+}
+```
+
+## Talk-to-Your-Data Side Panel
+
+The side-panel agent answers admin questions about analytics and insight data.
+
+Constraints:
+1. It can query aggregated analytics, anonymized query text, and stored insight runs.
+2. It cannot expose athlete names.
+3. It should reference metrics or insight records when possible.
+4. It should decline questions outside admin analytics scope.
+
+## Evaluation Targets
+
+| Eval Area | Target |
+|-----------|--------|
+| Retrieval | Expected source appears in top-K for golden questions |
+| Answer quality | Accurate, concise, warm, cited |
+| Citation integrity | Citations map to retrieved context |
+| Refusal | Unsupported and sensitive questions decline correctly |
+| Emergency | Emergency instructions appear and advice is refused |
+| Conflict handling | Newest or official/priority source is preferred |
+| Admin insights | Topics/risk summaries match seeded query data |
 
 ## Observability
 
-- Track run duration, status transitions, and failure reasons per graph.
-- Track token usage per step and per run.
-- Log at node boundaries with structured context (run id, step, status).
+Agent runs should emit:
+- request ID,
+- conversation ID or insight run ID,
+- organization ID,
+- topic/risk labels,
+- retrieval document IDs and scores,
+- answer type,
+- token usage,
+- latency,
+- non-sensitive error reason.
 
-## Failure and Recovery
-
-1. Failed runs preserve their run record and expose a retry path.
-2. Partial outputs are marked and never treated as complete.
-3. Checkpointing lets interrupted runs resume by `thread_id`.
-
-## File Layout
-
-```
-backend/app/agents/
-├── chains/      # per-task chains (create_agent)
-├── nodes/       # graph nodes (chain calls + deterministic steps)
-├── graphs/      # graph assembly
-├── executors/   # run/resume graphs, manage checkpoints
-├── context/     # policies, serializers, middleware
-├── prompts/     # task prompts
-└── tools/       # agent tools
-```
+Logs must not include OAuth tokens, secrets, or unnecessary PII.

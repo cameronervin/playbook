@@ -1,9 +1,11 @@
-# CLAUDE.md — Agent Harness
+# CLAUDE.md — Playbook Agent Harness
 
 > Companion to [AGENTS.md](AGENTS.md). That file has additional architecture detail.
 > All rules, skills, and style guides live in `.claude/` — read them before writing code.
 
-This is a reusable agentic-app scaffold: **FastAPI + LangGraph** backend, **Next.js (App Router) + Tailwind v4 + Zustand + TanStack Query** frontend, Anthropic-first LLM. There is no domain product yet — fill in `prd/` and `docs/` as you build.
+Playbook is an agentic web prototype for college athletic departments. The MVP gives athletes a seamless chat-first support experience for NIL, compliance, and internal process questions, grounded in department-specific knowledge and supported by admin analytics.
+
+The product is built on a reusable **FastAPI + LangGraph** backend, **Next.js (App Router) + Tailwind v4 + Zustand + TanStack Query** frontend, Anthropic-first LLM, and a standalone KB service for ingestion/retrieval.
 
 ---
 
@@ -108,6 +110,24 @@ docs/
 
 ---
 
+## PRD
+
+Specification docs live in `prd/`. Previous scaffold PRD files are archived in `prd-v1-unstructured/`.
+
+- User stories: `prd/01-user-stories/_master-user-stories.md`
+- Implementation: `prd/03-implementation/_implementation-plan.md`
+- Phase 1: `prd/03-implementation/phase-1-foundations.md`
+- Data model: `prd/02-technical-docs/data-model.md`
+- API specification: `prd/02-technical-docs/api-specification.md`
+- Agentic framework: `prd/02-technical-docs/agentic-framework.md`
+- Security: `prd/02-technical-docs/security.md`
+- Integrations: `prd/02-technical-docs/integration-spec.md`
+- Evaluation framework: `prd/02-technical-docs/eval-framework.md`
+- KB service architecture: `prd/02-technical-docs/_kb-service-architecture.md`
+
+V1/unstructured reference:
+- Archived scaffold PRD: `prd-v1-unstructured/`
+
 ## Product & Implementation (Read for Context)
 
 ```
@@ -117,11 +137,13 @@ prd/
 │   ├── _master-user-stories.md
 │   └── epic-*.md
 ├── 02-technical-docs/
+│   ├── _kb-service-architecture.md
 │   ├── data-model.md
 │   ├── api-specification.md
 │   ├── agentic-framework.md
 │   ├── security.md
-│   └── integration-spec.md
+│   ├── integration-spec.md
+│   └── eval-framework.md
 └── 03-implementation/
     └── _implementation-plan.md
 ```

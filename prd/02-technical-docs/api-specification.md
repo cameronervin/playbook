@@ -1,100 +1,242 @@
 # API Specification
 
-> Generic API contract spec. Defines resources, request/response shapes, and
-> status codes. The `examples` resource is illustrative. See
-> `docs/api/endpoints.md` for the live endpoint reference.
+Base URL: `/api/v1`
 
-## Conventions
+This document defines Playbook MVP API contracts for authentication, athlete chat, knowledgebase administration, admin analytics, and auditability.
 
-- Base path: `/api/v1`.
-- Plural-noun resources; HTTP method conveys the action (no verbs in URLs).
-- Every endpoint declares a Pydantic `response_model`.
-- Bearer-token auth via `fastapi-users`; protected routes require it.
-- Errors return `{ "detail": "..." }`.
+<!-- V2 CHANGE: Replace scaffold Example endpoints with Playbook product APIs. -->
 
-## Status Codes
+## Endpoint Summary
 
-| Code | Use |
-|------|-----|
-| 200 | Success (GET, PUT) |
-| 201 | Created (POST) |
-| 204 | No Content (DELETE) |
-| 400 | Validation error |
-| 401 | Not authenticated |
-| 403 | Authenticated but not authorized |
-| 404 | Not found / not owned |
+### Auth and Users
 
-## Resources
+| Method | Endpoint | Purpose | Role |
+|--------|----------|---------|------|
+| GET | `/auth/providers` | List enabled OAuth providers | public |
+| GET | `/auth/{provider}/login` | Start OAuth/OIDC login | public |
+| GET | `/auth/{provider}/callback` | Complete OAuth/OIDC callback | public |
+| POST | `/auth/logout` | End current session | authenticated |
+| GET | `/users/me` | Return current user/profile | authenticated |
+| PATCH | `/users/me/profile` | Complete/update athlete profile | athlete |
+| GET | `/admin/users` | List users for role management | super_admin |
+| PATCH | `/admin/users/{user_id}/role` | Update user role | super_admin |
 
-### Health
+### Athlete Chat
 
-| Method | Path | Auth | Response |
-|--------|------|------|----------|
-| GET | `/health` | none | `{ "status": "ok" }` |
+| Method | Endpoint | Purpose | Role |
+|--------|----------|---------|------|
+| GET | `/conversations` | List current athlete conversations | athlete |
+| POST | `/conversations` | Create a new conversation | athlete |
+| GET | `/conversations/{conversation_id}` | Get conversation with messages, citations, files | athlete-owner |
+| POST | `/conversations/{conversation_id}/messages` | Submit user message and start streamed generation | athlete-owner |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks | athlete-owner |
+| POST | `/conversations/{conversation_id}/files` | Upload conversation-scoped file | athlete-owner |
 
-### Examples
+### Knowledge Base Admin
 
-| Method | Path | Auth | Request | Success |
-|--------|------|------|---------|---------|
-| GET | `/examples` | yes | query: `page`, `page_size` | 200 `ExampleList` |
-| POST | `/examples` | yes | `ExampleCreate` | 201 `Example` |
-| GET | `/examples/{id}` | yes | — | 200 `Example` |
-| PUT | `/examples/{id}` | yes | `ExampleUpdate` | 200 `Example` |
-| DELETE | `/examples/{id}` | yes | — | 204 |
+| Method | Endpoint | Purpose | Role |
+|--------|----------|---------|------|
+| GET | `/admin/kb/documents` | List KB documents and status | admin |
+| POST | `/admin/kb/documents` | Upload KB document | admin |
+| GET | `/admin/kb/documents/{document_id}` | Get document metadata/status | admin |
+| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags, official flag, priority, source date | admin |
+| POST | `/admin/kb/documents/{document_id}/retry` | Retry failed/ready document processing | admin |
+| DELETE | `/admin/kb/documents/{document_id}` | Delete or archive document | admin |
 
-## Schemas
+### Admin Analytics and Insights
 
-### ExampleCreate
+| Method | Endpoint | Purpose | Role |
+|--------|----------|---------|------|
+| GET | `/admin/analytics/summary` | Query volume, topics, unanswered, risk summary | admin |
+| GET | `/admin/analytics/queries` | Anonymized query list | admin |
+| GET | `/admin/insights/runs` | List insight runs | admin |
+| POST | `/admin/insights/runs` | Start manual insight generation | admin |
+| GET | `/admin/insights/runs/{run_id}` | Get run status/output | admin |
+| POST | `/admin/insights/ask` | Talk-to-your-data side-panel question | admin |
+
+### Governance
+
+| Method | Endpoint | Purpose | Role |
+|--------|----------|---------|------|
+| GET | `/admin/audit-logs` | Query audit log records | super_admin |
+| GET | `/health` | API health check | public |
+
+## Request / Response Examples
+
+### Current User
 ```json
+GET /api/v1/users/me
 {
-  "name": "string (required, 1..255)",
-  "description": "string | null",
-  "data": "object (default {})"
+  "id": "uuid",
+  "email": "athlete@example.com",
+  "name": "Jordan Athlete",
+  "role": "athlete",
+  "sport_team": "Basketball",
+  "profile_complete": true
 }
 ```
 
-### ExampleUpdate
+### Update Athlete Profile
 ```json
+PATCH /api/v1/users/me/profile
 {
-  "name": "string | null",
-  "description": "string | null",
-  "status": "draft | active | archived | null",
-  "data": "object | null"
+  "name": "Jordan Athlete",
+  "sport_team": "Basketball",
+  "selected_role": "athlete"
 }
 ```
-All fields optional; omitted fields are unchanged.
 
-### Example (response)
+Response:
 ```json
 {
   "id": "uuid",
-  "owner_id": "uuid",
-  "name": "string",
-  "description": "string | null",
-  "status": "draft",
-  "data": {},
-  "created_at": "ISO8601",
-  "updated_at": "ISO8601"
+  "name": "Jordan Athlete",
+  "role": "athlete",
+  "sport_team": "Basketball",
+  "next_route": "/chat"
 }
 ```
 
-### ExampleList (response)
+### Submit Chat Message
+```json
+POST /api/v1/conversations/{conversation_id}/messages
+{
+  "content": "Can I accept this NIL deal?",
+  "file_ids": ["uuid"]
+}
+```
+
+Response:
 ```json
 {
-  "items": [ /* Example[] */ ],
-  "total": 0,
-  "page": 1,
-  "page_size": 20
+  "user_message_id": "uuid",
+  "assistant_message_id": "uuid",
+  "stream_url": "/api/v1/conversations/uuid/messages/uuid/stream",
+  "status": "streaming"
+}
+```
+
+### Assistant Message Shape
+```json
+{
+  "id": "uuid",
+  "role": "assistant",
+  "content": "Short answer...",
+  "status": "complete",
+  "safety_outcome": null,
+  "citations": [
+    {
+      "source_title": "NIL Policy Handbook",
+      "rank": 1,
+      "metadata": {
+        "document_id": "uuid",
+        "source_date": "2026-01-15",
+        "is_official": true
+      }
+    }
+  ],
+  "created_at": "2026-06-03T12:00:00Z"
+}
+```
+
+### Upload KB Document
+```json
+POST /api/v1/admin/kb/documents
+Content-Type: multipart/form-data
+
+file=@nil-handbook.pdf
+metadata_tags={"topic":"nil","source_type":"policy"}
+is_official=true
+priority=10
+source_date=2026-01-15
+```
+
+Response:
+```json
+{
+  "id": "uuid",
+  "title": "nil-handbook.pdf",
+  "processing_status": "uploaded",
+  "metadata_tags": {
+    "topic": "nil",
+    "source_type": "policy"
+  }
+}
+```
+
+### Analytics Summary
+```json
+GET /api/v1/admin/analytics/summary?window=7d
+{
+  "window_start": "2026-05-27T00:00:00Z",
+  "window_end": "2026-06-03T00:00:00Z",
+  "query_volume": 128,
+  "top_topics": [
+    { "label": "NIL", "count": 48 }
+  ],
+  "unanswered_count": 12,
+  "risk_counts": {
+    "nil": 22,
+    "compliance": 14,
+    "recruiting": 3
+  }
+}
+```
+
+### Manual Insight Run
+```json
+POST /api/v1/admin/insights/runs
+{
+  "window_start": "2026-05-27T00:00:00Z",
+  "window_end": "2026-06-03T00:00:00Z"
+}
+```
+
+Response:
+```json
+{
+  "run_id": "uuid",
+  "status": "pending"
+}
+```
+
+### Talk-to-Your-Data Question
+```json
+POST /api/v1/admin/insights/ask
+{
+  "question": "What are athletes most confused about this week?",
+  "window": "7d"
+}
+```
+
+Response:
+```json
+{
+  "answer": "NIL disclosure timing is the most common confusion area...",
+  "references": [
+    { "type": "metric", "id": "top_topics.nil" },
+    { "type": "insight_run", "id": "uuid" }
+  ]
+}
+```
+
+## Error Response Contract
+
+```json
+{
+  "error": {
+    "code": "string",
+    "message": "string",
+    "retryable": false
+  }
 }
 ```
 
 ## Authorization Rules
 
-- All `examples` operations are scoped to the authenticated user.
-- A user may only read/update/delete examples they own. Accessing another
-  user's example returns 404 (existence is not leaked).
-
-## Versioning
-
-Breaking contract changes go under a new path prefix (`/api/v2`). Additive,
-backward-compatible changes stay in `/api/v1`.
+1. Athletes can only read and mutate their own conversations and files.
+2. Admins can manage KB documents and view anonymized analytics.
+3. Super admins can manage users, roles, and audit log queries.
+4. Admin analytics must not return athlete names by default.
+5. KB document operations must write audit records.
+6. OAuth tokens must never be returned to the frontend after session creation.

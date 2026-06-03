@@ -1,108 +1,111 @@
 # Integration Specification
 
-> Generic spec for external integrations: the LLM provider, an optional
-> knowledge base, and object storage. Each integration is behind an abstraction
-> so it can be swapped via configuration.
+This document defines how Playbook integrates with identity providers, the existing KB service, storage, async workers, and future athletic department systems.
 
-## 1. LLM Provider
+## Current Scaffold Integrations
 
-### Abstraction
+- Main backend to KB service over HTTP through `LocalKBProvider`.
+- KB service to S3/LocalStack for staged document data.
+- KB service to PostgreSQL/pgvector for vector storage.
+- KB service to OpenAI embeddings directly or through LiteLLM gateway.
+- Backend to LLM providers directly or through LiteLLM gateway.
+- Celery + Valkey for async ingestion and background jobs.
 
-All LLM access goes through `BaseLLMProvider.get_chat_model()` (and
-streaming/structured variants). Application and agent code never import a vendor
-SDK directly.
+<!-- V2 CHANGE: Add Playbook OAuth/OIDC, chat-to-KB retrieval, admin document upload, nightly insights, and future system integration boundaries. -->
 
-### Transport Modes
+## Identity Providers
 
-| Mode | Behavior | When to use |
-|------|----------|-------------|
-| `direct` (default) | Call the provider SDK directly (Anthropic-first) | Local dev, single-provider deployments |
-| `gateway` | Route through a LiteLLM proxy (OpenAI-compatible) | Multi-provider routing, fallbacks, centralized cost/rate control |
+| Provider | Purpose | MVP Scope |
+|----------|---------|-----------|
+| Google OAuth/OIDC | User sign-in | Required |
+| Microsoft OAuth/OIDC | User sign-in | Required |
 
-Selected by `LLM_PROVIDER_MODE`. Model identity is config
-(`LLM_CHAT_MODEL`, model lists), so swaps are config changes, not code changes.
+Implementation notes:
+1. Configure app registrations and redirect URLs per environment.
+2. Store provider and provider subject on the local user record.
+3. Use local roles for authorization; do not rely on provider groups for MVP.
+4. Avoid paid auth vendors unless later requirements justify one.
 
-### Configuration
+## Knowledge Base Service
 
-| Var | Mode | Purpose |
-|-----|------|---------|
-| `LLM_PROVIDER_MODE` | both | `direct` or `gateway` |
-| `LLM_CHAT_MODEL` | both | Default chat model id |
-| `ANTHROPIC_API_KEY` | direct | Provider credential |
-| `LLM_GATEWAY_URL` | gateway | LiteLLM proxy URL |
-| `LLM_GATEWAY_API_KEY` | gateway | Gateway credential |
+### Admin Document Flow
 
-### Requirements
+1. Admin uploads document through main backend.
+2. Main backend stores original file in configured storage.
+3. Main backend creates `kb_documents` record with `uploaded` status.
+4. Main backend calls KB service ingestion endpoint or dispatches ingestion worker.
+5. KB service parses, chunks, embeds, and writes vectors.
+6. Main backend updates status to `processing`, `ready`, or `failed`.
+7. Ready documents become eligible for chat retrieval.
 
-1. Token usage and (where available) cost are tracked per request.
-2. Timeouts and bounded retries are configured for transient failures.
-3. The eval/judge layer uses the same factory, so it tracks production model
-   identity automatically.
+### Search Flow
 
-## 2. Knowledge Base / Retrieval (optional)
+1. Athlete asks question.
+2. Chat agent calls backend knowledgebase provider.
+3. Provider calls KB service semantic search.
+4. Results return document/chunk metadata.
+5. Chat agent ranks results using score, source date, official flag, and priority.
+6. Answer cites source titles at the bottom.
 
-If the product needs grounded retrieval, integrate a retrieval source behind a
-tool or a retriever abstraction.
+## Conversation File Uploads
 
-### Requirements
+Athlete-uploaded files are conversation-scoped.
 
-1. Expose retrieval to agents as a typed tool (e.g. `query_knowledge`), not as
-   raw context dumping.
-2. Return **snippets/chunks** with source metadata, not whole documents, to keep
-   token usage low.
-3. Scope retrieval to what the requesting user is authorized to see.
-4. Treat retrieved content as untrusted data (never as instructions).
-5. Record which sources informed an output for traceability.
+1. Athlete uploads supported file to conversation.
+2. File is stored securely and associated with conversation.
+3. Extraction runs for that file.
+4. Extracted text can be included in context for that conversation.
+5. File is retained and visible in conversation history.
+6. File is not added to shared KB in MVP.
 
-### Contract (illustrative)
+Supported MVP file types:
+- PDF
+- DOCX
+- PPTX
+- XLSX
 
-```json
-{
-  "query": "string",
-  "top_k": 5,
-  "results": [
-    { "id": "string", "text": "string", "source": "string", "score": 0.0 }
-  ]
-}
-```
+## External Athletic Systems
 
-## 3. Object Storage (S3 / LocalStack)
+Systems mentioned for future interaction:
+- Teamworks
+- Opendorse
+- NILGO
 
-### Abstraction
+MVP boundary:
+- Playbook answers "where/how" based on uploaded docs.
+- Playbook may include links when docs contain them.
+- Playbook does not perform direct API actions in those systems.
 
-A single S3-compatible client (boto3) is used everywhere. It points at
-LocalStack in dev and real S3 in production — only the endpoint and credentials
-change.
+Future state:
+- Add API integrations if provider APIs, auth, scopes, and costs support it.
+- Actions must require explicit user confirmation and auditability.
 
-### Configuration
+## Insight Jobs
 
-| Var | Purpose |
-|-----|---------|
-| `S3_ENDPOINT_URL` | LocalStack URL in dev; omitted in prod (uses AWS default) |
-| `S3_BUCKET` | Target bucket |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credentials (prefer an IAM role in prod) |
-| `AWS_REGION` | Region |
+| Job | Trigger | Output |
+|-----|---------|--------|
+| Nightly query insights | Scheduled | `query_insight_runs`, `query_insights` |
+| Manual query insights | Admin action | `query_insight_runs`, `query_insights` |
 
-### Requirements
+Insight jobs read conversation/query metadata and anonymized query text. They summarize topics, unanswered questions, and NIL/compliance/recruiting risk.
 
-1. Validate uploads (type, size) before storing.
-2. Use server-generated keys; do not trust client filenames for paths.
-3. Serve downloads via presigned URLs with a short TTL where direct access is
-   needed.
-4. Do not make buckets public.
+## Storage
 
-## 4. Async Processing (optional)
+| Data | Storage |
+|------|---------|
+| Admin KB originals | S3/LocalStack-compatible storage |
+| Conversation files | S3/LocalStack-compatible storage |
+| Parsed/chunked staging | KB service S3 staging |
+| Vector embeddings | PostgreSQL + pgvector |
+| Conversations/analytics/audit | Main backend PostgreSQL |
 
-Long-running work (e.g. multi-step agent runs) can be offloaded to Celery with
-Valkey as broker/result backend.
+## Failure Handling
 
-| Var | Purpose |
-|-----|---------|
-| `CELERY_BROKER_URL` | Valkey broker URL |
-| `CELERY_RESULT_BACKEND` | Result backend URL |
-
-### Requirements
-
-1. Tasks are idempotent where possible and safe to retry.
-2. Task status is queryable so the frontend can poll progress.
-3. Failures are recorded with enough context to retry or debug.
+| Integration | Failure | Expected Behavior |
+|-------------|---------|-------------------|
+| OAuth provider | Callback/token exchange fails | No local session; retryable error |
+| KB ingestion | Parse/chunk/embed fails | Document status `failed` with reason |
+| KB search | Service unavailable | Chat returns graceful error or unsupported response |
+| LLM provider | Generation fails | Stream shows recoverable failure and logs run ID |
+| Insight job | Agent/job fails | Run status `failed`; dashboard shows failure |
+| Storage | Upload fails | No ready record; admin/athlete sees clear error |
