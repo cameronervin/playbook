@@ -8,6 +8,7 @@
 | Tool | Version | Notes |
 |------|---------|-------|
 | Python | 3.12+ | Backend (FastAPI) |
+| uv | latest | Python package and environment manager |
 | Node.js | 20+ | Frontend (Next.js) |
 | Docker | latest | Postgres, LocalStack, Valkey |
 | Git | latest | — |
@@ -36,21 +37,18 @@ Or start only the services you need — see
 ```bash
 cd backend
 
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Install Python 3.12 if needed, then create/sync the managed environment
+uv python install 3.12
+uv sync
 
 # Configure environment
 cp ../deploy/envs/.env.local .env   # then edit values (e.g. ANTHROPIC_API_KEY)
 
 # Apply database migrations
-alembic upgrade head
+uv run alembic upgrade head
 
 # Run the dev server (http://localhost:8000)
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 ```
 
 Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "ok"}`.
@@ -70,7 +68,18 @@ cp .env.example .env.local           # set NEXT_PUBLIC_API_URL=http://localhost:
 npm run dev
 ```
 
-## 5. Verify End to End
+## 5. KB Service
+
+For standalone KB-service work:
+
+```bash
+cd kb-service
+uv sync
+uv run alembic upgrade head          # needs Postgres with pgvector
+uv run python run_dev.py             # uvicorn on http://localhost:8001
+```
+
+## 6. Verify End to End
 
 1. Open http://localhost:3000.
 2. Register a user, log in.
@@ -80,6 +89,7 @@ npm run dev
 
 | Symptom | Fix |
 |---------|-----|
+| `uv` cannot find Python 3.12 | Run `uv python install 3.12` from the repo root |
 | `connection refused` on DB | Ensure the Postgres container is running and `DATABASE_URL` matches the exposed port |
 | `alembic` "target database is not up to date" | Run `alembic upgrade head` |
 | LLM calls fail | Check `LLM_PROVIDER_MODE` and the relevant API key in `.env` |

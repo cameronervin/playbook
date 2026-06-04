@@ -11,15 +11,12 @@ Installed on top of the backend env (shares `app.*`; not an isolated venv):
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt      # runtime deps
-pip install -e ".[evals]"            # evals extras (dev/CI only — not in the runtime image)
+uv sync --group evals          # runtime, dev, and eval deps
 ```
 
-The `evals` extra pulls `ragas`, `langfuse`, and `click`. The harness modules
+The `evals` dependency group pulls `ragas`, `langfuse`, and `click`. The harness modules
 import these lazily, so `python -m compileall evals` succeeds even before the
-extra is installed.
+group is installed.
 
 ## Run
 
@@ -31,9 +28,9 @@ Author the dataset + rubric YAMLs first (see `datasets/README.md`, `rubrics/READ
 
 ```bash
 cd backend
-python -m evals.cli sync-datasets                 # mirror datasets into Langfuse
-python -m evals.cli run --agent example
-python -m evals.cli run-all                        # every agent
+uv run --group evals python -m evals.cli sync-datasets  # mirror datasets into Langfuse
+uv run --group evals python -m evals.cli run --agent example
+uv run --group evals python -m evals.cli run-all         # every agent
 ```
 
 `--agent` choices: `example`.

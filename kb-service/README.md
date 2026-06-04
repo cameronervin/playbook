@@ -69,12 +69,12 @@ tests/                     pgvector / celery / splitter shims; repo + worker con
 
 ```bash
 cd kb-service
-pip install -r requirements.txt
-alembic upgrade head                 # needs Postgres with the pgvector extension
-python run_dev.py                    # uvicorn on :8001
+uv sync
+uv run alembic upgrade head          # needs Postgres with the pgvector extension
+uv run python run_dev.py             # uvicorn on :8001
 # workers (separate terminals):
-celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2
-celery -A app.workers.app worker -Q kb-io  --pool=threads  --concurrency=50
+uv run celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2
+uv run celery -A app.workers.app worker -Q kb-io  --pool=threads  --concurrency=50
 ```
 
 See `deploy/compose/base.yml` (+ `--profile worker`) to run the whole stack with Docker.

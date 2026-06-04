@@ -50,7 +50,7 @@ needs it:
 1. Add an API-key setting to `app/core/config.py` (e.g. `MISTRAL_API_KEY`).
 2. Add a branch to `direct.py::_create_chat_model` returning the LangChain
    chat model for that provider.
-3. Add the integration package to `requirements.txt`.
+3. Add the integration package to `backend/pyproject.toml`.
 
 ## Adding domain-specific model accessors
 

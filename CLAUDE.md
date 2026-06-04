@@ -251,7 +251,8 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 ./deploy/scripts/deploy.sh dev --build --detach
 
 # Backend standalone
-cd backend && uvicorn app.main:app --reload && pytest -v
+cd backend && uv run uvicorn app.main:app --reload
+cd backend && uv run pytest -v
 
 # Frontend standalone
 cd frontend && npm run dev && npm test

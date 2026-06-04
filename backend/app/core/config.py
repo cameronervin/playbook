@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     TRACING_ENABLED: bool = False
 
     # Langfuse — LLM tracing + eval dataset/score sync (used by evals/).
-    # Install the extra: pip install -e ".[evals]"
+    # Install the dependency group: uv sync --group evals
     LANGFUSE_ENABLED: bool = False
     LANGFUSE_SECRET_KEY: str = ""
     LANGFUSE_PUBLIC_KEY: str = ""

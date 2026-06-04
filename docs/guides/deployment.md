@@ -33,6 +33,11 @@ what differs.
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up
 ```
 
+Python service images use `uv sync --locked --no-dev` against each service's
+committed `pyproject.toml` and `uv.lock`. The container virtual environment is
+created at `/opt/venv`, which keeps local bind mounts from hiding installed
+packages during hot-reload development.
+
 ## Deploy Script
 
 `deploy/scripts/deploy.sh` wraps the compose invocation:
@@ -109,4 +114,11 @@ connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
 
 # Backend health
 curl http://<host>/api/v1/health
+```
+
+To verify Python dependency resolution before a deploy:
+
+```bash
+cd backend && uv sync --locked
+cd ../kb-service && uv sync --locked
 ```
