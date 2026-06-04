@@ -62,7 +62,7 @@ mix-in), not abstract methods on `BaseKnowledgebaseProvider`:
 - `delete_document(document_id)` / `delete_pipeline(configuration_id)`.
 - `find_document_ids_by_filename(configuration_id, filename) -> list[str]`.
 
-Document ingestion is typically driven from a Celery task (see `app/tasks/`),
+Document ingestion is typically driven from a Celery task (see `app/workers/`),
 calling the individual submit/poll methods with worker-managed retries.
 
 ## Adding a real KB backend

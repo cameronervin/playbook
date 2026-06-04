@@ -11,7 +11,7 @@ POST /api/v2/<resource>        → 202 Accepted, { "task_id": "..." }
 GET  /api/v2/tasks/{task_id}   → { "status": "pending|running|succeeded|failed", "result": ... }
 ```
 
-The work is dispatched to a background worker (see `app/tasks/`), which uses
+The work is dispatched to a background worker (see `app/workers/`), which uses
 `worker_db_session()` for its own DB session. v1 endpoints remain the blocking
 equivalents.
 

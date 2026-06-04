@@ -71,8 +71,35 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
   healthcheck — keep them.
 - **Reverse proxy**: nginx serves the frontend and proxies `/api` to the
   backend (see `deploy/docker/nginx.conf`).
-- **LLM transport**: set `LLM_PROVIDER_MODE` (`direct` or `gateway`) and the
-  matching credentials per environment.
+- **LLM transport**: production should use `LLM_PROVIDER_MODE=gateway` and route
+  backend, KB-service, and eval traffic through LiteLLM Proxy. Direct mode is
+  reserved for local smoke tests or an explicit break-glass path.
+
+## LiteLLM Proxy
+
+LiteLLM should run as its own service/container in deployed environments. The
+application services should not hold provider API keys directly; they should
+call the proxy with `LLM_GATEWAY_BASE_URL` and a LiteLLM virtual/service key.
+
+Recommended deployment shape:
+
+| Component | Responsibility |
+|-----------|----------------|
+| `litellm` service | Runs LiteLLM Proxy on the internal network, usually port `4000` |
+| LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, and `playbook-embed` |
+| LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
+| Backend env | `LLM_PROVIDER_MODE=gateway`, `LLM_GATEWAY_BASE_URL=http://litellm:4000`, `LLM_GATEWAY_API_KEY=<service key>` |
+| KB-service env | Gateway base URL/key plus embedding alias for ingestion |
+
+Use a separate LiteLLM database or at least a separate database/user in the
+Postgres cluster. Do not add LiteLLM tables to the Playbook application data
+model or manage them with Playbook Alembic migrations; LiteLLM owns its own
+schema and migrations.
+
+LiteLLM's database is optional for a minimal proxy, but it is required for the
+features Playbook wants in scope: virtual keys, spend tracking, budgets, and the
+admin UI. That means the production deployment should include a LiteLLM DB
+connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
 
 ## Verifying a Deploy
 

@@ -10,7 +10,7 @@ from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.infrastructure.db.session import get_db
 from app.models.example import Example
 
 

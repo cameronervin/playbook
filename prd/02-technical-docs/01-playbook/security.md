@@ -23,7 +23,7 @@ The scaffold includes FastAPI auth patterns, service-to-service auth for the KB 
 | Role | Permissions |
 |------|-------------|
 | `athlete` | Chat, upload conversation files, view own history |
-| `admin` | Manage KB documents, view anonymized analytics, run insights |
+| `admin` | Manage KB documents, view anonymized analytics, run dashboard insights, use admin chat |
 | `super_admin` | Admin permissions plus user role management and audit log query |
 
 Role storage must support future roles without schema redesign.
@@ -44,7 +44,7 @@ Role storage must support future roles without schema redesign.
 2. Admin analytics shows query text but anonymizes athlete identity.
 3. Analytics payloads should use stable anonymous identifiers where grouping is needed.
 4. Logs should avoid unnecessary PII and must never include secrets or provider tokens.
-5. Stored conversations are used for athlete history and admin insights.
+5. Stored conversations are used for athlete history, dashboard insights, and anonymized admin analytics.
 
 ## Safety Policy
 

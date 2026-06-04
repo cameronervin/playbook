@@ -11,7 +11,7 @@ session.commit() explicitly, so each method manages its own transaction.
 
 from contextlib import asynccontextmanager
 
-from app.db.session import get_session_factory
+from app.infrastructure.db.session import get_session_factory
 
 
 @asynccontextmanager

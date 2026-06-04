@@ -56,9 +56,10 @@ app/
 │   ├── prompts/       # Task-specific prompts
 │   └── tools/         # Agent tools (e.g. example_tool)
 └── infrastructure/    # External integrations
+    ├── db/            # SQLAlchemy engine/session helpers
     ├── storage/       # S3 client (boto3)
     ├── llm/           # LLM providers (direct + gateway)
-    └── tasks/         # Celery app + tasks (optional)
+    └── workers/       # Celery app + worker tasks (optional)
 ```
 
 ### Frontend
@@ -83,7 +84,7 @@ src/
 | Frontend | Next.js (App Router), TypeScript, Tailwind v4, TanStack Query, Zustand |
 | Backend | FastAPI, SQLAlchemy 2.0 (async), Pydantic, Alembic |
 | Agents | LangGraph, LangChain |
-| LLM | Anthropic (direct, default); LiteLLM (gateway, optional) |
+| LLM | LiteLLM gateway by default; direct Anthropic/OpenAI only for local or break-glass use |
 | Database | PostgreSQL |
 | Storage | AWS S3, LocalStack (dev) |
 | Async (optional) | Valkey (broker/backend) + Celery |
@@ -99,9 +100,11 @@ imports a vendor SDK directly:
   variants). Application code and agents depend on this abstraction, not on a
   concrete client.
 - Transport is selected by `LLM_PROVIDER_MODE`:
-  - `direct` — call the provider SDK directly (Anthropic-first default).
   - `gateway` — route through a LiteLLM proxy (OpenAI-compatible) for
-    multi-provider routing, fallbacks, and centralized cost/rate controls.
+    centralized credentials, model aliases, routing, fallbacks, spend tracking,
+    and cost/rate controls.
+  - `direct` — call the provider SDK directly for local development, smoke
+    tests, or an explicit break-glass path.
 - Swapping a model or provider is a config change, not a code change. See
   [ADR 0002](decisions/0002-llm-provider-modes.md).
 

@@ -10,16 +10,16 @@ The application calls large language models from multiple places (services and
 agent graphs). We need to:
 
 - Avoid coupling application/agent code to any one vendor SDK.
-- Support a simple, low-dependency default for local development and small
-  deployments.
-- Allow centralized multi-provider routing, fallbacks, and cost/rate controls
-  when running at scale.
+- Centralize provider API keys outside application services.
+- Allow centralized multi-provider routing, fallbacks, spend tracking, budgets,
+  and rate controls when running at scale.
+- Preserve a simple direct path for local development and emergency fallback.
 
 Two transport options exist:
 
-1. **Direct** — call the provider SDK (Anthropic by default) directly.
-2. **Gateway** — route all traffic through a [LiteLLM](https://github.com/BerriAI/litellm)
+1. **Gateway** — route all traffic through a [LiteLLM](https://github.com/BerriAI/litellm)
    proxy that exposes an OpenAI-compatible API and can fan out to many providers.
+2. **Direct** — call the provider SDK directly for local or break-glass use.
 
 ## Decision
 
@@ -29,11 +29,11 @@ SDK directly.
 
 Transport is selected at runtime by the `LLM_PROVIDER_MODE` setting:
 
-- `direct` (**default**) — Anthropic-first. Calls the provider SDK directly.
-  Fewest moving parts; ideal for local dev and single-provider deployments.
-- `gateway` — routes through a LiteLLM proxy. Use when you need multi-provider
-  routing, automatic fallbacks, or centralized usage/cost tracking and rate
-  limiting.
+- `gateway` (**default**) — routes through a LiteLLM proxy. Use for production
+  traffic that needs centralized credentials, model aliases, multi-provider
+  routing, automatic fallbacks, usage/cost tracking, budgets, and rate limiting.
+- `direct` — calls the provider SDK directly. Use only for local development,
+  smoke tests, or an explicit break-glass path.
 
 Model identity (`LLM_CHAT_MODEL`, model lists, etc.) is also configuration, so a
 model or provider swap is a config change with no code change.
@@ -42,8 +42,8 @@ model or provider swap is a config change with no code change.
 
 **Positive**
 - Vendor independence — swap providers or models via env vars.
-- Local dev stays simple (`direct`, single API key).
-- Scaling path is built in (`gateway`) without rewriting agents.
+- Provider credentials are centralized in the gateway instead of spread across app services.
+- Local dev and emergency fallback remain possible through `direct`.
 - The eval/judge layer reuses the same factory, so it always tracks production
   model identity.
 
@@ -55,4 +55,4 @@ model or provider swap is a config change with no code change.
 
 **Follow-ups**
 - Document required env vars for each mode in `deploy/envs/`.
-- Add a smoke test that exercises both modes against a cheap model.
+- Add smoke tests that exercise gateway mode by default and direct mode as a fallback.

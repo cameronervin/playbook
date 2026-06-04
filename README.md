@@ -1,71 +1,100 @@
-# Agentic App Scaffold
+# Playbook
 
-A reusable, **pattern-faithful** starting point for building an agentic application with a
-**FastAPI + LangGraph** backend, a **Next.js (App Router)** frontend, and a full
-**Claude Code / Cursor agent harness** (`.claude/`, `.cursor/`, `CLAUDE.md`, `AGENTS.md`).
+Playbook is an agentic web prototype for college athletic departments. The MVP
+gives athletes a chat-first support experience for NIL, compliance, and internal
+process questions, grounded in department-specific knowledge and supported by
+admin analytics.
 
-This scaffold was distilled from a production codebase. All domain logic has been removed and
-replaced with clearly-labeled `example_*` exemplars + `STUBS.md` notes, so a coding agent can
-pattern-match against real architecture instead of starting from an empty repo.
+The project is an MVP build in progress. It builds on a reusable FastAPI,
+LangGraph, Next.js, and knowledge-base service foundation, but the product goal
+is Playbook: a neutral, athlete-first support tool that does not imply
+affiliation with any specific university.
+
+---
+
+## MVP Focus
+
+| Surface | Purpose |
+|---------|---------|
+| Athlete chat | Ask natural-language NIL, compliance, and process questions, with grounded answers, citations, conversation history, and conversation-scoped file uploads. |
+| Knowledge base operations | Let admins upload, tag, process, retry, and manage department documents used for retrieval. |
+| Admin analytics | Help admins understand question volume, topic patterns, unsupported requests, and recurring knowledge gaps. |
+| Safety and governance | Support refusal behavior, role-based access, audit logging, anonymized analytics, and release-readiness checks. |
+
+MVP priorities are a low-friction athlete entry path, concise cited answers,
+safe declines for unsupported or sensitive topics, admin document management,
+and insight generation for department operators.
 
 ---
 
 ## Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI, SQLAlchemy 2.0 (async), Alembic, Pydantic v2 |
-| Agents | LangGraph + LangChain (Anthropic-first) |
-| LLM gateway | LiteLLM (optional `gateway` mode) |
-| Storage | S3 / LocalStack (boto3) |
-| Frontend | Next.js (App Router), Tailwind CSS v4, Zustand, TanStack Query |
-| KB / RAG | `kb-service`: docling → OpenAI embeddings → pgvector (FastAPI + Celery) |
-| Async | Celery + Valkey (optional) |
-| Logging | structlog |
-| Tests | pytest (backend / kb-service), Vitest + React Testing Library (frontend) |
+|-------|------------|
+| Frontend | Next.js App Router, TypeScript, Tailwind CSS v4, Zustand, TanStack Query |
+| Backend | FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2 |
+| Agents | LangGraph + LangChain, Anthropic-first LLM orchestration |
+| LLM gateway | LiteLLM gateway mode, with direct provider mode for local or break-glass use |
+| Knowledge base | Standalone `kb-service` for ingestion, chunking, embeddings, and retrieval |
+| Retrieval | Docling, tiktoken chunking, OpenAI/LiteLLM embeddings, pgvector similarity search |
+| Data and storage | PostgreSQL, pgvector, S3 or LocalStack |
+| Async work | Celery + Valkey for long-running ingestion and background processing |
+| Observability | structlog, audit logs, and privacy-conscious operational logging |
+| Tests | pytest for backend and KB service, Vitest + React Testing Library for frontend |
 
 ---
 
 ## Architecture
 
-```
-backend/app/  api/v1 -> services -> repositories -> models
+```text
 frontend/     app/ -> features/ -> components/ -> hooks -> lib/store
+backend/app/  api/v1 -> services -> repositories -> models
+kb-service/   api -> services -> repositories -> models + workers
 ```
 
-- **Thin routes** parse the request and delegate to a service (`Depends()` DI).
-- **Services** hold business logic and orchestrate repositories + providers.
-- **Repositories** are the only place that touches the DB (`select()` + `selectinload`).
-- **Infrastructure providers** (LLM / KB / storage) follow an **ABC + `StrEnum` mode + `@lru_cache` factory** pattern so implementations are swappable by config.
-- **Agents** compose `chains -> nodes -> graphs -> executors` via builders; tools are declared in a frozen `ToolSpec` registry.
+Playbook separates the product API, frontend experience, and retrieval pipeline:
+
+- The **Next.js frontend** provides the athlete chat surface and admin
+  workspaces.
+- The **FastAPI backend** owns product APIs, auth, roles, conversations, audit
+  logging, analytics, and LangGraph agent orchestration.
+- The **LangGraph agent layer** composes chains, nodes, graphs, executors,
+  prompts, and tools for chat, safety, retrieval, and insight workflows.
+- The **KB service** owns document ingestion and retrieval: parsing, chunking,
+  embedding, pgvector storage, status tracking, and search.
+- The backend talks to the KB service over HTTP through `LocalKBProvider`, so
+  retrieval can evolve independently from the product API.
 
 ---
 
-## What's where
+## Repository Map
 
 | Path | Purpose |
 |------|---------|
-| `CLAUDE.md` / `AGENTS.md` | Agent harness manifesto (rules, skills, boundaries) |
-| `.claude/` `.cursor/` | Rules, skills, style guides, commands, MCP config |
-| `backend/app/infrastructure/` | LLM / KB / storage providers + LangGraph checkpointer (see `INFRASTRUCTURE.md`) |
-| `backend/app/agents/` | LangGraph orchestration (see `agents/STUBS.md`) |
-| `kb-service/` | Standalone RAG service: docling → OpenAI embeddings → pgvector. The backend's `LocalKBProvider` is its HTTP client (see `kb-service/README.md`) |
-| `frontend/` | Next.js skeleton (see `FRONTEND.md`) |
-| `docs/` | Architecture, API, guides, ADRs |
-| `prd/` | Product requirements skeleton (user stories, tech docs, phases) |
-| `deploy/` | Docker Compose, Dockerfiles, env templates, scripts |
-
-Every `STUBS.md` explains how to replace the `example_*` exemplar with real logic.
+| `prd/` | Playbook user stories, technical specs, and phase implementation plans |
+| `docs/` | Architecture notes, API docs, setup guides, ADRs, and agent documentation |
+| `backend/` | FastAPI product backend, LangGraph agent runtime, providers, models, and tests |
+| `frontend/` | Next.js App Router frontend for athlete and admin experiences |
+| `kb-service/` | Standalone RAG service for document ingestion and vector retrieval |
+| `deploy/` | Docker Compose, Dockerfiles, environment templates, and deployment scripts |
+| `.claude/`, `.cursor/`, `AGENTS.md`, `CLAUDE.md` | Agent harness rules, skills, commands, and collaboration guidance |
 
 ---
 
-## First steps for a new agent
+## Getting Oriented
 
-1. Read `CLAUDE.md` and the rules in `.claude/rules/`.
-2. Read `docs/architecture/overview.md` and `prd/README.md`.
-3. Pick a layer, open its `example_*` exemplar + neighbouring `STUBS.md`, and follow the pattern.
-4. Backend: `cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload`.
-5. Frontend: `cd frontend && npm install && npm run dev`.
+Start with the product docs, then follow the implementation phase plan:
 
-> This is scaffolding, not a running product. The example flows parse and type-check, but real
-> models, providers, prompts, and screens are intentionally left as stubs.
+1. Read [`prd/README.md`](prd/README.md) for the MVP overview, priorities, and
+   document index.
+2. Read [`prd/03-implementation/_implementation-plan.md`](prd/03-implementation/_implementation-plan.md)
+   for the phase roadmap.
+3. Read [`docs/architecture/overview.md`](docs/architecture/overview.md) for the
+   system architecture and request lifecycle.
+4. Use [`docs/guides/setup.md`](docs/guides/setup.md) for local setup details.
+5. Use [`kb-service/README.md`](kb-service/README.md) when working on ingestion,
+   embeddings, or retrieval.
+
+For code changes, follow the rules and skills in `.claude/` before editing.
+Those files define the repo workflow for TDD, security, logging,
+documentation, frontend design, and review.

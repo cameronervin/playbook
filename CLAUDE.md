@@ -117,13 +117,18 @@ Specification docs live in `prd/`. Previous scaffold PRD files are archived in `
 - User stories: `prd/01-user-stories/_master-user-stories.md`
 - Implementation: `prd/03-implementation/_implementation-plan.md`
 - Phase 1: `prd/03-implementation/phase-1-foundations.md`
-- Data model: `prd/02-technical-docs/data-model.md`
-- API specification: `prd/02-technical-docs/api-specification.md`
-- Agentic framework: `prd/02-technical-docs/agentic-framework.md`
-- Security: `prd/02-technical-docs/security.md`
-- Integrations: `prd/02-technical-docs/integration-spec.md`
-- Evaluation framework: `prd/02-technical-docs/eval-framework.md`
-- KB service architecture: `prd/02-technical-docs/_kb-service-architecture.md`
+- Data model: `prd/02-technical-docs/01-playbook/data-model.md`
+- API specification: `prd/02-technical-docs/01-playbook/api-specification.md`
+- Agentic framework: `prd/02-technical-docs/01-playbook/agentic-framework.md`
+- Security: `prd/02-technical-docs/01-playbook/security.md`
+- Integrations: `prd/02-technical-docs/01-playbook/integration-spec.md`
+- Evaluation framework: `prd/02-technical-docs/01-playbook/eval-framework.md`
+- KB service architecture: `prd/02-technical-docs/02-kb-service/architecture.md`
+- KB service data model: `prd/02-technical-docs/02-kb-service/data-model.md`
+- KB service API contracts: `prd/02-technical-docs/02-kb-service/api-contracts.md`
+- KB service ingestion: `prd/02-technical-docs/02-kb-service/ingestion-pipeline.md`
+- KB service retrieval: `prd/02-technical-docs/02-kb-service/retrieval.md`
+- KB service operations/security: `prd/02-technical-docs/02-kb-service/operations-security.md`
 
 V1/unstructured reference:
 - Archived scaffold PRD: `prd-v1-unstructured/`
@@ -137,13 +142,21 @@ prd/
 │   ├── _master-user-stories.md
 │   └── epic-*.md
 ├── 02-technical-docs/
-│   ├── _kb-service-architecture.md
-│   ├── data-model.md
-│   ├── api-specification.md
-│   ├── agentic-framework.md
-│   ├── security.md
-│   ├── integration-spec.md
-│   └── eval-framework.md
+│   ├── 01-playbook/
+│   │   ├── data-model.md
+│   │   ├── api-specification.md
+│   │   ├── agentic-framework.md
+│   │   ├── security.md
+│   │   ├── integration-spec.md
+│   │   └── eval-framework.md
+│   └── 02-kb-service/
+│       ├── README.md
+│       ├── architecture.md
+│       ├── data-model.md
+│       ├── api-contracts.md
+│       ├── ingestion-pipeline.md
+│       ├── retrieval.md
+│       └── operations-security.md
 └── 03-implementation/
     └── _implementation-plan.md
 ```
@@ -151,7 +164,8 @@ prd/
 | Need | Read |
 |------|------|
 | User stories | `prd/01-user-stories/_master-user-stories.md` |
-| Technical specs | `prd/02-technical-docs/*.md` |
+| Playbook technical specs | `prd/02-technical-docs/01-playbook/*.md` |
+| KB service technical specs | `prd/02-technical-docs/02-kb-service/*.md` |
 | Implementation plan | `prd/03-implementation/_implementation-plan.md` |
 
 ---

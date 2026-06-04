@@ -26,6 +26,7 @@ never imported.
 | **LLM**          | `llm/` — `BaseLLMProvider`   | `direct`, `gateway`  | Anthropic / LiteLLM  |
 | **Knowledgebase**| `knowledgebase/` — `BaseKnowledgebaseProvider` | `mock`, `local` | KB service (httpx)   |
 | **Storage**      | `storage/` — `StorageProvider` | (single)           | S3 / LocalStack (boto3) |
+| **Database**     | `db/` — engine/session helpers | (single)           | Postgres (SQLAlchemy) |
 | **Checkpointer** | `checkpointer.py`            | (single)             | Postgres (LangGraph) |
 
 See each subpackage's `STUBS.md` for the extension guide.
@@ -56,3 +57,9 @@ Shutdown happens in reverse order:
 - SQLAlchemy `+asyncpg` URLs are converted to psycopg DSNs automatically.
 - `prune_old_checkpoints()` deletes data older than `CHECKPOINT_RETENTION_DAYS`
   (wire it into a scheduled task as needed).
+
+## Database notes
+
+- `db/session.py` owns the lazy SQLAlchemy async engine and session factory.
+- `db/base.py` imports all ORM models so metadata is available for Alembic and
+  SQLAlchemy autogeneration.

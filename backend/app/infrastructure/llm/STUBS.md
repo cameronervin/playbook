@@ -7,8 +7,8 @@ the app never imports a vendor SDK directly.
 
 ```
 BaseLLMProvider (ABC)          ← providers/base.py
-   ├── DirectLLMProvider       ← providers/direct.py   (Anthropic-first, per-use-case)
-   └── GatewayLLMProvider      ← providers/gateway.py  (LiteLLM, OpenAI-compatible)
+   ├── GatewayLLMProvider      ← providers/gateway.py  (LiteLLM, OpenAI-compatible)
+   └── DirectLLMProvider       ← providers/direct.py   (local/break-glass, per-use-case)
 
 LLMProviderMode (StrEnum)      ← factory.py
 get_llm_provider() @lru_cache  ← factory.py  (singleton, mode-driven)
@@ -18,7 +18,7 @@ clear_all_caches()             ← factory.py  (test/reset)
 
 Selection is driven by `settings.LLM_PROVIDER_MODE` (`direct` | `gateway`).
 
-## Anthropic-first defaults
+## Model Defaults
 
 | Setting          | Default               | Used in       |
 |------------------|-----------------------|---------------|
@@ -27,7 +27,9 @@ Selection is driven by `settings.LLM_PROVIDER_MODE` (`direct` | `gateway`).
 | `LLM_CHAT_MODEL` | `claude-sonnet-4-6`   | gateway alias |
 | `LLM_RESEARCH_MODEL` | `claude-opus-4-8` | gateway alias |
 
-`DirectLLMProvider` uses `langchain_anthropic.ChatAnthropic` by default.
+Gateway mode is the production default; direct mode is intended for local
+development, smoke tests, or an explicit break-glass path. `DirectLLMProvider`
+uses `langchain_anthropic.ChatAnthropic` by default.
 Alternatives, already coded in `direct.py::_create_chat_model`:
 `openai` (`langchain_openai`), `google` (`langchain_google_genai`), and
 `gateway` (OpenAI-compatible client pointed at the LiteLLM gateway).

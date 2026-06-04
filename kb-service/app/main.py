@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.db.session import cleanup_db_engine
+from app.infrastructure.db.session import cleanup_db_engine
 
 logger = structlog.get_logger(__name__)
 

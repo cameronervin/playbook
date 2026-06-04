@@ -20,12 +20,12 @@ markers = [
 branch = false
 source = ["app"]
 omit = [
-    "app/db/base.py",
+    "app/infrastructure/db/base.py",
     "*/migrations/*",
     "*/alembic/*",
     # Celery/worker entrypoints and thin pass-through repositories are better
     # covered by integration tests than the unit suite.
-    "app/tasks/session.py",
+    "app/workers/session.py",
 ]
 
 [tool.coverage.report]

@@ -212,7 +212,7 @@ def teardown_worker_resources(**kwargs) -> None:
     connection lingers bound to the about-to-die event loop.
     """
     try:
-        from app.db.session import reset_db_engine
+        from app.infrastructure.db.session import reset_db_engine
 
         reset_db_engine()
     except Exception as exc:

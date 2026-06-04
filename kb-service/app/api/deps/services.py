@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.infrastructure.db.session import get_db
 from app.repositories.configuration_repo import ConfigurationRepository
 from app.repositories.vector_repo import AsyncVectorRepository
 from app.services.configuration_service import ConfigurationService

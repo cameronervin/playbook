@@ -279,7 +279,7 @@ def parse_task(
     streams them back — so MBs of text never travel through the Redis broker.
     """
     from app.core.config import settings
-    from app.db.session import get_session_factory
+    from app.infrastructure.db.session import get_session_factory
     from app.infrastructure.io.s3_tempfile import stream_s3_object_to_tempfile
     from app.infrastructure.parsers.contracts.errors import CorruptFileError, OCRTimeoutError
     from app.repositories.document_repo import DocumentRepository
@@ -406,7 +406,7 @@ def chunk_task(self, prev: dict, *, document_id: str, metadata: dict) -> dict:
     ``kb/staging/{doc_id}/chunks.ndjson`` as NDJSON without ever materialising
     either the full pages list or the full chunks list in memory.
     """
-    from app.db.session import get_session_factory
+    from app.infrastructure.db.session import get_session_factory
     from app.infrastructure.chunkers.token_based import iter_chunks_from_pages
     from app.repositories.document_repo import DocumentRepository
     from app.repositories.ingestion_log_repo import IngestionLogRepository
@@ -756,7 +756,7 @@ def embed_batch_task(
     Returns a small summary dict — no embeddings travel through the broker.
     """
     from app.core.config import settings
-    from app.db.session import get_session_factory
+    from app.infrastructure.db.session import get_session_factory
     from app.infrastructure.embedders.base import (
         EmbedRateLimitError,
         EmbedTransientError,
@@ -1092,7 +1092,7 @@ def load_vector_task(
       5. If matched, marks embed + load_vector + pipeline SUCCESS, notifies,
          and deletes S3 staging.
     """
-    from app.db.session import get_session_factory
+    from app.infrastructure.db.session import get_session_factory
     from app.repositories.document_repo import DocumentRepository
     from app.repositories.ingestion_log_repo import IngestionLogRepository
     from app.repositories.vector_repo import VectorRepository
@@ -1419,7 +1419,7 @@ def _handle_webhook_dead_letter(
     if not document_id:
         return
 
-    from app.db.session import get_session_factory
+    from app.infrastructure.db.session import get_session_factory
     from app.workers.app import run_async
 
     async def _persist() -> None:
@@ -1471,7 +1471,7 @@ def reconcile_stuck_embeds(self, stuck_minutes: int = _STUCK_EMBED_MINUTES_DEFAU
     """
     from sqlalchemy import text
 
-    from app.db.session import get_session_factory
+    from app.infrastructure.db.session import get_session_factory
     from app.workers.app import run_async
 
     async def _run() -> dict:

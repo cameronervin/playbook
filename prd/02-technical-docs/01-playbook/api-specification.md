@@ -49,10 +49,16 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 |--------|----------|---------|------|
 | GET | `/admin/analytics/summary` | Query volume, topics, unanswered, risk summary | admin |
 | GET | `/admin/analytics/queries` | Anonymized query list | admin |
-| GET | `/admin/insights/runs` | List insight runs | admin |
-| POST | `/admin/insights/runs` | Start manual insight generation | admin |
-| GET | `/admin/insights/runs/{run_id}` | Get run status/output | admin |
-| POST | `/admin/insights/ask` | Talk-to-your-data side-panel question | admin |
+| GET | `/admin/dashboard-insights/current` | Get latest completed dashboard insight output | admin |
+| GET | `/admin/dashboard-insights/outputs` | List generated dashboard insight outputs | admin |
+| GET | `/admin/dashboard-insights/outputs/{insight_id}` | Get one dashboard insight output | admin |
+| GET | `/admin/dashboard-insights/runs` | List dashboard insight runs | admin |
+| POST | `/admin/dashboard-insights/runs` | Start manual dashboard insight generation | admin |
+| GET | `/admin/dashboard-insights/runs/{run_id}` | Get dashboard insight run status/output | admin |
+| GET | `/admin/chat/sessions` | List current admin's chat sessions | admin |
+| POST | `/admin/chat/sessions` | Create an admin chat side-panel session | admin |
+| GET | `/admin/chat/sessions/{session_id}` | Get admin chat session with messages | admin-owner |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question | admin-owner |
 
 ### Governance
 
@@ -115,6 +121,33 @@ Response:
   "status": "streaming"
 }
 ```
+
+### Upload Conversation File
+```json
+POST /api/v1/conversations/{conversation_id}/files
+Content-Type: multipart/form-data
+
+file=@contract.pdf
+```
+
+Response:
+```json
+{
+  "id": "uuid",
+  "conversation_id": "uuid",
+  "filename": "contract.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 123456,
+  "extraction_status": "uploaded",
+  "chunk_count": 0,
+  "created_at": "2026-06-03T12:00:00Z"
+}
+```
+
+After extraction completes, the file detail in conversation history includes
+`extraction_status: "ready"` and `chunk_count`. Full extracted text references
+and storage keys are internal and must not be returned to athletes unless a later
+download/export feature explicitly requires them.
 
 ### Assistant Message Shape
 ```json
@@ -183,12 +216,39 @@ GET /api/v1/admin/analytics/summary?window=7d
 }
 ```
 
-### Manual Insight Run
+### Current Dashboard Insight
 ```json
-POST /api/v1/admin/insights/runs
+GET /api/v1/admin/dashboard-insights/current?window=7d
+{
+  "id": "uuid",
+  "run_id": "uuid",
+  "summary": "NIL disclosure timing is the clearest support gap this week.",
+  "headline_cards": [
+    {
+      "title": "NIL disclosure timing",
+      "value": "18 related questions",
+      "severity": "medium"
+    }
+  ],
+  "topic_breakdown": [
+    { "label": "NIL", "count": 48 }
+  ],
+  "recommended_attention_areas": [
+    "Clarify NIL disclosure timing in athlete-facing guidance."
+  ],
+  "generated_at": "2026-06-03T12:00:00Z"
+}
+```
+
+### Manual Dashboard Insight Run
+```json
+POST /api/v1/admin/dashboard-insights/runs
 {
   "window_start": "2026-05-27T00:00:00Z",
-  "window_end": "2026-06-03T00:00:00Z"
+  "window_end": "2026-06-03T00:00:00Z",
+  "source_filters": {
+    "topic_labels": ["nil", "compliance"]
+  }
 }
 ```
 
@@ -200,9 +260,29 @@ Response:
 }
 ```
 
-### Talk-to-Your-Data Question
+### Create Admin Chat Session
 ```json
-POST /api/v1/admin/insights/ask
+POST /api/v1/admin/chat/sessions
+{
+  "title": "Weekly NIL questions",
+  "context_window_start": "2026-05-27T00:00:00Z",
+  "context_window_end": "2026-06-03T00:00:00Z"
+}
+```
+
+Response:
+```json
+{
+  "id": "uuid",
+  "title": "Weekly NIL questions",
+  "status": "active",
+  "created_at": "2026-06-03T12:00:00Z"
+}
+```
+
+### Admin Chat Question
+```json
+POST /api/v1/admin/chat/sessions/{session_id}/messages
 {
   "question": "What are athletes most confused about this week?",
   "window": "7d"
@@ -212,13 +292,20 @@ POST /api/v1/admin/insights/ask
 Response:
 ```json
 {
+  "session_id": "uuid",
+  "message_id": "uuid",
   "answer": "NIL disclosure timing is the most common confusion area...",
+  "answer_type": "analytics_answer",
   "references": [
     { "type": "metric", "id": "top_topics.nil" },
-    { "type": "insight_run", "id": "uuid" }
+    { "type": "dashboard_insight", "id": "uuid" }
   ]
 }
 ```
+
+The API stores both the admin question and assistant answer in
+`admin_chat_messages`. The `session_id` must belong to the current admin and
+organization.
 
 ## Error Response Contract
 

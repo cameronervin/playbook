@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter
 
 from app.core.config import settings
-from app.db.session import get_engine
+from app.infrastructure.db.session import get_engine
 from app.repositories.system_repo import SystemRepository
 
 logger = structlog.get_logger(__name__)

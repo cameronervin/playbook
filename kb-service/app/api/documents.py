@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.services import get_ingestion_service
-from app.db.session import get_db
+from app.infrastructure.db.session import get_db
 from app.repositories.document_repo import DocumentRepository
 from app.services.ingestion_service import IngestionService
 

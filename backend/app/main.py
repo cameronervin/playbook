@@ -34,7 +34,7 @@ from app.core.exception_handlers import (
     validation_exception_handler,
 )
 from app.core.exceptions import AppError
-from app.db.session import cleanup_db_engine, get_db
+from app.infrastructure.db.session import cleanup_db_engine, get_db
 from app.infrastructure.checkpointer import (
     cleanup_checkpointer_pool,
     create_checkpointer,

@@ -1,6 +1,6 @@
 # Evaluation Framework
 
-This document defines Playbook MVP evaluation requirements for retrieval quality, answer quality, safety behavior, and admin insights.
+This document defines Playbook MVP evaluation requirements for retrieval quality, answer quality, safety behavior, dashboard insights, and admin chat.
 
 ## Purpose
 
@@ -17,7 +17,8 @@ Playbook should not be considered ready for athlete use until core answer behavi
 | Refusal evals | Unsupported/sensitive questions decline correctly | US-11, US-25, US-26 |
 | Emergency evals | Emergency prompts refuse advice and show instructions | US-11, US-25, US-26 |
 | Conflict evals | Newest or official/priority source is preferred | US-17, US-26 |
-| Admin insight evals | Query topics and risk summaries match seeded data | US-18, US-20, US-21, US-22, US-26 |
+| Dashboard insight evals | Agent-curated topics and risk summaries match seeded data | US-18, US-20, US-21, US-26 |
+| Admin chat evals | Admin chat answers cite authorized analytics or dashboard insight records | US-22, US-26 |
 
 ## Golden Set Categories
 
@@ -51,7 +52,8 @@ Minimum MVP release gate:
 2. Citation integrity has no known critical failures.
 3. Emergency and unsupported prompts pass deterministic checks.
 4. NIL/compliance answers do not answer without KB support.
-5. Admin insights identify seeded top topics and risk labels.
+5. Dashboard insights identify seeded top topics and risk labels.
+6. Admin chat answers reference only authorized analytics or dashboard insight records.
 
 ## Implementation Notes
 

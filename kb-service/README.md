@@ -47,7 +47,6 @@ POST /api/kb/embed/search ─▶ SearchService ─▶ embed query ─▶ pgvecto
 app/
   main.py                  FastAPI + lifespan (build embed provider, dispose engines)
   core/config.py           Pydantic Settings (grouped by concern)
-  db/session.py            thread-local async engine + NullPool (Celery-thread safe)
   models/                  SQLAlchemy models incl. pgvector VectorEmbedding
   schemas/                 Pydantic DTOs (configuration / ingest / search / status)
   repositories/            CRUD + vector similarity search
@@ -55,6 +54,7 @@ app/
   api/                     routers + deps (service_auth, services)
   workers/                 Celery app, tasks, per-thread state, rate limiter
   infrastructure/
+    db/session.py          thread-local async engine + NullPool (Celery-thread safe)
     parsers/               contracts + extractors + complexity routing + OCR stub
     chunkers/              token-based recursive splitter
     embedders/             ABC + direct + gateway + factory

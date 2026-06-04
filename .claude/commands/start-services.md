@@ -48,7 +48,7 @@ npm run dev
 ### 5. Start Celery Workers (optional, in background)
 ```bash
 # Working directory: backend/
-celery -A app.tasks.celery_app worker -c 2 --loglevel=info
+celery -A app.workers.celery_app worker -c 2 --loglevel=info
 ```
 
 > Only needed if the project uses background tasks. Start additional workers per queue as your project defines them.

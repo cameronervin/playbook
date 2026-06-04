@@ -27,13 +27,19 @@ The project scaffold is already in place.
 - `prd/01-user-stories/epic-3-knowledge-base-and-document-operations.md`
 - `prd/01-user-stories/epic-4-admin-analytics-and-insights.md`
 - `prd/01-user-stories/epic-5-safety-governance-and-release-readiness.md`
-- `prd/02-technical-docs/data-model.md`
-- `prd/02-technical-docs/api-specification.md`
-- `prd/02-technical-docs/agentic-framework.md`
-- `prd/02-technical-docs/security.md`
-- `prd/02-technical-docs/integration-spec.md`
-- `prd/02-technical-docs/eval-framework.md`
-- `prd/02-technical-docs/_kb-service-architecture.md`
+- `prd/02-technical-docs/01-playbook/data-model.md`
+- `prd/02-technical-docs/01-playbook/api-specification.md`
+- `prd/02-technical-docs/01-playbook/agentic-framework.md`
+- `prd/02-technical-docs/01-playbook/security.md`
+- `prd/02-technical-docs/01-playbook/integration-spec.md`
+- `prd/02-technical-docs/01-playbook/eval-framework.md`
+- `prd/02-technical-docs/02-kb-service/README.md`
+- `prd/02-technical-docs/02-kb-service/architecture.md`
+- `prd/02-technical-docs/02-kb-service/data-model.md`
+- `prd/02-technical-docs/02-kb-service/api-contracts.md`
+- `prd/02-technical-docs/02-kb-service/ingestion-pipeline.md`
+- `prd/02-technical-docs/02-kb-service/retrieval.md`
+- `prd/02-technical-docs/02-kb-service/operations-security.md`
 - `prd/03-implementation/_implementation-plan.md`
 - `prd/03-implementation/phase-1-foundations.md`
 - `prd/03-implementation/phase-2-athlete-ai-experience.md`
@@ -76,7 +82,7 @@ When implementation differs from a task row, log it in `phase-{N}-*.deviations.m
 2. Accurate, concise, cited answers grounded in department knowledge.
 3. Safe refusal behavior for unsupported, emergency, and sensitive topics.
 4. Admin document management and query analytics.
-5. Insight generation and talk-to-your-data admin side panel.
+5. Dashboard insight generation and admin chat side panel.
 
 ## Hardening Targets
 
@@ -97,6 +103,8 @@ When implementation differs from a task row, log it in `phase-{N}-*.deviations.m
 - MVP is a single-tenant prototype, designed for future multi-college expansion.
 - Athlete-uploaded files are conversation-scoped and retained in history.
 - Admin KB documents are visible to all athletes for MVP.
+- KB document chunks and vectors are owned by the KB service; conversation file
+  chunks are owned by the main backend and remain conversation-scoped.
 - Metadata tags are preferred over a fixed document category taxonomy.
 - Admin analytics may show query text but should anonymize athlete identity.
 - No explicit university affiliation claims should appear in product copy or code identifiers.

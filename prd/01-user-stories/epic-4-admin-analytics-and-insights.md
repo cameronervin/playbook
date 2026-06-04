@@ -33,43 +33,44 @@ So that I can review query content without exposing names by default.
 
 ### US-20
 As an admin
-I want nightly insight generation
+I want nightly dashboard insight generation
 So that recurring gaps and risks are summarized without manual work.
 
-> **New in Playbook MVP.** Insights should run nightly and on demand.
+> **New in Playbook MVP.** Dashboard insights should run nightly and on demand.
 
 #### Acceptance Criteria
-1. A scheduled job runs query insight generation nightly.
+1. A scheduled job runs dashboard insight generation nightly.
 2. The job summarizes common topics, unanswered questions, and risk categories.
-3. Failed insight jobs are logged and visible to admins.
-4. Generated insight records include time window, status, and generated-at timestamp.
+3. Failed dashboard insight jobs are logged and visible to admins.
+4. Generated dashboard insight records include time window, status, and generated-at timestamp.
 
 ### US-21
 As an admin
-I want to generate insights on demand
+I want to generate dashboard insights on demand
 So that I can inspect recent query patterns whenever needed.
 
-> **New in Playbook MVP.** Admins can run insights manually.
+> **New in Playbook MVP.** Admins can run dashboard insights manually.
 
 #### Acceptance Criteria
-1. Admins can trigger insight generation from the dashboard.
+1. Admins can trigger dashboard insight generation from the dashboard.
 2. The request accepts a bounded time window.
 3. The dashboard shows pending, processing, completed, and failed states.
-4. Completed insight output is persisted and viewable later.
+4. Completed dashboard insight output is persisted and viewable later.
 
 ### US-22
 As an admin
-I want a talk-to-your-data side panel
+I want an admin chat side panel
 So that I can ask natural-language questions about query analytics.
 
-> **New in Playbook MVP.** TTYD-style side panel opens from a dashboard button.
+> **New in Playbook MVP.** Admin chat side panel opens from a dashboard button.
 
 #### Acceptance Criteria
-1. The dashboard includes a button to open the insights side panel.
-2. Admins can ask natural-language questions about analytics and insight data.
+1. The dashboard includes a button to open the admin chat side panel.
+2. Admins can ask natural-language questions about analytics and dashboard insight data.
 3. The side-panel agent only uses authorized analytics data.
-4. The side-panel response cites or references the underlying metric or insight record when possible.
+4. The side-panel response cites or references the underlying metric or dashboard insight record when possible.
 5. The side panel can be closed without losing dashboard state.
+6. Admin chat questions and answers are persisted as admin chat messages.
 
 ### US-23
 As an admin
@@ -83,13 +84,13 @@ So that I can identify gaps in athlete support.
 2. Dashboard lists NIL, compliance, and recruiting-risk questions.
 3. Admins can filter by date range and risk/topic type.
 4. Admins can open a query detail view without seeing athlete name.
-5. Admin insights summarize response gaps rather than editing documents automatically.
+5. Dashboard insights summarize response gaps rather than editing documents automatically.
 
 ## Edge Cases
 
 | Edge Case | Expected Behavior |
 |-----------|-------------------|
-| Nightly insight job fails | Failure is visible to admins and logged |
+| Nightly dashboard insight job fails | Failure is visible to admins and logged |
 | Dashboard has no data yet | Empty state renders without fake metrics |
 | Admin asks side-panel question outside analytics scope | Agent declines and explains supported scope |
 | Query includes identifying text | Owner identity remains anonymized in dashboard payload |
