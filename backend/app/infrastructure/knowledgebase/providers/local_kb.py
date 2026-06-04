@@ -97,10 +97,11 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
     async def health_check(self) -> bool:
         try:
             response = await self._client.get("/health")
-            return response.status_code == 200
         except httpx.HTTPError as exc:
             logger.warning("kb_local_health_check_failed", error=str(exc))
             return False
+        else:
+            return response.status_code == 200
 
     async def resolve_configuration(self) -> str:
         if self._config_id is not None:

@@ -1,23 +1,23 @@
 # API Endpoints
 
-> Template — `examples` is an illustrative resource. Replace it with your real
-> resources, following the REST conventions below. Keep this doc in sync with
-> the code (update it whenever you add or change an endpoint).
-
 Base URL: `/api/v1`
 
-## REST Conventions
+This document tracks the Playbook API surface. Keep it aligned with implemented
+routes and the product API specification in
+`prd/02-technical-docs/01-playbook/api-specification.md`.
+
+## Conventions
 
 | Rule | Detail |
 |------|--------|
-| Plural nouns | `/examples`, not `/example` or `/getExample` |
-| No verbs in URLs | Use the HTTP method to convey the action |
+| Plural nouns | Use resource nouns such as `/conversations` and `/admin/kb/documents` |
 | Versioned | All routes live under `/api/v1` |
-| Typed responses | Every route declares a Pydantic `response_model` |
-| Status codes | 200 GET/PUT · 201 POST · 204 DELETE · 400/401/403/404 errors |
-| Auth | Bearer token via `fastapi-users`; protected routes require it |
+| Thin routes | Routes validate input, call services, and return DTOs |
+| Typed responses | Every route declares a Pydantic `response_model` once implemented |
+| Auth | Protected routes require the app auth dependency or the selected OAuth integration |
 
-## Health
+## Implemented
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Liveness/readiness check |
@@ -27,109 +27,55 @@ curl http://localhost:8000/api/v1/health
 # {"status": "ok"}
 ```
 
-## Auth
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Register user |
-| POST | `/auth/jwt/login` | JWT login |
-| POST | `/auth/jwt/logout` | JWT logout |
-| GET | `/auth/users/me` | Current user |
+## Planned Playbook Surface
 
-Auth is provided by `fastapi-users`. Add SSO/OAuth routes (e.g. `/auth/oauth/*`)
-here when you configure a provider.
+### Auth and Users
 
-## Examples
-| Method | Endpoint | Description | Success |
-|--------|----------|-------------|---------|
-| GET | `/examples` | List the current user's examples | 200 |
-| POST | `/examples` | Create an example | 201 |
-| GET | `/examples/{id}` | Get one example | 200 |
-| PUT | `/examples/{id}` | Update an example | 200 |
-| DELETE | `/examples/{id}` | Delete an example | 204 |
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/auth/providers` | List enabled OAuth providers |
+| GET | `/auth/{provider}/login` | Start OAuth/OIDC login |
+| GET | `/auth/{provider}/callback` | Complete OAuth/OIDC callback |
+| POST | `/auth/logout` | End current session |
+| GET | `/users/me` | Return current user/profile |
+| PATCH | `/users/me/profile` | Complete/update athlete profile |
+| GET | `/admin/users` | List users for role management |
+| PATCH | `/admin/users/{user_id}/role` | Update user role |
 
-### List Examples
-```bash
-curl http://localhost:8000/api/v1/examples \
-  -H "Authorization: Bearer <token>"
-```
+### Athlete Chat
 
-**Response** (200 OK):
-```json
-{
-  "items": [
-    {
-      "id": "uuid",
-      "name": "First example",
-      "description": null,
-      "status": "draft",
-      "created_at": "2026-01-01T10:00:00Z",
-      "updated_at": "2026-01-01T10:00:00Z"
-    }
-  ],
-  "total": 1
-}
-```
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/conversations` | List current athlete conversations |
+| POST | `/conversations` | Create a new conversation |
+| GET | `/conversations/{conversation_id}` | Get conversation details |
+| POST | `/conversations/{conversation_id}/messages` | Submit a user message |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks |
+| POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 
-### Create Example
-```bash
-curl -X POST http://localhost:8000/api/v1/examples \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "First example", "description": "Optional text"}'
-```
+### Knowledge Base Admin
 
-**Response** (201 Created):
-```json
-{
-  "id": "uuid",
-  "name": "First example",
-  "description": "Optional text",
-  "status": "draft",
-  "data": {},
-  "created_at": "2026-01-01T10:00:00Z",
-  "updated_at": "2026-01-01T10:00:00Z"
-}
-```
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/admin/kb/documents` | List KB documents and status |
+| POST | `/admin/kb/documents` | Upload KB document |
+| GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
+| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update document metadata |
+| POST | `/admin/kb/documents/{document_id}/retry` | Retry document processing |
+| DELETE | `/admin/kb/documents/{document_id}` | Delete or archive document |
 
-### Get Example
-```bash
-curl http://localhost:8000/api/v1/examples/{id} \
-  -H "Authorization: Bearer <token>"
-```
+### Admin Analytics and Governance
 
-Returns 200 with the example, or 404 if not found / not owned by the caller.
-
-### Update Example
-```bash
-curl -X PUT http://localhost:8000/api/v1/examples/{id} \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Renamed", "status": "active"}'
-```
-
-Returns 200 with the updated example.
-
-### Delete Example
-```bash
-curl -X DELETE http://localhost:8000/api/v1/examples/{id} \
-  -H "Authorization: Bearer <token>"
-```
-
-Returns 204 No Content.
-
-## Error Shape
-
-Errors return a consistent JSON body:
-
-```json
-{
-  "detail": "Example not found"
-}
-```
-
-| Code | Meaning |
-|------|---------|
-| 400 | Validation error (malformed body, failed Pydantic validation) |
-| 401 | Not authenticated |
-| 403 | Authenticated but not authorized for this resource |
-| 404 | Resource not found or not owned by caller |
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/admin/analytics/summary` | Query volume, topics, unanswered, risk summary |
+| GET | `/admin/analytics/queries` | Anonymized query list |
+| GET | `/admin/dashboard-insights/current` | Get latest completed insight output |
+| GET | `/admin/dashboard-insights/outputs` | List generated insight outputs |
+| GET | `/admin/dashboard-insights/runs` | List dashboard insight runs |
+| POST | `/admin/dashboard-insights/runs` | Start manual insight generation |
+| GET | `/admin/chat/sessions` | List current admin chat sessions |
+| POST | `/admin/chat/sessions` | Create an admin chat session |
+| GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question |
+| GET | `/admin/audit-logs` | Query audit log records |

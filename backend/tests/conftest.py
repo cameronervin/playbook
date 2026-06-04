@@ -2,7 +2,6 @@
 import os
 import sys
 from unittest.mock import AsyncMock
-from uuid import uuid4
 
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -83,23 +82,6 @@ async def db_session():
         await conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
 
     await engine.dispose()
-
-
-@pytest_asyncio.fixture
-async def example_factory(db_session):
-    """Factory for creating test Example records."""
-    from app.models.example import Example
-
-    async def create_example(**kwargs):
-        defaults = {"name": f"Test Example {uuid4().hex[:8]}", "status": "active"}
-        defaults.update(kwargs)
-        example = Example(**defaults)
-        db_session.add(example)
-        await db_session.flush()
-        await db_session.refresh(example)
-        return example
-
-    return create_example
 
 
 @pytest.fixture

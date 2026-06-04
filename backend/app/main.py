@@ -25,7 +25,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1 import example, health
+from app.api.v1 import health
 from app.core.config import settings
 from app.core.exception_handlers import (
     app_error_handler,
@@ -34,12 +34,12 @@ from app.core.exception_handlers import (
     validation_exception_handler,
 )
 from app.core.exceptions import AppError
-from app.infrastructure.db.session import cleanup_db_engine, get_db
 from app.infrastructure.checkpointer import (
     cleanup_checkpointer_pool,
     create_checkpointer,
     create_checkpointer_pool,
 )
+from app.infrastructure.db.session import cleanup_db_engine, get_db
 from app.infrastructure.knowledgebase import get_kb_provider, is_kb_feature_enabled
 from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import cleanup_storage_provider, get_storage_provider
@@ -53,7 +53,6 @@ API_V2_PREFIX = "/api/v2"
 
 OPENAPI_TAGS = [
     {"name": "Health", "description": "Platform liveness and dependency health checks."},
-    {"name": "Examples", "description": "Generic example entity CRUD (replace with your domain)."},
 ]
 
 
@@ -86,7 +85,7 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
         try:
             config_id = await kb_provider.resolve_configuration()
             logger.info("KB configuration resolved", config_id=config_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "KB configuration not resolved at startup — retrieval may fail "
                 "until the KB service is reachable",
@@ -112,8 +111,12 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
     # dependency injection will raise a clear error at first dispatch instead.
     example_executor = None
     try:
-        from app.agents.builders import compile_example_graph  # type: ignore[import-not-found]
-        from app.agents.executors import ExampleExecutor  # type: ignore[import-not-found]
+        from app.agents.builders import (
+            compile_example_graph,  # type: ignore[import-not-found]
+        )
+        from app.agents.executors import (
+            ExampleExecutor,  # type: ignore[import-not-found]
+        )
 
         example_graph = compile_example_graph(
             chat_model=chat_model,
@@ -124,7 +127,7 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
         example_executor = ExampleExecutor(example_graph, tracing_enabled=settings.TRACING_ENABLED)
         app.state.example_graph = example_graph
         logger.info("Compiled agent graph with PostgreSQL checkpointer")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Agent layer not yet present / stubbed — keep the API up.
         logger.warning(
             "Agent layer not wired — agent endpoints will be unavailable until "
@@ -144,26 +147,26 @@ async def _shutdown_infrastructure(checkpointer_pool: object, kb_provider: objec
     try:
         await cleanup_checkpointer_pool(checkpointer_pool)  # type: ignore[arg-type]
         logger.info("Checkpointer connection pool closed")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error closing checkpointer pool", error=str(e))
 
     if kb_provider is not None:
         try:
             await kb_provider.close()  # type: ignore[attr-defined]
             logger.info("Knowledgebase provider closed")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Error closing knowledgebase provider", error=str(e))
 
     try:
         cleanup_storage_provider()
         logger.info("Storage provider cleaned up")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error cleaning up storage provider", error=str(e))
 
     try:
         await cleanup_db_engine()
         logger.info("Database engine disposed")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error disposing database engine", error=str(e))
 
 
@@ -211,11 +214,8 @@ setup_cors(app)
 # Routes
 # ============================================================
 app.include_router(health.router, prefix=API_V1_PREFIX)
-app.include_router(example.router, prefix=API_V1_PREFIX)
 
-# V2 async task-pattern routers are included here as they are added:
-# from app.api.v2 import example as example_v2
-# app.include_router(example_v2.router, prefix=API_V2_PREFIX)
+# V2 async task-pattern routers are included here as they are added.
 
 
 @app.get("/")

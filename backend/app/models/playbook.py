@@ -1,33 +1,26 @@
-"""Aggregates model imports so Alembic and SQLAlchemy see every table.
+"""Compatibility exports for Playbook product data models."""
 
-Importing this module guarantees that all ORM models are registered on
-``Base.metadata`` before ``create_all`` / autogenerate runs. Add new model
-imports here as the data layer grows.
-"""
-
-from app.models import (  # noqa: F401
+from app.models.analytics import (
     AdminChatMessage,
     AdminChatSession,
-    AuditLog,
-    Base,
+    DashboardInsight,
+    DashboardInsightRun,
+)
+from app.models.audit import AuditLog
+from app.models.conversations import (
     Conversation,
     ConversationFile,
     ConversationFileChunk,
     ConversationMessage,
-    DashboardInsight,
-    DashboardInsightRun,
-    KBDocument,
-    KBDocumentEvent,
     MessageCitation,
-    Organization,
-    User,
 )
+from app.models.identity import Organization, User
+from app.models.knowledge_base import KBDocument, KBDocumentEvent
 
 __all__ = [
     "AdminChatMessage",
     "AdminChatSession",
     "AuditLog",
-    "Base",
     "Conversation",
     "ConversationFile",
     "ConversationFileChunk",

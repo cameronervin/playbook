@@ -1,9 +1,7 @@
-"""save_state node - persist generated state back to the database.
+"""save_state node - placeholder persistence for the scaffold graph.
 
-Pattern: the terminal node before END writes the chain's output to persistence
-and returns an empty dict (it has side effects only). This generic version
-persists the result's title onto the ``Example`` entity's ``name`` to show the
-write path; replace with your domain's persistence logic.
+The Playbook product schema replaced the scaffold Example repository. Keep this
+node importable until a Playbook-specific graph replaces the example workflow.
 """
 
 from collections.abc import AsyncGenerator, Callable
@@ -13,8 +11,6 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.states.example_state import ExampleState
-from app.core.exceptions import DatabaseError
-from app.repositories.example_repository import ExampleRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -29,37 +25,12 @@ def create_save_state_node(
 
         Returns an empty dict (side-effect-only node).
 
-        Raises:
-            DatabaseError: If the database write fails (retryable).
+        The scaffold Example repository was removed with the Playbook schema.
+        Returning no updates keeps the graph shape importable without touching
+        product data.
         """
         example_id = state["example_id"]
-        result = state.get("result")
-        saved: list[str] = []
-
-        try:
-            async for session in get_session():
-                repo = ExampleRepository(session)
-                logger.info("saving_state", example_id=str(example_id))
-
-                if result is not None:
-                    await repo.update(example_id, {"name": result.title})
-                    saved.append("result")
-                break  # only the first yielded session
-        except Exception as e:
-            logger.error(
-                "save_state_failed",
-                example_id=str(example_id),
-                error=str(e),
-                error_type=type(e).__name__,
-                exc_info=True,
-            )
-            raise DatabaseError(
-                message=f"Failed to save state to database: {str(e)}",
-                retryable=True,
-                details={"example_id": str(example_id), "error_type": type(e).__name__},
-            ) from e
-        else:
-            logger.info("state_saved", example_id=str(example_id), saved=saved)
-            return {}
+        logger.info("example_state_save_skipped", example_id=str(example_id))
+        return {}
 
     return save_state_node

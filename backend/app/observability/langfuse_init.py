@@ -79,7 +79,7 @@ def create_langfuse_handler():
     if not _initialized:
         return None
 
-    from langfuse.langchain import CallbackHandler
+    from langfuse.langchain import CallbackHandler  # noqa: PLC0415
 
     return CallbackHandler()
 
@@ -94,9 +94,9 @@ def shutdown_langfuse() -> None:
         return
 
     try:
-        from langfuse import get_client
+        from langfuse import get_client  # noqa: PLC0415
 
         get_client().shutdown()
         logger.info("Langfuse client shut down successfully")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error shutting down Langfuse", error=str(e))

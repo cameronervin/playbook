@@ -10,7 +10,7 @@ services:
     environment:
       - POSTGRES_USER=${DB_USER:-app}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME:-appdb}
+      - POSTGRES_DB=${DB_NAME:-playbook}
 
   valkey:
     env_file:

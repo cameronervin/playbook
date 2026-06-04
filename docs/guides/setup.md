@@ -25,6 +25,7 @@ cd agentic-app
 Start Postgres (and optionally LocalStack + Valkey) via Docker Compose:
 
 ```bash
+cp deploy/envs/.env.local.example deploy/envs/.env.local
 ./deploy/scripts/deploy.sh local --build
 ```
 
@@ -82,8 +83,8 @@ uv run python run_dev.py             # uvicorn on http://localhost:8001
 ## 6. Verify End to End
 
 1. Open http://localhost:3000.
-2. Register a user, log in.
-3. Create an `Example` and confirm it lists.
+2. Confirm the backend health check is reachable.
+3. Confirm Playbook migrations apply against the local `playbook` database.
 
 ## Common Issues
 

@@ -10,7 +10,7 @@ services:
     environment:
       - POSTGRES_USER=app
       - POSTGRES_PASSWORD=${DB_PASSWORD:-localpass}
-      - POSTGRES_DB=appdb
+      - POSTGRES_DB=playbook
 
   valkey:
     ports:

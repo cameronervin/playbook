@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # =========================================================================
     # Database — must come from environment
     # =========================================================================
-    DATABASE_URL: str = "postgresql+asyncpg://app:app@localhost:5432/app"
+    DATABASE_URL: str = "postgresql+asyncpg://app:localpass@localhost:5433/playbook"
 
     # LangGraph checkpoint database (optional — defaults to DATABASE_URL).
     LANGGRAPH_CHECKPOINT_DB_URL: str | None = None

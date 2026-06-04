@@ -85,3 +85,4 @@ class BaseKnowledgebaseProvider(ABC):
         Default implementation is a no-op. Providers that hold open connections
         (e.g. an httpx.AsyncClient) must override this and call it on shutdown.
         """
+        logger.debug("knowledgebase_provider_close_noop", provider=self.provider_name)

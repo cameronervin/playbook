@@ -1,11 +1,7 @@
-"""load_state node - hydrate graph state from persistence.
+"""load_state node - placeholder state hydration for the scaffold graph.
 
-Pattern: the first node in the graph reads any existing data for this entity
-out of the database and returns a *partial* state update. Returning only the
-keys it loaded keeps reducers happy and lets later nodes skip completed work.
-
-This generic version loads the ``Example`` entity into ``loaded_context``;
-replace the repository call with your domain's hydration logic.
+The Playbook product schema replaced the scaffold Example repository. Keep this
+node importable until a Playbook-specific graph replaces the example workflow.
 """
 
 from collections.abc import AsyncGenerator, Callable
@@ -15,8 +11,6 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.states.example_state import ExampleState
-from app.core.exceptions import DatabaseError
-from app.repositories.example_repository import ExampleRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -38,43 +32,12 @@ def create_load_state_node(
 
         Returns a partial dict with only the fields hydrated from the DB.
 
-        Raises:
-            DatabaseError: If the database read fails (retryable).
+        The scaffold Example repository was removed with the Playbook schema.
+        Returning no updates keeps the graph shape importable without touching
+        product data.
         """
         example_id = state["example_id"]
-        updates: dict = {}
-
-        try:
-            async for session in get_session():
-                repo = ExampleRepository(session)
-                logger.info("loading_state", example_id=str(example_id))
-
-                entity = await repo.get(example_id)
-                if entity is not None:
-                    updates["loaded_context"] = {
-                        "id": str(entity.id),
-                        "name": entity.name,
-                        "status": entity.status,
-                    }
-                break  # only the first yielded session
-        except Exception as e:
-            logger.exception(
-                "load_state_failed",
-                example_id=str(example_id),
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            raise DatabaseError(
-                message=f"Failed to load state from database: {str(e)}",
-                retryable=True,
-                details={"example_id": str(example_id), "error_type": type(e).__name__},
-            ) from e
-        else:
-            logger.info(
-                "state_loaded",
-                example_id=str(example_id),
-                loaded_keys=list(updates.keys()),
-            )
-            return updates
+        logger.info("example_state_load_skipped", example_id=str(example_id))
+        return {}
 
     return load_state_node
