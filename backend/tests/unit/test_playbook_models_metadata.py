@@ -1,6 +1,6 @@
 """Metadata tests for the Playbook product schema."""
 
-from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy import ForeignKeyConstraint, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 
 from app.models import Base
@@ -8,6 +8,7 @@ from app.models import Base
 EXPECTED_PLAYBOOK_TABLES = {
     "organizations",
     "users",
+    "oauth_accounts",
     "conversations",
     "conversation_messages",
     "message_citations",
@@ -44,6 +45,7 @@ def test_domain_model_modules_export_registered_models() -> None:
         KBDocument,
         KBDocumentEvent,
         MessageCitation,
+        OAuthAccount,
         Organization,
         User,
     )
@@ -61,6 +63,7 @@ def test_domain_model_modules_export_registered_models() -> None:
         ConversationMessage as ConversationsConversationMessage,
         MessageCitation as ConversationsMessageCitation,
     )
+    from app.models.identity import OAuthAccount as IdentityOAuthAccount
     from app.models.identity import Organization as IdentityOrganization
     from app.models.identity import User as IdentityUser
     from app.models.knowledge_base import KBDocument as KnowledgeBaseKBDocument
@@ -68,6 +71,7 @@ def test_domain_model_modules_export_registered_models() -> None:
 
     assert IdentityOrganization is Organization
     assert IdentityUser is User
+    assert IdentityOAuthAccount is OAuthAccount
     assert ConversationsConversation is Conversation
     assert ConversationsConversationMessage is ConversationMessage
     assert ConversationsMessageCitation is MessageCitation
@@ -93,11 +97,25 @@ def test_users_constraints_match_playbook_identity_model() -> None:
     assert isinstance(users.c.id.type, PG_UUID)
     assert users.c.organization_id.foreign_keys
     assert users.c.role.server_default.arg.text == "'athlete'::text"
+    assert users.c.hashed_password.server_default.arg.text == "''::text"
+    assert users.c.is_verified.server_default.arg.text == "true"
+    assert users.c.is_superuser.server_default.arg.text == "false"
     assert ("organization_id", "email") in unique_columns
     assert ("auth_provider", "provider_subject") in unique_columns
-    assert "hashed_password" not in users.c
-    assert "is_superuser" not in users.c
-    assert "is_verified" not in users.c
+
+
+def test_oauth_accounts_constraints_match_fastapi_users_compatibility() -> None:
+    oauth_accounts = Base.metadata.tables["oauth_accounts"]
+    unique_columns = {
+        tuple(constraint.columns.keys())
+        for constraint in oauth_accounts.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+
+    assert isinstance(oauth_accounts.c.id.type, PG_UUID)
+    assert oauth_accounts.c.user_id.foreign_keys
+    assert isinstance(oauth_accounts.c.access_token.type, Text)
+    assert ("oauth_name", "account_id") in unique_columns
 
 
 def test_jsonb_columns_have_server_defaults() -> None:
@@ -145,6 +163,7 @@ def test_jsonb_columns_have_server_defaults() -> None:
 def test_key_foreign_key_delete_behaviors_are_explicit() -> None:
     expected_ondelete = {
         ("users", ("organization_id",)): "CASCADE",
+        ("oauth_accounts", ("user_id",)): "CASCADE",
         ("conversations", ("organization_id",)): "CASCADE",
         ("conversations", ("athlete_id",)): "CASCADE",
         ("conversation_messages", ("conversation_id",)): "CASCADE",
@@ -178,6 +197,9 @@ def test_operational_indexes_are_registered() -> None:
     expected_indexes = {
         "ix_users_organization_id",
         "ix_users_role",
+        "ix_users_is_superuser",
+        "ix_oauth_accounts_user_id",
+        "ix_oauth_accounts_provider",
         "ix_conversations_athlete_id",
         "ix_conversation_messages_conversation_id",
         "ix_conversation_files_conversation_id",

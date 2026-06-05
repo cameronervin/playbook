@@ -27,6 +27,13 @@ class KBDocumentRepository:
     def __init__(self, session: AsyncSession = Depends(get_db)) -> None:
         self.session = session
 
+    async def get(self, document_id: UUID) -> KBDocument | None:
+        """Return a KB document by ID."""
+        result = await self.session.execute(
+            select(KBDocument).where(KBDocument.id == document_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_for_organization(
         self,
         *,
@@ -166,6 +173,11 @@ class KBDocumentRepository:
         await self.session.flush()
         await self.session.refresh(document)
         return document
+
+    async def delete(self, document: KBDocument) -> None:
+        """Delete a KB document metadata row without committing."""
+        await self.session.delete(document)
+        await self.session.flush()
 
 
 class KBDocumentEventRepository:

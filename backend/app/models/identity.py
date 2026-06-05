@@ -6,9 +6,18 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models._columns import (
     created_at_column,
@@ -52,6 +61,7 @@ class User(Base):
         Index("ix_users_organization_id", "organization_id"),
         Index("ix_users_role", "role"),
         Index("ix_users_is_active", "is_active"),
+        Index("ix_users_is_superuser", "is_superuser"),
     )
 
     id: Mapped[UUID] = uuid_primary_key()
@@ -69,11 +79,62 @@ class User(Base):
     )
     auth_provider: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(
+        String(1024),
+        server_default=text("''::text"),
+        nullable=False,
+    )
     sport_team: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         server_default=text("true"),
         nullable=False,
     )
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("true"),
+        nullable=False,
+    )
+    is_superuser: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("false"),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
+    oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class OAuthAccount(Base):
+    """OAuth account record compatible with FastAPI Users' OAuth adapter shape."""
+
+    __tablename__ = "oauth_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "oauth_name",
+            "account_id",
+            name="uq_oauth_accounts_provider_account",
+        ),
+        Index("ix_oauth_accounts_user_id", "user_id"),
+        Index("ix_oauth_accounts_provider", "oauth_name"),
+    )
+
+    id: Mapped[UUID] = uuid_primary_key()
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    oauth_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    account_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    created_at: Mapped[datetime] = created_at_column()
+    updated_at: Mapped[datetime] = updated_at_column()
+    user: Mapped[User] = relationship(back_populates="oauth_accounts")

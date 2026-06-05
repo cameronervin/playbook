@@ -26,7 +26,8 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 | Table | Purpose |
 |-------|---------|
 | `organizations` | Tenant organization and future theming boundary |
-| `users` | Playbook user profile, OAuth subject, organization, and role |
+| `users` | Playbook user profile, OAuth subject, organization, role, and FastAPI Users-compatible auth flags |
+| `oauth_accounts` | OAuth provider account/token records compatible with FastAPI Users' SQLAlchemy adapter shape |
 | `conversations` | Athlete-owned support conversations |
 | `conversation_messages` | User, assistant, and system messages with safety/topic metadata |
 | `message_citations` | Assistant answer source references |
@@ -40,9 +41,10 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 | `admin_chat_messages` | Admin chat messages and analytics references |
 | `audit_logs` | Immutable audit trail for privileged actions |
 
-The `users` table intentionally follows the Playbook PRD shape. FastAPI Users
-or OAuth adapter tables may be added during the OAuth/OIDC foundation task if
-the selected integration path requires them.
+The `users` table keeps Playbook `role` as the source of truth while including
+FastAPI Users-compatible fields: `hashed_password`, `is_verified`, and
+`is_superuser`. `is_superuser` is synchronized from `role == "super_admin"` for
+adapter compatibility and is not an independent authorization field.
 
 ## Repository Layer
 
@@ -56,6 +58,7 @@ Phase 1 repository coverage:
 |------------|--------|---------|
 | `OrganizationRepository` | `organizations` | Tenant lookup, active organization listing, and organization creation |
 | `UserRepository` | `users` | OAuth subject lookup, org/email lookup, profile updates, role updates, and org-scoped user listing |
+| `OAuthAccountRepository` | `oauth_accounts` | OAuth account lookup plus token/account metadata create/update |
 | `AuditLogRepository` | `audit_logs` | Append-only privileged-action audit creation and super-admin query filters |
 | `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, and org-scoped listing |
 | `KBDocumentEventRepository` | `kb_document_events` | KB ingestion/status lifecycle event append and listing |
@@ -69,8 +72,7 @@ own commit/rollback boundaries so multi-row operations such as role change plus
 audit log creation remain atomic.
 
 Later phases will add conversation file/chunk repositories, analytics queries,
-dashboard insight run/output repositories, admin chat repositories, and any
-OAuth adapter-specific data access required by the selected auth integration.
+dashboard insight run/output repositories, and admin chat repositories.
 
 ## Infrastructure Tables
 

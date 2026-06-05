@@ -18,7 +18,16 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1 import health
+from app.api.v1 import (
+    admin_users,
+    audit,
+    auth,
+    conversations,
+    health,
+    kb_documents,
+    kb_webhook,
+    users,
+)
 from app.core.config import settings
 from app.core.exception_handlers import (
     app_error_handler,
@@ -171,6 +180,13 @@ def create_app() -> FastAPI:
     setup_cors(app)
     setup_request_context(app)
 
+    app.include_router(auth.router, prefix=API_V1_PREFIX)
+    app.include_router(users.router, prefix=API_V1_PREFIX)
+    app.include_router(admin_users.router, prefix=API_V1_PREFIX)
+    app.include_router(audit.router, prefix=API_V1_PREFIX)
+    app.include_router(kb_documents.router, prefix=API_V1_PREFIX)
+    app.include_router(kb_webhook.router, prefix=API_V1_PREFIX)
+    app.include_router(conversations.router, prefix=API_V1_PREFIX)
     app.include_router(health.router, prefix=API_V1_PREFIX)
 
     @app.get("/")

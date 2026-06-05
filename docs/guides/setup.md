@@ -54,6 +54,32 @@ uv run uvicorn app.main:app --reload
 
 Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "ok"}`.
 
+Phase 1 auth and KB document control-plane settings:
+
+```env
+API_PUBLIC_URL=http://localhost:8000
+OAUTH_STATE_SECRET=replace-with-a-long-random-value
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+MICROSOFT_OAUTH_CLIENT_ID=
+MICROSOFT_OAUTH_CLIENT_SECRET=
+MICROSOFT_OAUTH_TENANT=common
+DEFAULT_ORGANIZATION_NAME=Playbook Athletics
+DEFAULT_ORGANIZATION_SLUG=playbook-athletics
+KB_WEBHOOK_SECRET=replace-with-a-long-random-value
+```
+
+For Google and Microsoft app registrations, set redirect URIs to:
+
+```text
+http://localhost:8000/api/v1/auth/google/callback
+http://localhost:8000/api/v1/auth/microsoft/callback
+```
+
+The KB service signs status callbacks to
+`http://localhost:8000/api/v1/kb/webhook` with `X-KB-Signature:
+sha256=<hmac>`, where the HMAC secret is `KB_WEBHOOK_SECRET`.
+
 ## 4. Frontend
 
 ```bash

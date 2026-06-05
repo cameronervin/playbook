@@ -34,11 +34,24 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     CORS_ORIGINS: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
     FRONTEND_URL: str = "http://localhost:3000"
+    API_PUBLIC_URL: str = "http://localhost:8000"
 
     JWT_LIFETIME_SECONDS: int = 3600  # 1 hour
     JWT_REFRESH_THRESHOLD_SECONDS: int = 1800  # Renew if < 30 min remaining
     # Cookie domain: "" or "localhost" for local dev, ".example.com" for prod
     COOKIE_DOMAIN: str = "localhost"
+    OAUTH_STATE_SECRET: str = "change-me-oauth-state"
+    OAUTH_STATE_COOKIE_NAME: str = "playbook_oauth_state"
+    ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
+
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    MICROSOFT_OAUTH_CLIENT_ID: str = ""
+    MICROSOFT_OAUTH_CLIENT_SECRET: str = ""
+    MICROSOFT_OAUTH_TENANT: str = "common"
+
+    DEFAULT_ORGANIZATION_NAME: str = "Playbook Athletics"
+    DEFAULT_ORGANIZATION_SLUG: str = "playbook"
 
     # --- AWS -------------------------------------------------------------------
     # Set S3_ENDPOINT_URL to a LocalStack URL (e.g. http://localstack:4566) for
@@ -98,6 +111,7 @@ class Settings(BaseSettings):
     # Local KB service connection (only used when KB_PROVIDER_MODE=local)
     KB_LOCAL_BASE_URL: str = "http://kb-api:8001"
     KB_API_SECRET: str = ""  # Bearer token sent with every call to the KB service
+    KB_WEBHOOK_SECRET: str = ""
     KB_CONFIG_NAME: str = "Playbook KB Pipeline"
     KB_TIMEOUT: int = 30
 
@@ -188,10 +202,14 @@ class Settings(BaseSettings):
         if is_production:
             if self.SECRET_KEY in ("change-me", "change-me-in-production"):
                 errors.append("SECRET_KEY must be changed in production")
+            if self.OAUTH_STATE_SECRET in ("change-me", "change-me-oauth-state"):
+                errors.append("OAUTH_STATE_SECRET must be changed in production")
             if "*" in self.CORS_ORIGINS:
                 errors.append("CORS_ORIGINS cannot contain '*' in production")
             if _is_local_url(self.FRONTEND_URL):
                 errors.append("FRONTEND_URL cannot use localhost in production")
+            if _is_local_url(self.API_PUBLIC_URL):
+                errors.append("API_PUBLIC_URL cannot use localhost in production")
             if self.LLM_PROVIDER_MODE == "litellm" and _is_local_url(
                 self.LITELLM_BASE_URL
             ):

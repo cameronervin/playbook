@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
-from app.models.identity import Organization, User
+from app.models.identity import OAuthAccount, Organization, User
 
 
 class OrganizationRepository:
@@ -146,9 +146,13 @@ class UserRepository:
         provider_subject: str,
         role: str = "athlete",
         sport_team: str | None = None,
+        hashed_password: str = "",
+        is_verified: bool = True,
+        is_superuser: bool | None = None,
         is_active: bool = True,
     ) -> User:
         """Create a local Playbook user without committing the transaction."""
+        resolved_is_superuser = role == "super_admin" if is_superuser is None else is_superuser
         user = User(
             organization_id=organization_id,
             email=email,
@@ -156,8 +160,11 @@ class UserRepository:
             role=role,
             auth_provider=auth_provider,
             provider_subject=provider_subject,
+            hashed_password=hashed_password,
             sport_team=sport_team,
             is_active=is_active,
+            is_verified=is_verified,
+            is_superuser=resolved_is_superuser,
         )
         self.session.add(user)
         await self.session.flush()
@@ -178,9 +185,30 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
+    async def update_oauth_identity(
+        self,
+        user: User,
+        *,
+        email: str,
+        name: str,
+        auth_provider: str,
+        provider_subject: str,
+        is_verified: bool = True,
+    ) -> User:
+        """Update OAuth identity fields without committing the transaction."""
+        user.email = email
+        user.name = name
+        user.auth_provider = auth_provider
+        user.provider_subject = provider_subject
+        user.is_verified = is_verified
+        await self.session.flush()
+        await self.session.refresh(user)
+        return user
+
     async def update_role(self, user: User, *, role: str) -> User:
         """Update a user's role without committing the transaction."""
         user.role = role
+        user.is_superuser = role == "super_admin"
         await self.session.flush()
         await self.session.refresh(user)
         return user
@@ -191,3 +219,69 @@ class UserRepository:
         await self.session.flush()
         await self.session.refresh(user)
         return user
+
+
+class OAuthAccountRepository:
+    """Data access for OAuth accounts linked to Playbook users."""
+
+    def __init__(self, session: AsyncSession = Depends(get_db)) -> None:
+        self.session = session
+
+    async def get_by_provider_account(
+        self,
+        *,
+        oauth_name: str,
+        account_id: str,
+    ) -> OAuthAccount | None:
+        """Return an OAuth account by provider and provider subject."""
+        result = await self.session.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.oauth_name == oauth_name,
+                OAuthAccount.account_id == account_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(
+        self,
+        *,
+        user_id: UUID,
+        oauth_name: str,
+        access_token: str,
+        account_id: str,
+        account_email: str,
+        expires_at: int | None = None,
+        refresh_token: str | None = None,
+    ) -> OAuthAccount:
+        """Create an OAuth account without committing the transaction."""
+        account = OAuthAccount(
+            user_id=user_id,
+            oauth_name=oauth_name,
+            access_token=access_token,
+            expires_at=expires_at,
+            refresh_token=refresh_token,
+            account_id=account_id,
+            account_email=account_email,
+        )
+        self.session.add(account)
+        await self.session.flush()
+        await self.session.refresh(account)
+        return account
+
+    async def update_tokens(
+        self,
+        account: OAuthAccount,
+        *,
+        access_token: str,
+        account_email: str,
+        expires_at: int | None = None,
+        refresh_token: str | None = None,
+    ) -> OAuthAccount:
+        """Update OAuth account token metadata without committing."""
+        account.access_token = access_token
+        account.account_email = account_email
+        account.expires_at = expires_at
+        account.refresh_token = refresh_token
+        await self.session.flush()
+        await self.session.refresh(account)
+        return account

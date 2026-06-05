@@ -37,48 +37,40 @@ Example error response:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Liveness/readiness check |
+| GET | `/auth/providers` | List configured Google/Microsoft OAuth providers |
+| GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
+| GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session |
+| POST | `/auth/logout` | Clear the current app session cookie |
+| GET | `/users/me` | Return current authenticated user/profile |
+| PATCH | `/users/me/profile` | Complete/update current athlete profile |
+| GET | `/admin/users` | List organization users for super-admin role management |
+| PATCH | `/admin/users/{user_id}/role` | Update a user's Playbook role |
+| GET | `/conversations` | List current athlete conversations |
+| POST | `/conversations` | Create a current-athlete conversation shell |
+| GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations |
+| GET | `/admin/kb/documents` | List KB documents and status |
+| POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
+| GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
+| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags, official flag, priority, and source date |
+| POST | `/admin/kb/documents/{document_id}/retry` | Retry document ingestion |
+| DELETE | `/admin/kb/documents/{document_id}` | Delete backend document record, original file, and searchable KB vectors |
+| POST | `/kb/webhook` | Receive signed KB-service status callbacks |
+| GET | `/admin/audit-logs` | Query org-scoped audit log records |
 
 ```bash
 curl http://localhost:8000/api/v1/health
 # {"status": "ok"}
 ```
 
-## Planned Playbook Surface
-
-### Auth and Users
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/auth/providers` | List enabled OAuth providers |
-| GET | `/auth/{provider}/login` | Start OAuth/OIDC login |
-| GET | `/auth/{provider}/callback` | Complete OAuth/OIDC callback |
-| POST | `/auth/logout` | End current session |
-| GET | `/users/me` | Return current user/profile |
-| PATCH | `/users/me/profile` | Complete/update athlete profile |
-| GET | `/admin/users` | List users for role management |
-| PATCH | `/admin/users/{user_id}/role` | Update user role |
+## Remaining Planned Surface
 
 ### Athlete Chat
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/conversations` | List current athlete conversations |
-| POST | `/conversations` | Create a new conversation |
-| GET | `/conversations/{conversation_id}` | Get conversation details |
 | POST | `/conversations/{conversation_id}/messages` | Submit a user message |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks |
 | POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
-
-### Knowledge Base Admin
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/admin/kb/documents` | List KB documents and status |
-| POST | `/admin/kb/documents` | Upload KB document |
-| GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
-| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update document metadata |
-| POST | `/admin/kb/documents/{document_id}/retry` | Retry document processing |
-| DELETE | `/admin/kb/documents/{document_id}` | Delete or archive document |
 
 ### Admin Analytics and Governance
 
@@ -94,4 +86,3 @@ curl http://localhost:8000/api/v1/health
 | POST | `/admin/chat/sessions` | Create an admin chat session |
 | GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
 | POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question |
-| GET | `/admin/audit-logs` | Query audit log records |

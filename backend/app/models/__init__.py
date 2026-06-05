@@ -15,7 +15,7 @@ from app.models.conversations import (
     ConversationMessage,
     MessageCitation,
 )
-from app.models.identity import Organization, User
+from app.models.identity import OAuthAccount, Organization, User
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "KBDocument",
     "KBDocumentEvent",
     "MessageCitation",
+    "OAuthAccount",
     "Organization",
     "User",
 ]
