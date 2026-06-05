@@ -44,6 +44,34 @@ The `users` table intentionally follows the Playbook PRD shape. FastAPI Users
 or OAuth adapter tables may be added during the OAuth/OIDC foundation task if
 the selected integration path requires them.
 
+## Repository Layer
+
+All product database access goes through repositories under
+`backend/app/repositories/`. Repositories use SQLAlchemy 2.0 async `select(...)`
+queries and receive an `AsyncSession` through FastAPI dependency injection.
+
+Phase 1 repository coverage:
+
+| Repository | Tables | Purpose |
+|------------|--------|---------|
+| `OrganizationRepository` | `organizations` | Tenant lookup, active organization listing, and organization creation |
+| `UserRepository` | `users` | OAuth subject lookup, org/email lookup, profile updates, role updates, and org-scoped user listing |
+| `AuditLogRepository` | `audit_logs` | Append-only privileged-action audit creation and super-admin query filters |
+| `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, and org-scoped listing |
+| `KBDocumentEventRepository` | `kb_document_events` | KB ingestion/status lifecycle event append and listing |
+| `ConversationRepository` | `conversations` | Athlete-owned conversation create/list/get and status/timestamp updates |
+| `ConversationMessageRepository` | `conversation_messages` | Message append, ordered history, bounded recent history, and assistant status/content updates |
+| `MessageCitationRepository` | `message_citations` | Assistant citation append and rank-ordered listing |
+
+Repositories flush and refresh written models so generated IDs and server
+defaults are visible to callers, but they do not commit transactions. Services
+own commit/rollback boundaries so multi-row operations such as role change plus
+audit log creation remain atomic.
+
+Later phases will add conversation file/chunk repositories, analytics queries,
+dashboard insight run/output repositories, admin chat repositories, and any
+OAuth adapter-specific data access required by the selected auth integration.
+
 ## Infrastructure Tables
 
 LangGraph checkpoint tables are package-owned and initialized by
