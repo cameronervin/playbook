@@ -28,7 +28,7 @@
 ┌──────────────┐  ┌──────────────┐       ┌─────────────────────────────┐
 │  PostgreSQL  │  │  AWS S3 /    │       │   LLM Providers             │
 │ Data storage │  │  LocalStack  │       │   Direct (Anthropic-first)  │
-│              │  │ File storage │       │   or Gateway (LiteLLM)      │
+│              │  │ File storage │       │   or LiteLLM               │
 └──────────────┘  └──────────────┘       └─────────────────────────────┘
        │
        ▼
@@ -58,7 +58,7 @@ app/
 └── infrastructure/    # External integrations
     ├── db/            # SQLAlchemy engine/session helpers
     ├── storage/       # S3 client (boto3)
-    ├── llm/           # LLM providers (direct + gateway)
+    ├── llm/           # LLM providers (direct + LiteLLM)
     └── workers/       # Celery app + worker tasks (optional)
 ```
 
@@ -84,7 +84,7 @@ src/
 | Frontend | Next.js (App Router), TypeScript, Tailwind v4, TanStack Query, Zustand |
 | Backend | FastAPI, SQLAlchemy 2.0 (async), Pydantic, Alembic |
 | Agents | LangGraph, LangChain |
-| LLM | LiteLLM gateway by default; direct Anthropic/OpenAI only for local or break-glass use |
+| LLM | LiteLLM by default in deployed environments; direct Anthropic/OpenAI only for local or break-glass use |
 | Database | PostgreSQL |
 | Storage | AWS S3, LocalStack (dev) |
 | Async (optional) | Valkey (broker/backend) + Celery |
@@ -100,7 +100,7 @@ imports a vendor SDK directly:
   variants). Application code and agents depend on this abstraction, not on a
   concrete client.
 - Transport is selected by `LLM_PROVIDER_MODE`:
-  - `gateway` — route through a LiteLLM proxy (OpenAI-compatible) for
+  - `litellm` — route through a LiteLLM proxy (OpenAI-compatible) for
     centralized credentials, model aliases, routing, fallbacks, spend tracking,
     and cost/rate controls.
   - `direct` — call the provider SDK directly for local development, smoke

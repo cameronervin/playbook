@@ -15,6 +15,22 @@ routes and the product API specification in
 | Thin routes | Routes validate input, call services, and return DTOs |
 | Typed responses | Every route declares a Pydantic `response_model` once implemented |
 | Auth | Protected routes require the app auth dependency or the selected OAuth integration |
+| Errors | API errors use nested `{"error": {"code", "message", "retryable", "details"}}` payloads and include `details.request_id` when available |
+
+Example error response:
+
+```json
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Admin role required",
+    "retryable": false,
+    "details": {
+      "request_id": "request-id"
+    }
+  }
+}
+```
 
 ## Implemented
 

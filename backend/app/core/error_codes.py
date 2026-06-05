@@ -12,10 +12,13 @@ class ErrorCode(StrEnum):
 
     # Client errors (4xx) — not retryable
     VALIDATION_ERROR = "VALIDATION_ERROR"
+    UNAUTHORIZED = "UNAUTHORIZED"
     NOT_FOUND = "NOT_FOUND"
     FORBIDDEN = "FORBIDDEN"
+    CONFLICT = "CONFLICT"
     FILE_TOO_LARGE = "FILE_TOO_LARGE"
     UNSUPPORTED_FILE_TYPE = "UNSUPPORTED_FILE_TYPE"
+    OAUTH_ERROR = "OAUTH_ERROR"
 
     # Rate limiting (429) — retryable
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
@@ -42,10 +45,13 @@ class ErrorCode(StrEnum):
 # Mapping of error codes to HTTP status codes
 ERROR_CODE_STATUS_MAP = {
     ErrorCode.VALIDATION_ERROR: 400,
+    ErrorCode.UNAUTHORIZED: 401,
     ErrorCode.FORBIDDEN: 403,
     ErrorCode.NOT_FOUND: 404,
+    ErrorCode.CONFLICT: 409,
     ErrorCode.FILE_TOO_LARGE: 413,
     ErrorCode.UNSUPPORTED_FILE_TYPE: 415,
+    ErrorCode.OAUTH_ERROR: 502,
     ErrorCode.RATE_LIMIT_EXCEEDED: 429,
     ErrorCode.AGENT_FAILED: 500,
     ErrorCode.STORAGE_ERROR: 500,
@@ -64,10 +70,13 @@ ERROR_CODE_STATUS_MAP = {
 ERROR_CODE_RETRYABLE_MAP = {
     # Non-retryable (permanent errors)
     ErrorCode.VALIDATION_ERROR: False,
+    ErrorCode.UNAUTHORIZED: False,
     ErrorCode.NOT_FOUND: False,
     ErrorCode.FORBIDDEN: False,
+    ErrorCode.CONFLICT: False,
     ErrorCode.FILE_TOO_LARGE: False,
     ErrorCode.UNSUPPORTED_FILE_TYPE: False,
+    ErrorCode.OAUTH_ERROR: True,
     ErrorCode.KB_AUTH_ERROR: False,
     ErrorCode.KB_VALIDATION_ERROR: False,
     ErrorCode.KB_CONFIG_ERROR: False,

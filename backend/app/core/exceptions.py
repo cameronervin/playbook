@@ -53,11 +53,41 @@ class ForbiddenError(AppError):
         super().__init__(message=message, error_code=ErrorCode.FORBIDDEN, details=details)
 
 
+class UnauthorizedError(AppError):
+    """Authentication required or invalid credentials."""
+
+    def __init__(
+        self,
+        message: str = "Not authenticated",
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(message=message, error_code=ErrorCode.UNAUTHORIZED, details=details)
+
+
+class ConflictError(AppError):
+    """Resource conflict exception."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(message=message, error_code=ErrorCode.CONFLICT, details=details)
+
+
 class ValidationError(AppError):
     """Validation error exception."""
 
     def __init__(self, message: str, details: dict[str, Any] | None = None):
         super().__init__(message=message, error_code=ErrorCode.VALIDATION_ERROR, details=details)
+
+
+class OAuthError(AppError):
+    """OAuth provider or callback failure."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(
+            message=message,
+            error_code=ErrorCode.OAUTH_ERROR,
+            retryable=True,
+            details=details,
+        )
 
 
 # --- LLM-specific exceptions ---

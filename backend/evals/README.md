@@ -21,7 +21,7 @@ group is installed.
 ## Run
 
 Set in `.env`: `LANGFUSE_ENABLED=true`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
-`LANGFUSE_HOST`, `LLM_GATEWAY_BASE_URL`, `LLM_GATEWAY_API_KEY`, and `KB_PROVIDER_MODE`
+`LANGFUSE_HOST`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `KB_PROVIDER_MODE`
 (`local` for real RAG scoring; `mock` only smoke-tests the pipe).
 
 Author the dataset + rubric YAMLs first (see `datasets/README.md`, `rubrics/README.md`).

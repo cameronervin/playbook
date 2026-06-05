@@ -76,7 +76,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
   healthcheck — keep them.
 - **Reverse proxy**: nginx serves the frontend and proxies `/api` to the
   backend (see `deploy/docker/nginx.conf`).
-- **LLM transport**: production should use `LLM_PROVIDER_MODE=gateway` and route
+- **LLM transport**: production should use `LLM_PROVIDER_MODE=litellm` and route
   backend, KB-service, and eval traffic through LiteLLM Proxy. Direct mode is
   reserved for local smoke tests or an explicit break-glass path.
 
@@ -84,7 +84,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 
 LiteLLM should run as its own service/container in deployed environments. The
 application services should not hold provider API keys directly; they should
-call the proxy with `LLM_GATEWAY_BASE_URL` and a LiteLLM virtual/service key.
+call the proxy with `LITELLM_BASE_URL` and a LiteLLM virtual/service key.
 
 Recommended deployment shape:
 
@@ -93,8 +93,8 @@ Recommended deployment shape:
 | `litellm` service | Runs LiteLLM Proxy on the internal network, usually port `4000` |
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, and `playbook-embed` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
-| Backend env | `LLM_PROVIDER_MODE=gateway`, `LLM_GATEWAY_BASE_URL=http://litellm:4000`, `LLM_GATEWAY_API_KEY=<service key>` |
-| KB-service env | Gateway base URL/key plus embedding alias for ingestion |
+| Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat` |
+| KB-service env | LiteLLM base URL/key plus embedding alias for ingestion |
 
 Use a separate LiteLLM database or at least a separate database/user in the
 Postgres cluster. Do not add LiteLLM tables to the Playbook application data

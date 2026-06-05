@@ -1,13 +1,4 @@
-"""LLM provider factory.
-
-Factory pattern for creating LLM providers based on LLM_PROVIDER_MODE.
-
-Modes:
-    - gateway: route all requests through a LiteLLM (OpenAI-compatible) gateway.
-    - direct:  per-use-case provider configuration (Anthropic-first).
-
-Pattern: StrEnum mode + @lru_cache factory + FastAPI dependency + clear_all_caches.
-"""
+"""LLM provider factory."""
 
 from enum import StrEnum
 from functools import lru_cache
@@ -23,13 +14,13 @@ logger = structlog.get_logger()
 class LLMProviderMode(StrEnum):
     """Available LLM provider modes."""
 
-    GATEWAY = "gateway"  # Route all operations through the LiteLLM gateway
-    DIRECT = "direct"    # Per-use-case provider configuration
+    DIRECT = "direct"
+    LITELLM = "litellm"
 
 
 PROVIDER_MODE_DESCRIPTIONS = {
-    LLMProviderMode.GATEWAY: "LiteLLM gateway — unified API access to multiple providers",
-    LLMProviderMode.DIRECT: "Per-use-case provider selection with direct SDK access",
+    LLMProviderMode.DIRECT: "Direct provider SDK access",
+    LLMProviderMode.LITELLM: "LiteLLM proxy — unified API access to multiple providers",
 }
 
 
@@ -47,10 +38,10 @@ def get_llm_provider(mode: LLMProviderMode | None = None) -> BaseLLMProvider:
 
     logger.info("Initializing LLM provider", mode=mode.value)
 
-    if mode == LLMProviderMode.GATEWAY:
-        from app.infrastructure.llm.providers.gateway import GatewayLLMProvider
+    if mode == LLMProviderMode.LITELLM:
+        from app.infrastructure.llm.providers.gateway import LiteLLMProvider
 
-        return GatewayLLMProvider()
+        return LiteLLMProvider()
 
     if mode == LLMProviderMode.DIRECT:
         from app.infrastructure.llm.providers.direct import DirectLLMProvider
@@ -70,7 +61,7 @@ def clear_all_caches() -> None:
     get_llm_provider.cache_clear()
 
     from app.infrastructure.llm.providers.direct import clear_caches as clear_direct
-    from app.infrastructure.llm.providers.gateway import clear_caches as clear_gateway
+    from app.infrastructure.llm.providers.gateway import clear_caches as clear_litellm
 
-    clear_gateway()
+    clear_litellm()
     clear_direct()

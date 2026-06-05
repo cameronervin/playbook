@@ -93,5 +93,5 @@ uv run python run_dev.py             # uvicorn on http://localhost:8001
 | `uv` cannot find Python 3.12 | Run `uv python install 3.12` from the repo root |
 | `connection refused` on DB | Ensure the Postgres container is running and `DATABASE_URL` matches the exposed port |
 | `alembic` "target database is not up to date" | Run `alembic upgrade head` |
-| LLM calls fail | Check `LLM_PROVIDER_MODE` and the relevant API key in `.env` |
+| LLM calls fail | Check `LLM_PROVIDER_MODE`, `LLM_CHAT_MODEL`, and either `LITELLM_API_KEY` or the selected direct-provider API key in `.env` |
 | Frontend can't reach API | Check `NEXT_PUBLIC_API_URL` and CORS settings on the backend |

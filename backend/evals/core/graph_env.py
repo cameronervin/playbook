@@ -3,7 +3,7 @@
 This is the ONLY module under ``evals`` that imports ``app.*``. It provides:
 
 - ``get_eval_chat_model()`` / ``get_eval_embeddings()`` — the evaluator (judge)
-  LLM and embeddings, both routed through the same LiteLLM gateway the app uses,
+  LLM and embeddings, both routed through the same LiteLLM proxy the app uses,
   so every evaluator model is LiteLLM-provisioned regardless of LLM_PROVIDER_MODE.
 - ``get_example_chains()`` — the agent chains under test, built with the project's
   configured provider (whatever the app normally runs with).
@@ -25,20 +25,19 @@ if TYPE_CHECKING:
 
 
 # --------------------------------------------------------------------------- #
-# Evaluator models — pinned to the LiteLLM gateway (OpenAI-compatible).
-# Mirrors the app's gateway provider so routing is identical.
+# Evaluator models — pinned to LiteLLM (OpenAI-compatible).
 # --------------------------------------------------------------------------- #
 @lru_cache
 def get_eval_chat_model() -> "BaseChatModel":
-    """Judge LLM, routed through the LiteLLM gateway."""
+    """Judge LLM, routed through LiteLLM."""
     from langchain_openai import ChatOpenAI
 
     from app.core.config import settings
 
     return ChatOpenAI(
         model=settings.EVAL_JUDGE_MODEL or settings.LLM_CHAT_MODEL,
-        base_url=settings.LLM_GATEWAY_BASE_URL,
-        api_key=settings.LLM_GATEWAY_API_KEY or "x",
+        base_url=settings.LITELLM_BASE_URL,
+        api_key=settings.LITELLM_API_KEY or "x",
         temperature=0,
         timeout=settings.LLM_TIMEOUT,
     )
@@ -46,7 +45,7 @@ def get_eval_chat_model() -> "BaseChatModel":
 
 @lru_cache
 def get_eval_embeddings() -> "Embeddings | None":
-    """Ragas embeddings (answer_relevancy), routed through the LiteLLM gateway.
+    """Ragas embeddings (answer_relevancy), routed through LiteLLM.
 
     Returns ``None`` when ``EVAL_EMBEDDINGS_MODEL`` is blank or construction fails,
     in which case the embeddings-dependent metric is skipped rather than erroring.
@@ -61,8 +60,8 @@ def get_eval_embeddings() -> "Embeddings | None":
 
         return OpenAIEmbeddings(
             model=model,
-            base_url=settings.LLM_GATEWAY_BASE_URL,
-            api_key=settings.LLM_GATEWAY_API_KEY or "x",
+            base_url=settings.LITELLM_BASE_URL,
+            api_key=settings.LITELLM_API_KEY or "x",
         )
     except Exception:  # noqa: BLE001 — embeddings optional; skip the metric instead
         return None

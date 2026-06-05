@@ -41,6 +41,8 @@ def _get_test_database_url() -> str:
         return explicit_url
 
     prod_url = settings.DATABASE_URL
+    if prod_url.startswith("postgresql://"):
+        prod_url = prod_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     db_name = prod_url.rsplit("/", 1)[-1] if "/" in prod_url else ""
     return prod_url.rsplit("/", 1)[0] + f"/{db_name}_test"
 
