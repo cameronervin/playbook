@@ -199,11 +199,11 @@ class AuthService:
                 self._redirect_uri(provider, request),
             )
             account_id, account_email = await client.get_id_email(token["access_token"])
-        except (HTTPXOAuthError, OAuth2Error) as exc:
+        except (HTTPXOAuthError, OAuth2Error):
             raise OAuthError(
                 "OAuth provider callback failed",
                 details={"provider": provider},
-            ) from exc
+            ) from None
 
         if not account_email:
             raise OAuthError(

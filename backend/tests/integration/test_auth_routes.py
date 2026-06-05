@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 import jwt
 import pytest
 from sqlalchemy import select
+from structlog.processors import format_exc_info
 from structlog.testing import capture_logs
 
 from httpx_oauth.oauth2 import OAuth2Error
@@ -171,10 +172,16 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     ]
     assert oauth_client.access_token not in callback_response.text
     assert oauth_client.refresh_token not in callback_response.text
+    assert oauth_client.subject not in callback_response.text
+    assert "access_token" in body
     assert "refresh_token" not in body
+    assert "refresh_token" not in callback_response.text
     assert "oauth_accounts" not in body
+    assert "oauth_accounts" not in callback_response.text
     assert "auth_provider" not in body["user"]
+    assert "auth_provider" not in callback_response.text
     assert "provider_subject" not in body["user"]
+    assert "provider_subject" not in callback_response.text
 
     set_cookie = callback_response.headers["set-cookie"]
     assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in set_cookie
@@ -213,7 +220,7 @@ async def test_oauth_callback_failure_does_not_persist_or_log_provider_tokens(
     assert login_response.status_code == 200
     assert google_client.last_state is not None
 
-    with capture_logs() as captured_logs:
+    with capture_logs(processors=[format_exc_info]) as captured_logs:
         callback_response = await route_client.client.get(
             "/api/v1/auth/google/callback",
             params={"code": "oauth-code", "state": google_client.last_state},
