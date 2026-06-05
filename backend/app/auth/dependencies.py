@@ -4,7 +4,7 @@ from uuid import UUID
 
 import jwt
 import structlog
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,18 +17,17 @@ logger = structlog.get_logger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
 
-AUTH_COOKIE_NAME = "access_token"
+AUTH_COOKIE_NAME = settings.ACCESS_TOKEN_COOKIE_NAME
 
 
 async def _resolve_token_from_request(
     request: Request,
     bearer: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    access_token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
 ) -> str | None:
-    """Extract the JWT from the Bearer header (priority) or access_token cookie."""
+    """Extract the JWT from the Bearer header (priority) or configured cookie."""
     if bearer and bearer.credentials:
         return bearer.credentials
-    if access_token:
+    if access_token := request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME):
         return access_token
     return None
 

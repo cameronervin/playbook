@@ -1,4 +1,6 @@
 """Pytest configuration for backend tests."""
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 import os
 import sys
 from unittest.mock import AsyncMock
@@ -16,11 +18,17 @@ except ImportError:
 
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.auth.dependencies import current_active_user
 from app.core.config import settings
+from app.infrastructure.db.session import get_db
+from app.main import create_app
 from app.models.base import Base
+from app.models.identity import User
 
 
 def pytest_configure(config):
@@ -100,3 +108,35 @@ def mock_storage_provider():
     storage.file_exists = AsyncMock(return_value=True)
     storage.get_presigned_url = AsyncMock(return_value="https://example.com/presigned-url")
     return storage
+
+
+@dataclass
+class RouteTestHarness:
+    """Small wrapper for route-level tests using FastAPI dependency overrides."""
+
+    app: FastAPI
+    client: AsyncClient
+
+    def authenticate_as(self, user: User) -> None:
+        """Override the current-user dependency for role-gated routes."""
+
+        async def override_current_active_user() -> User:
+            return user
+
+        self.app.dependency_overrides[current_active_user] = override_current_active_user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def route_client(db_session: AsyncSession) -> AsyncGenerator[RouteTestHarness, None]:
+    """Create an ASGI test client wired to the function-scoped DB session."""
+    app = create_app()
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield RouteTestHarness(app=app, client=client)
+
+    app.dependency_overrides = {}

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from fastapi.responses import Response
 
 from app.api.v1.dependencies import AdminUserDep, KBDocumentServiceDep
+from app.core.exceptions import ValidationError
 from app.schemas.kb_documents import (
     KBDocumentMetadataUpdateRequest,
     KBDocumentResponse,
@@ -18,6 +20,19 @@ from app.schemas.kb_documents import (
 from app.services.kb_document_service import KBDocumentUpload
 
 router = APIRouter(prefix="/admin/kb/documents", tags=["KB Documents"])
+
+
+def _metadata_tags_from_form(metadata_tags: str | None) -> dict[str, Any] | None:
+    """Parse optional multipart metadata JSON into a dictionary."""
+    if metadata_tags is None or metadata_tags.strip() == "":
+        return None
+    try:
+        parsed = json.loads(metadata_tags)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("metadata_tags must be a JSON object") from exc
+    if not isinstance(parsed, dict):
+        raise ValidationError("metadata_tags must be a JSON object")
+    return parsed
 
 
 @router.get("", response_model=list[KBDocumentResponse])
@@ -47,6 +62,7 @@ async def upload_document(
     service: KBDocumentServiceDep,
     file: Annotated[UploadFile, File()],
     title: Annotated[str | None, Form()] = None,
+    metadata_tags: Annotated[str | None, Form()] = None,
     source_date: Annotated[date | None, Form()] = None,
     is_official: Annotated[bool, Form()] = False,
     priority: Annotated[int, Form(ge=0)] = 0,
@@ -57,6 +73,7 @@ async def upload_document(
         content_type=file.content_type or "application/octet-stream",
         file=file.file,
         title=title,
+        metadata_tags=_metadata_tags_from_form(metadata_tags),
         source_date=source_date,
         is_official=is_official,
         priority=priority,

@@ -12,7 +12,7 @@ from fastapi import Request, Response
 from httpx_oauth.oauth2 import HTTPXOAuthError, OAuth2Error
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import AUTH_COOKIE_NAME, is_profile_complete
+from app.auth.dependencies import is_profile_complete
 from app.core.config import settings
 from app.core.exceptions import OAuthError, ValidationError
 from app.models.identity import User
@@ -69,7 +69,7 @@ def _cookie_domain() -> str | None:
 def set_access_token_cookie(response: Response, token: str) -> None:
     """Attach the app access token as an HttpOnly cookie."""
     response.set_cookie(
-        AUTH_COOKIE_NAME,
+        settings.ACCESS_TOKEN_COOKIE_NAME,
         token,
         max_age=settings.JWT_LIFETIME_SECONDS,
         httponly=True,
@@ -238,7 +238,7 @@ class AuthService:
 
     def logout(self, response: Response) -> None:
         """Clear the app access token cookie."""
-        response.delete_cookie(AUTH_COOKIE_NAME, domain=_cookie_domain())
+        response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, domain=_cookie_domain())
 
     def _assert_provider_enabled(self, provider: ProviderName) -> None:
         enabled = {

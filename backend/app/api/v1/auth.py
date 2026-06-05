@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 
-from app.api.v1.dependencies import AuthServiceDep
+from app.api.v1.dependencies import AuthServiceDep, CurrentUserDep
 from app.schemas.users import (
     AuthProvidersResponse,
     LogoutResponse,
@@ -57,6 +57,7 @@ async def callback(
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
     response: Response,
+    _user: CurrentUserDep,
     service: AuthServiceDep,
 ) -> LogoutResponse:
     """Clear the app session cookie."""
