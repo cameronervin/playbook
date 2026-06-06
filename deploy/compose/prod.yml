@@ -26,6 +26,21 @@ services:
         limits:
           memory: 512M
 
+  litellm:
+    env_file:
+      - ../envs/.env.prod
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
+
   backend:
     env_file:
       - ../envs/.env.prod
@@ -64,6 +79,64 @@ services:
   celery-worker:
     env_file:
       - ../envs/.env.prod
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+
+  kb-api:
+    env_file:
+      - ../envs/.env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  kb-valkey:
+    env_file:
+      - ../envs/.env.prod
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  kb-worker-cpu:
+    env_file:
+      - ../envs/.env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+
+  kb-worker-io:
+    env_file:
+      - ../envs/.env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
     deploy:
       replicas: 2
       resources:

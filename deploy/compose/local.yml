@@ -18,6 +18,37 @@ services:
     env_file:
       - ../envs/.env.local
 
+  litellm-db-init:
+    image: postgres:16-alpine
+    env_file:
+      - ../envs/.env.local
+      - ../envs/.env.litellm.local
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        export PGPASSWORD="$${POSTGRES_PASSWORD:-$${DB_PASSWORD:-localpass}}"
+        db_user="$${POSTGRES_USER:-$${DB_USER:-app}}"
+        db_name="$${POSTGRES_DB:-$${DB_NAME:-playbook}}"
+        psql -h db -U "$${db_user}" -d "$${db_name}" -tAc "SELECT 1 FROM pg_database WHERE datname='litellm'" | grep -q 1 || \
+          psql -h db -U "$${db_user}" -d "$${db_name}" -c "CREATE DATABASE litellm OWNER \"$${db_user}\""
+    restart: "no"
+
+  litellm:
+    ports:
+      - "4000:4000"
+    env_file:
+      - ../envs/.env.litellm.local
+    depends_on:
+      db:
+        condition: service_healthy
+      litellm-db-init:
+        condition: service_completed_successfully
+
   backend:
     ports:
       - "8000:8000"
@@ -32,6 +63,8 @@ services:
       db:
         condition: service_healthy
       valkey:
+        condition: service_healthy
+      litellm:
         condition: service_healthy
       minio-bootstrap:
         condition: service_completed_successfully
@@ -109,6 +142,8 @@ services:
         condition: service_healthy
       kb-valkey:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
       minio-bootstrap:
         condition: service_completed_successfully
 
@@ -126,6 +161,8 @@ services:
         condition: service_healthy
       kb-valkey:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
       minio-bootstrap:
         condition: service_completed_successfully
 
@@ -138,6 +175,8 @@ services:
       db:
         condition: service_healthy
       kb-valkey:
+        condition: service_healthy
+      litellm:
         condition: service_healthy
       minio-bootstrap:
         condition: service_completed_successfully

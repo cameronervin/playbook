@@ -22,13 +22,32 @@ cd agentic-app
 
 ## 2. Start Infrastructure
 
-Start Postgres, MinIO, and Valkey via Docker Compose:
+Start Postgres, MinIO, Valkey, KB-service, and LiteLLM via Docker Compose:
 
 ```bash
 cp deploy/envs/.env.local.example deploy/envs/.env.local
 cp deploy/envs/.env.kb-service.local.example deploy/envs/.env.kb-service.local
+cp deploy/envs/.env.litellm.local.example deploy/envs/.env.litellm.local
 ./deploy/scripts/deploy.sh local --build
 ```
+
+Edit `deploy/envs/.env.litellm.local` before making real model calls. Provider
+API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) belong in that LiteLLM-only env
+file, not in backend or KB-service env files. For first local boot, the backend
+and KB-service examples use `sk-local-litellm-master-key` as their LiteLLM
+service key; after LiteLLM starts, generate a scoped key from
+`http://localhost:4000/ui` and replace `LITELLM_API_KEY` /
+`LLM_GATEWAY_API_KEY`.
+
+Verify LiteLLM:
+
+```bash
+curl http://localhost:4000/health/liveliness
+curl http://localhost:4000/health/readiness
+```
+
+See [Self-Hosted LiteLLM](litellm_self_hosting.md) for key provisioning and
+security notes.
 
 Or start only the services you need — see
 [postgresql_setup.md](postgresql_setup.md) and
@@ -44,7 +63,9 @@ uv python install 3.12
 uv sync
 
 # Configure environment
-cp ../deploy/envs/.env.local .env   # then edit values (e.g. ANTHROPIC_API_KEY)
+cp ../deploy/envs/.env.local .env
+# If running backend directly on the host, set:
+# LITELLM_BASE_URL=http://localhost:4000
 
 # Apply database migrations
 uv run alembic upgrade head
@@ -107,11 +128,15 @@ uv run alembic upgrade head          # needs Postgres with pgvector
 uv run python run_dev.py             # uvicorn on http://localhost:8001
 ```
 
+If running KB-service directly on the host while LiteLLM runs in Docker, set
+`LLM_GATEWAY_BASE_URL=http://localhost:4000` in `kb-service/.env`.
+
 ## 6. Verify End to End
 
 1. Open http://localhost:3000.
 2. Confirm the backend health check is reachable.
-3. Confirm Playbook migrations apply against the local `playbook` database.
+3. Confirm LiteLLM health is reachable on port `4000`.
+4. Confirm Playbook migrations apply against the local `playbook` database.
 
 ## Common Issues
 
@@ -120,5 +145,5 @@ uv run python run_dev.py             # uvicorn on http://localhost:8001
 | `uv` cannot find Python 3.12 | Run `uv python install 3.12` from the repo root |
 | `connection refused` on DB | Ensure the Postgres container is running and `DATABASE_URL` matches the exposed port |
 | `alembic` "target database is not up to date" | Run `alembic upgrade head` |
-| LLM calls fail | Check `LLM_PROVIDER_MODE`, `LLM_CHAT_MODEL`, and either `LITELLM_API_KEY` or the selected direct-provider API key in `.env` |
+| LLM calls fail | Check LiteLLM health, `LLM_PROVIDER_MODE`, `LLM_CHAT_MODEL`, `LITELLM_BASE_URL`, and the LiteLLM service key in the app env. Provider API keys should be in `deploy/envs/.env.litellm.local` |
 | Frontend can't reach API | Check `NEXT_PUBLIC_API_URL` and CORS settings on the backend |

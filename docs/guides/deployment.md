@@ -94,7 +94,8 @@ Recommended deployment shape:
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, and `playbook-embed` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
 | Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat` |
-| KB-service env | LiteLLM base URL/key plus embedding alias for ingestion |
+| KB-service env | `KB_LLM_PROVIDER_MODE=gateway`, LiteLLM base URL/key, and `LLM_GATEWAY_EMBED_MODEL=playbook-embed` |
+| LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, and `LITELLM_DATABASE_URL` |
 
 Use a separate LiteLLM database or at least a separate database/user in the
 Postgres cluster. Do not add LiteLLM tables to the Playbook application data
@@ -105,6 +106,27 @@ LiteLLM's database is optional for a minimal proxy, but it is required for the
 features Playbook wants in scope: virtual keys, spend tracking, budgets, and the
 admin UI. That means the production deployment should include a LiteLLM DB
 connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
+Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` should be
+available only to the LiteLLM proxy service. The backend and KB-service should
+hold only LiteLLM virtual/service keys.
+
+The project-owned LiteLLM image is defined in
+`deploy/docker/Dockerfile.litellm` and uses `deploy/litellm/config.yaml` for
+model aliases:
+
+| Alias | Provider model | Used by |
+|-------|----------------|---------|
+| `playbook-chat` | `LITELLM_PLAYBOOK_CHAT_MODEL` | athlete chat, admin chat, eval judge default |
+| `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries or future fast paths |
+| `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
+
+For local Compose, `litellm-db-init` creates a separate `litellm` database in
+the local Postgres container. Production should provision the LiteLLM database
+through infrastructure or a managed database workflow and provide
+`LITELLM_DATABASE_URL` through the secrets manager.
+
+See [Self-Hosted LiteLLM](litellm_self_hosting.md) for the concise operations
+guide.
 
 ## Verifying a Deploy
 
@@ -114,6 +136,10 @@ connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
 
 # Backend health
 curl http://<host>/api/v1/health
+
+# LiteLLM proxy health
+curl http://<host-or-internal-litellm>:4000/health/liveliness
+curl http://<host-or-internal-litellm>:4000/health/readiness
 ```
 
 To verify Python dependency resolution before a deploy:

@@ -1,0 +1,22 @@
+model_list:
+  - model_name: playbook-chat
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_CHAT_MODEL
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: playbook-fast
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_FAST_MODEL
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: playbook-embed
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_EMBED_MODEL
+      api_key: os.environ/OPENAI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL
+
+litellm_settings:
+  drop_params: true

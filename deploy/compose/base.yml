@@ -31,12 +31,38 @@ services:
       - valkey_data:/data
     restart: unless-stopped
 
+  # LiteLLM Proxy — OpenAI-compatible LLM gateway for chat, embeddings, evals,
+  # virtual keys, budgets, and spend tracking. Provider credentials live only in
+  # the LiteLLM env file / secrets manager, not in app service env files.
+  litellm:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile.litellm
+      args:
+        LITELLM_IMAGE_TAG: ${LITELLM_IMAGE_TAG:-1.84.1}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; [urllib.request.urlopen(url, timeout=5).read() for url in ('http://localhost:4000/health/liveliness', 'http://localhost:4000/health/readiness')]\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
   backend:
     build:
       context: ../../backend
       dockerfile: ../deploy/docker/Dockerfile.backend
     depends_on:
       db:
+        condition: service_healthy
+      litellm:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -85,6 +111,8 @@ services:
         condition: service_healthy
       kb-valkey:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
@@ -119,6 +147,8 @@ services:
         condition: service_healthy
       kb-valkey:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
     restart: unless-stopped
     profiles:
       - worker
@@ -132,6 +162,8 @@ services:
       db:
         condition: service_healthy
       kb-valkey:
+        condition: service_healthy
+      litellm:
         condition: service_healthy
     restart: unless-stopped
     profiles:

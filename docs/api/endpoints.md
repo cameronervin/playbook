@@ -59,8 +59,11 @@ Example error response:
 
 ```bash
 curl http://localhost:8000/api/v1/health
-# {"status": "ok"}
+# {"status": "healthy"}
 ```
+
+For a repeatable local Swagger and curl validation pass, see
+[`phase1_backend_endpoint_validation.md`](../guides/phase1_backend_endpoint_validation.md).
 
 ## Remaining Planned Surface
 
