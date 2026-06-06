@@ -10,7 +10,7 @@
 | Python | 3.12+ | Backend (FastAPI) |
 | uv | latest | Python package and environment manager |
 | Node.js | 20+ | Frontend (Next.js) |
-| Docker | latest | Postgres, LocalStack, Valkey |
+| Docker | latest | Postgres, MinIO, Valkey |
 | Git | latest | — |
 
 ## 1. Clone
@@ -22,16 +22,17 @@ cd agentic-app
 
 ## 2. Start Infrastructure
 
-Start Postgres (and optionally LocalStack + Valkey) via Docker Compose:
+Start Postgres, MinIO, and Valkey via Docker Compose:
 
 ```bash
 cp deploy/envs/.env.local.example deploy/envs/.env.local
+cp deploy/envs/.env.kb-service.local.example deploy/envs/.env.kb-service.local
 ./deploy/scripts/deploy.sh local --build
 ```
 
 Or start only the services you need — see
 [postgresql_setup.md](postgresql_setup.md) and
-[localstack_setup.md](localstack_setup.md).
+[minio_setup.md](minio_setup.md).
 
 ## 3. Backend
 
@@ -52,7 +53,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "ok"}`.
+Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "healthy"}`.
 
 Phase 1 auth and KB document control-plane settings:
 

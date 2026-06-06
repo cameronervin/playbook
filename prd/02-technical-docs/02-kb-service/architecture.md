@@ -46,7 +46,7 @@ Stack:
 - FastAPI on port 8001.
 - Celery + Valkey workers.
 - Docling and native Office/PDF parsers.
-- S3/LocalStack staging.
+- S3-compatible staging.
 - LiteLLM gateway embeddings by default, with direct provider mode only for local or break-glass use.
 - PostgreSQL + pgvector.
 
@@ -104,7 +104,7 @@ that value in `kb_documents.kb_service_document_id` for status/debug linkage.
 - Changes to embedding model require migration planning.
 - OCR/image handling is not MVP unless added separately.
 - Existing service-to-service auth should remain in place.
-- Heavy intermediate artifacts may be staged in S3/LocalStack, but durable search
+- Heavy intermediate artifacts may be staged in S3-compatible storage, but durable search
   content lives in the KB service database.
 - Staging artifacts should be deleted after successful load or terminal failure
   cleanup.

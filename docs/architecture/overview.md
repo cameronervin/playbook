@@ -27,7 +27,7 @@
     ▼                   ▼                                     ▼
 ┌──────────────┐  ┌──────────────┐       ┌─────────────────────────────┐
 │  PostgreSQL  │  │  AWS S3 /    │       │   LLM Providers             │
-│ Data storage │  │  LocalStack  │       │   Direct (Anthropic-first)  │
+│ Data storage │  │  MinIO       │       │   Direct (Anthropic-first)  │
 │              │  │ File storage │       │   or LiteLLM               │
 └──────────────┘  └──────────────┘       └─────────────────────────────┘
        │
@@ -86,7 +86,7 @@ src/
 | Agents | LangGraph, LangChain |
 | LLM | LiteLLM by default in deployed environments; direct Anthropic/OpenAI only for local or break-glass use |
 | Database | PostgreSQL |
-| Storage | AWS S3, LocalStack (dev) |
+| Storage | AWS S3, MinIO (local dev) |
 | Async (optional) | Valkey (broker/backend) + Celery |
 | Observability | structlog |
 | Deploy | Docker Compose, nginx |
@@ -109,7 +109,8 @@ imports a vendor SDK directly:
   [ADR 0002](decisions/0002-llm-provider-modes.md).
 
 The same pattern applies to storage (an S3-compatible client that points at
-LocalStack in dev and real S3 in prod) and any other swappable infrastructure.
+MinIO in local development and real S3 in production) and any other swappable
+infrastructure.
 
 ## Request Lifecycle
 

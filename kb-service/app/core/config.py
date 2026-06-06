@@ -55,10 +55,10 @@ class Settings(BaseSettings):
     LLM_GATEWAY_EMBED_MODEL: str = "text-embedding-3-small"
 
     # -------------------------------------------------------------------------
-    # S3 / LocalStack — where original uploads + staged NDJSON live
+    # S3-compatible storage — where original uploads + staged NDJSON live
     # -------------------------------------------------------------------------
     AWS_S3_BUCKET: str = "kb-documents"
-    AWS_S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to LocalStack URL for local dev
+    AWS_S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
     AWS_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""

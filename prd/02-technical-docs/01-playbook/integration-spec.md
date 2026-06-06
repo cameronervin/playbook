@@ -5,7 +5,7 @@ This document defines how Playbook integrates with identity providers, the exist
 ## Current Scaffold Integrations
 
 - Main backend to KB service over HTTP through `LocalKBProvider`.
-- KB service to S3/LocalStack for staged document data.
+- KB service to S3-compatible storage for staged document data.
 - KB service to PostgreSQL/pgvector for vector storage.
 - KB service to embeddings through LiteLLM gateway by default.
 - Backend to chat/completion models through LiteLLM gateway by default.
@@ -132,18 +132,18 @@ separately from athlete conversations and must not expose athlete owner identity
 
 | Data | Storage |
 |------|---------|
-| Admin KB originals | S3/LocalStack-compatible storage |
-| Conversation file originals | S3/LocalStack-compatible storage |
-| Conversation extracted text/page JSON | S3/LocalStack-compatible storage |
+| Admin KB originals | S3-compatible storage |
+| Conversation file originals | S3-compatible storage |
+| Conversation extracted text/page JSON | S3-compatible storage |
 | Conversation file chunks | Main backend PostgreSQL |
 | Parsed/chunked staging | KB service S3 staging |
 | KB document vectors/chunk text | KB service PostgreSQL + pgvector |
 | Conversations/analytics/audit/admin chat | Main backend PostgreSQL |
 
-S3-compatible object storage is in MVP scope. Local development uses
-LocalStack-compatible storage; production should use private S3-compatible
-buckets with server-side encryption, public access disabled, and short-lived
-signed URLs for upload/download flows.
+S3-compatible object storage is in MVP scope. Local development uses MinIO;
+production should use private S3-compatible buckets with server-side
+encryption, public access disabled, and short-lived signed URLs for
+upload/download flows.
 
 Recommended logical prefixes:
 

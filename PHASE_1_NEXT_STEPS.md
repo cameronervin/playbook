@@ -17,7 +17,7 @@ wiring centralized in `backend/app/api/v1/dependencies.py`.
 | `UserProfileService` | Current-user response, route coverage, and athlete profile completion/update with `profile_complete` and `next_route="/chat"` | Any future richer profile/admin-edit fields |
 | `UserAdminService` | Super-admin user listing route coverage, org-scoped role update, `is_superuser` compatibility sync, and atomic audit logging | Future invite/activation/deactivation flows |
 | `AuditLogService` | Single audit write path and super-admin org-scoped audit log query | Future dashboard/reporting behavior |
-| `KBDocumentService` | Admin list/get/upload/metadata update/retry/delete route coverage, multipart `metadata_tags`, storage keying, lifecycle events, KB-service ingest/delete adapter calls, and audit logging | Real kb-service + LocalStack/S3 E2E test and stronger failure cleanup around partial upload/ingest failures |
+| `KBDocumentService` | Admin list/get/upload/metadata update/retry/delete route coverage, multipart `metadata_tags`, storage keying, lifecycle events, KB-service ingest/delete adapter calls, and audit logging | Real kb-service + MinIO/S3-compatible E2E test and stronger failure cleanup around partial upload/ingest failures |
 | `KBDocumentWebhookService` | HMAC route coverage, signature verification, stale webhook rejection, status mapping, document status update, and event append | E2E validation against real kb-service payloads and broader status-mapping tests |
 | `ConversationService` | Minimal athlete-owned shell route coverage: list/create/get conversations, bounded message loading, citation mapping, and athlete/org scoping | Phase 2 chat behavior: user message submission, assistant generation, streaming, LangGraph orchestration, KB retrieval, safety/refusal handling, file upload/extraction, `last_message_at` updates, and generated assistant message/citation persistence |
 
@@ -81,7 +81,7 @@ DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook \
      `postgresql+asyncpg://...`.
 
 3. Verify KB service integration end to end:
-   - Start backend, LocalStack/S3, and kb-service locally.
+   - Start backend, MinIO/S3-compatible storage, and kb-service locally.
    - Upload a sample PDF/DOCX/PPTX/XLSX through `/api/v1/admin/kb/documents`.
    - Confirm backend calls current kb-service ingest/delete/status route shapes.
    - Confirm signed webhook updates `kb_documents.processing_status` and appends

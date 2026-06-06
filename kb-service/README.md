@@ -39,7 +39,7 @@ POST /api/kb/embed/search ─▶ SearchService ─▶ embed query ─▶ pgvecto
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
 | Embeddings | OpenAI direct or LiteLLM gateway (`EmbedProviderMode`), `text-embedding-3-small`, 1536-dim |
 | Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
-| Storage | S3 / LocalStack (boto3), streamed to tempfiles |
+| Storage | S3-compatible storage / MinIO locally (boto3), streamed to tempfiles |
 
 ## Layout
 

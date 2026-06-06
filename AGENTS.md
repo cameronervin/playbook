@@ -91,7 +91,7 @@ docs/
 │   ├── deployment.md
 │   ├── contributing.md
 │   ├── postgresql_setup.md
-│   └── localstack_setup.md
+│   └── minio_setup.md
 └── agents/
     ├── tools.md
     └── context-engineering.md
@@ -232,7 +232,7 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 
 | Task | Reference |
 |------|-----------|
-| Start dev services (Postgres, LocalStack, Valkey, backend, frontend) | [.claude/commands/start-services.md](.claude/commands/start-services.md) |
+| Start dev services (Postgres, MinIO, Valkey, backend, frontend) | [.claude/commands/start-services.md](.claude/commands/start-services.md) |
 | Git commit conventions | [.claude/commands/git-commits.md](.claude/commands/git-commits.md) |
 | Bug squash workflow | [.claude/commands/bug-squasher.md](.claude/commands/bug-squasher.md) |
 | Code review workflow | [.claude/commands/code-review.md](.claude/commands/code-review.md) |

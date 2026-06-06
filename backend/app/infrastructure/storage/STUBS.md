@@ -1,13 +1,14 @@
 # Storage Infrastructure — Stubs & Extension Guide
 
 File storage behind a provider interface. The scaffold ships one real
-implementation: S3 (via boto3), which also targets LocalStack and AWS profiles.
+implementation: S3-compatible storage (via boto3), which targets local MinIO
+and AWS profiles.
 
 ## Pattern
 
 ```
 StorageProvider (ABC)        ← provider.py
-   └── S3StorageProvider     ← s3_client.py  (boto3, LocalStack/AWS)
+   └── S3StorageProvider     ← s3_client.py  (boto3, MinIO/AWS)
 
 _StorageManager singleton    ← factory.py
 get_storage_provider()       ← factory.py  (lazy singleton)
@@ -24,13 +25,13 @@ shutdown.
 
 ## Configuration
 
-| Setting             | Local (LocalStack)            | Production AWS S3        |
+| Setting             | Local (MinIO)                 | Production AWS S3        |
 |---------------------|-------------------------------|--------------------------|
-| `S3_ENDPOINT_URL`   | `http://localstack:4566`      | unset / None             |
-| `S3_ACCESS_KEY_ID`  | `test`                        | unset (use profile/IAM)  |
-| `S3_SECRET_ACCESS_KEY` | `test`                     | unset (use profile/IAM)  |
+| `S3_ENDPOINT_URL`   | `http://minio:9000`           | unset / None             |
+| `S3_ACCESS_KEY_ID`  | `playbookminio`               | unset (use profile/IAM)  |
+| `S3_SECRET_ACCESS_KEY` | `playbookminio123`         | unset (use profile/IAM)  |
 | `AWS_PROFILE`       | unset                         | optional profile name    |
-| `S3_BUCKET_NAME`    | `scaffold-bucket`             | your bucket              |
+| `S3_BUCKET_NAME`    | `playbook-bucket`             | your bucket              |
 
 ## Adding a new backend (e.g. local filesystem, GCS, Azure Blob)
 

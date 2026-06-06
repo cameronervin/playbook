@@ -53,13 +53,13 @@ class Settings(BaseSettings):
     DEFAULT_ORGANIZATION_NAME: str = "Playbook Athletics"
     DEFAULT_ORGANIZATION_SLUG: str = "playbook"
 
-    # --- AWS -------------------------------------------------------------------
-    # Set S3_ENDPOINT_URL to a LocalStack URL (e.g. http://localstack:4566) for
-    # local/dev. Leave empty/None for production AWS S3
+    # --- AWS / S3-compatible storage -------------------------------------------
+    # Set S3_ENDPOINT_URL to a MinIO URL (e.g. http://minio:9000) for local/dev.
+    # Leave empty/None for production AWS S3.
     S3_ENDPOINT_URL: str | None = None
     S3_BUCKET_NAME: str = "playbook-bucket"
     S3_REGION: str = "us-east-1"
-    # Explicit credentials (LocalStack: S3_ACCESS_KEY_ID=test). If unset, boto3
+    # Explicit credentials (MinIO: local dev credentials). If unset, boto3
     # falls back to AWS_PROFILE, then the default credential chain / IAM role
     S3_ACCESS_KEY_ID: str | None = None
     S3_SECRET_ACCESS_KEY: str | None = None

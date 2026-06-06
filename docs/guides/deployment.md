@@ -10,7 +10,7 @@
 deploy/
 ├── compose/
 │   ├── base.yml      # Shared service definitions (db, backend, frontend, valkey, ...)
-│   ├── local.yml     # Local dev: bind mounts, hot reload, exposed ports, LocalStack
+│   ├── local.yml     # Local dev: bind mounts, hot reload, exposed ports, MinIO
 │   ├── dev.yml       # Dev server: built images, exposed API
 │   └── prod.yml      # Production: no volumes, replicas, internal DB, resource limits
 ├── docker/
