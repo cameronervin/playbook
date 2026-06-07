@@ -35,13 +35,19 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
 
     create_response = await route_client.client.post(
         "/api/v1/conversations",
-        json={"title": "NIL question"},
+        json={"initial_message": " Can I accept this NIL deal? "},
     )
 
     assert create_response.status_code == 201
     conversation_id = create_response.json()["id"]
     conversation_uuid = UUID(conversation_id)
     assert create_response.json()["athlete_id"] == str(athlete.id)
+    assert create_response.json()["title"] is None
+    assert create_response.json()["last_message_at"] is not None
+    assert create_response.json()["messages"][0]["role"] == "user"
+    assert create_response.json()["messages"][0]["content"] == (
+        "Can I accept this NIL deal?"
+    )
 
     message = await ConversationMessageRepository(db_session).create(
         conversation_id=conversation_uuid,
@@ -62,11 +68,45 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
 
     assert list_response.status_code == 200
     assert [row["id"] for row in list_response.json()] == [conversation_id]
+    assert list_response.json()[0]["title"] is None
+    assert list_response.json()[0]["last_message_at"] is not None
     assert detail_response.status_code == 200
-    assert detail_response.json()["messages"][0]["id"] == str(message.id)
-    assert detail_response.json()["messages"][0]["citations"][0]["id"] == str(
+    assert detail_response.json()["messages"][0]["role"] == "user"
+    assert detail_response.json()["messages"][1]["id"] == str(message.id)
+    assert detail_response.json()["messages"][1]["citations"][0]["id"] == str(
         citation.id
     )
+
+
+@pytest.mark.asyncio
+async def test_create_conversation_validates_initial_message(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-subject",
+        sport_team="Basketball",
+    )
+    route_client.authenticate_as(athlete)
+
+    response = await route_client.client.post(
+        "/api/v1/conversations",
+        json={"initial_message": "   "},
+        headers={"X-Request-ID": "req-initial-message"},
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert error["details"]["request_id"] == "req-initial-message"
 
 
 @pytest.mark.asyncio

@@ -95,3 +95,27 @@ def test_production_rejects_unsafe_defaults_and_local_urls() -> None:
     assert "SECRET_KEY must be changed" in message
     assert "CORS_ORIGINS cannot contain '*'" in message
     assert "FRONTEND_URL cannot use localhost" in message
+
+
+def test_production_rejects_short_security_secrets() -> None:
+    try:
+        _base_settings(
+            ENVIRONMENT="production",
+            SECRET_KEY="short-secret",
+            OAUTH_STATE_SECRET="short-oauth-secret",
+            KB_PROVIDER_MODE="local",
+            KB_API_SECRET="short-kb-api",
+            KB_WEBHOOK_SECRET="short-webhook",
+            FRONTEND_URL="https://app.example.com",
+            API_PUBLIC_URL="https://api.example.com",
+            CORS_ORIGINS='["https://app.example.com"]',
+        )
+    except ValidationError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Settings should reject short production secrets")
+
+    assert "SECRET_KEY must be at least 32 characters" in message
+    assert "OAUTH_STATE_SECRET must be at least 32 characters" in message
+    assert "KB_API_SECRET must be at least 32 characters" in message
+    assert "KB_WEBHOOK_SECRET must be at least 32 characters" in message

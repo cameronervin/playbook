@@ -248,6 +248,42 @@ async def test_kb_upload_rejects_invalid_metadata_json(route_client, db_session)
 
 
 @pytest.mark.asyncio
+async def test_kb_upload_rejects_metadata_json_array(route_client, db_session) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+    _override_external_providers(route_client)
+
+    response = await route_client.client.post(
+        "/api/v1/admin/kb/documents",
+        data={"metadata_tags": '["nil"]'},
+        files={"file": ("nil-handbook.pdf", b"NIL policy", "application/pdf")},
+        headers={"X-Request-ID": "req-kb-array"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == {
+        "code": "VALIDATION_ERROR",
+        "message": "metadata_tags must be a JSON object",
+        "retryable": False,
+        "details": {"request_id": "req-kb-array"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_kb_upload_openapi_documents_metadata_tags_json_string(
+    route_client,
+) -> None:
+    response = await route_client.client.get("/openapi.json")
+
+    assert response.status_code == 200
+    metadata_tags = response.json()["components"]["schemas"][
+        "Body_upload_document_api_v1_admin_kb_documents_post"
+    ]["properties"]["metadata_tags"]
+    assert "JSON object encoded as a string" in metadata_tags["description"]
+    assert metadata_tags["examples"] == ['{"topic":"nil","source_type":"policy"}']
+
+
+@pytest.mark.asyncio
 async def test_kb_upload_rejects_unsupported_content_type(
     route_client,
     db_session,

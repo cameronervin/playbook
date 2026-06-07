@@ -1,0 +1,298 @@
+/* ============================================================
+   PLAYBOOK — Design Tokens
+   Color + Type foundations for the Playbook agentic platform.
+   Brand: OSU vivid orange on warm charcoal. Tech-forward, sharp.
+   Load fonts via Google Fonts (see fonts/README or the @import below).
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* Brand typefaces — self-hosted from uploaded variable fonts. */
+@font-face {
+  font-family: 'Archivo';
+  src: url('fonts/Archivo-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Archivo';
+  src: url('fonts/Archivo-Italic-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('fonts/Inter-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('fonts/Inter-Italic-Variable.ttf') format('truetype-variations');
+  font-weight: 100 900; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: 'Sora';
+  src: url('fonts/Sora-Variable.ttf') format('truetype-variations');
+  font-weight: 100 800; font-style: normal; font-display: swap;
+}
+
+:root {
+  /* ---------- Brand: Playbook Orange (OSU) ---------- */
+  --orange-50:  #FFF3E9;
+  --orange-100: #FFE0C4;
+  --orange-200: #FFC089;
+  --orange-300: #FF9D4D;
+  --orange-400: #FF8224;
+  --orange-500: #FF7300;   /* core brand orange */
+  --orange-600: #E85F00;
+  --orange-700: #C24C00;
+  --orange-800: #8F3800;
+  --orange-900: #5E2500;
+
+  --brand:        var(--orange-500);
+  --brand-hover:  var(--orange-400);
+  --brand-press:  var(--orange-600);
+  --brand-soft:   rgba(255, 115, 0, 0.14);  /* tinted fills */
+  --brand-glow:   rgba(255, 115, 0, 0.35);  /* focus / active glow */
+
+  /* ---------- Warm Charcoal Neutrals ---------- */
+  /* Slight warm (orange/brown) undertone so darks feel cohesive,
+     never cold blue-gray. */
+  --ink-1000: #0C0B09;   /* deepest — app shell void */
+  --ink-950:  #100F0C;   /* page background */
+  --ink-900:  #16140F;   /* base background */
+  --ink-850:  #1C1A14;   /* surface */
+  --ink-800:  #221F18;   /* raised surface / cards */
+  --ink-750:  #2A271E;   /* hover surface */
+  --ink-700:  #332F25;   /* border strong */
+  --ink-600:  #423D30;   /* divider on raised */
+  --ink-500:  #5A5343;   /* faint text / disabled */
+  --ink-400:  #7E7665;   /* muted text */
+  --ink-300:  #A89E8B;   /* secondary text */
+  --ink-200:  #CFC6B5;   /* high secondary */
+  --ink-100:  #E9E2D5;   /* near-white warm */
+  --ink-050:  #F6F1E8;   /* warm white */
+
+  /* ---------- Foreground (text on dark) ---------- */
+  --fg-1: #F6F1E8;   /* primary text */
+  --fg-2: #C2B9A8;   /* secondary text */
+  --fg-3: #8E8674;   /* muted / captions */
+  --fg-4: #5A5343;   /* faint / placeholder */
+  --fg-on-brand: #16140F;  /* text on orange fills */
+
+  /* ---------- Backgrounds & Surfaces ---------- */
+  --bg-void:     var(--ink-1000);
+  --bg-page:     var(--ink-950);
+  --bg-base:     var(--ink-900);
+  --surface:     var(--ink-850);
+  --surface-raised: var(--ink-800);
+  --surface-hover:  var(--ink-750);
+
+  /* ---------- Borders ---------- */
+  --border:        rgba(246, 241, 232, 0.08);  /* hairline on dark */
+  --border-strong: rgba(246, 241, 232, 0.14);
+  --border-solid:  var(--ink-700);
+  --border-brand:  rgba(255, 115, 0, 0.45);
+
+  /* ---------- Semantic ---------- */
+  --success:    #3FB68B;
+  --success-bg: rgba(63, 182, 139, 0.14);
+  --warning:    #F4A93C;
+  --warning-bg: rgba(244, 169, 60, 0.14);
+  --danger:     #F0563F;
+  --danger-bg:  rgba(240, 86, 63, 0.14);
+  --info:       #4FB6C7;   /* teal, NOT blue — avoids the AI-blue trope */
+  --info-bg:    rgba(79, 182, 199, 0.14);
+
+  /* Agent status accents */
+  --agent-thinking: var(--info);
+  --agent-active:   var(--orange-500);
+  --agent-done:     var(--success);
+
+  /* ---------- Typography: families ---------- */
+  --font-display: 'Archivo', system-ui, sans-serif;          /* headlines, display, eyebrows */
+  --font-display-alt: 'Sora', system-ui, sans-serif;         /* alternate geometric display */
+  --font-body:    'Inter', system-ui, sans-serif;            /* body, UI labels */
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace; /* system data: filenames, latency, code */
+
+  /* ---------- Type scale (px / rem on 16) ---------- */
+  --text-2xs: 0.6875rem;  /* 11 */
+  --text-xs:  0.75rem;    /* 12 */
+  --text-sm:  0.875rem;   /* 14 */
+  --text-base:1rem;       /* 16 */
+  --text-md:  1.125rem;   /* 18 */
+  --text-lg:  1.375rem;   /* 22 */
+  --text-xl:  1.75rem;    /* 28 */
+  --text-2xl: 2.25rem;    /* 36 */
+  --text-3xl: 3rem;       /* 48 */
+  --text-4xl: 4rem;       /* 64 */
+  --text-5xl: 5.5rem;     /* 88 */
+
+  /* ---------- Weights ---------- */
+  --w-regular: 400;
+  --w-medium:  500;
+  --w-semibold:600;
+  --w-bold:    700;
+  --w-extra:   800;
+  --w-black:   900;
+
+  /* ---------- Tracking ---------- */
+  --track-tight:  -0.02em;
+  --track-snug:   -0.01em;
+  --track-normal: 0;
+  --track-wide:   0.04em;
+  --track-caps:   0.12em;   /* eyebrows / overlines */
+
+  /* ---------- Spacing (4px base) ---------- */
+  --space-0: 0;
+  --space-1: 0.25rem;  /* 4  */
+  --space-2: 0.5rem;   /* 8  */
+  --space-3: 0.75rem;  /* 12 */
+  --space-4: 1rem;     /* 16 */
+  --space-5: 1.5rem;   /* 24 */
+  --space-6: 2rem;     /* 32 */
+  --space-7: 3rem;     /* 48 */
+  --space-8: 4rem;     /* 64 */
+  --space-9: 6rem;     /* 96 */
+
+  /* ---------- Radii (sharp / tight) ---------- */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;    /* default control radius */
+  --radius-lg: 12px;   /* cards */
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* ---------- Elevation ---------- */
+  /* On dark UI: rely on borders + low, warm shadows. */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.55);
+  --shadow-glow: 0 0 0 3px var(--brand-glow);
+  --shadow-focus: 0 0 0 3px var(--brand-glow);
+
+  /* ---------- Motion ---------- */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-med:  200ms;
+  --dur-slow: 360ms;
+}
+
+/* ============================================================
+   SEMANTIC TYPE ROLES
+   Apply these classes (or copy the rules) for consistent type.
+   ============================================================ */
+
+/* Eyebrow / kicker — sentence-case bold sans in brand orange.
+   Deliberately NOT monospace-uppercase-letterspaced (that reads as AI-generated). */
+.pb-eyebrow {
+  font-family: var(--font-body);
+  font-weight: var(--w-bold);
+  font-size: var(--text-sm);
+  letter-spacing: var(--track-normal);
+  color: var(--brand);
+}
+
+.pb-display {
+  font-family: var(--font-display);
+  font-weight: var(--w-black);
+  font-size: var(--text-5xl);
+  line-height: 0.96;
+  letter-spacing: var(--track-tight);
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+
+.pb-h1 {
+  font-family: var(--font-display);
+  font-weight: var(--w-extra);
+  font-size: var(--text-3xl);
+  line-height: 1.02;
+  letter-spacing: var(--track-tight);
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+
+.pb-h2 {
+  font-family: var(--font-display);
+  font-weight: var(--w-bold);
+  font-size: var(--text-2xl);
+  line-height: 1.06;
+  letter-spacing: var(--track-snug);
+  color: var(--fg-1);
+}
+
+.pb-h3 {
+  font-family: var(--font-display);
+  font-weight: var(--w-bold);
+  font-size: var(--text-xl);
+  line-height: 1.12;
+  letter-spacing: var(--track-snug);
+  color: var(--fg-1);
+}
+
+.pb-h4 {
+  font-family: var(--font-body);
+  font-weight: var(--w-semibold);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+  letter-spacing: var(--track-snug);
+  color: var(--fg-1);
+}
+
+.pb-lead {
+  font-family: var(--font-body);
+  font-weight: var(--w-regular);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+
+.pb-body {
+  font-family: var(--font-body);
+  font-weight: var(--w-regular);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+
+.pb-small {
+  font-family: var(--font-body);
+  font-weight: var(--w-regular);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--fg-3);
+}
+
+.pb-label {
+  font-family: var(--font-body);
+  font-weight: var(--w-semibold);
+  font-size: var(--text-sm);
+  letter-spacing: var(--track-normal);
+  color: var(--fg-1);
+}
+
+.pb-mono {
+  font-family: var(--font-mono);
+  font-weight: var(--w-regular);
+  font-size: var(--text-sm);
+  letter-spacing: var(--track-snug);
+  color: var(--fg-2);
+}
+
+/* Machine metadata — mono, but NEVER uppercase/letterspaced as decoration.
+   Reserved for real system output: latency, counts, log-style lines. */
+.pb-meta {
+  font-family: var(--font-mono);
+  font-weight: var(--w-regular);
+  font-size: var(--text-xs);
+  letter-spacing: var(--track-normal);
+  color: var(--fg-3);
+}
+
+/* Data token — filenames, IDs, code spans. The only home for mono. */
+.pb-token {
+  font-family: var(--font-mono);
+  font-weight: var(--w-medium);
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+}
