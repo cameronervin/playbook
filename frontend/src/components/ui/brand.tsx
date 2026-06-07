@@ -28,13 +28,16 @@ export function PlaybookMark({ className, size = 34 }: PlaybookMarkProps) {
 interface BrandLockupProps {
   className?: string
   markSize?: number
+  wordmarkClassName?: string
 }
 
-export function BrandLockup({ className, markSize = 34 }: BrandLockupProps) {
+export function BrandLockup({ className, markSize = 34, wordmarkClassName }: BrandLockupProps) {
   return (
     <div className={cn('flex items-center gap-3 text-fg-1', className)}>
       <PlaybookMark size={markSize} />
-      <span className="font-display text-2xl font-extrabold tracking-tight">Playbook</span>
+      <span className={cn('font-display text-2xl font-extrabold tracking-tight', wordmarkClassName)}>
+        Playbook
+      </span>
     </div>
   )
 }

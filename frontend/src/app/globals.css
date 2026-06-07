@@ -28,7 +28,10 @@
   --color-surface: #1c1a14;
   --color-surface-raised: #221f18;
   --color-surface-hover: #2a271e;
+  --color-border: rgba(246, 241, 232, 0.08);
+  --color-border-strong: rgba(246, 241, 232, 0.14);
   --color-border-solid: #332f25;
+  --color-border-brand: rgba(255, 115, 0, 0.45);
   --color-fg-1: #f6f1e8;
   --color-fg-2: #c2b9a8;
   --color-fg-3: #8e8674;
@@ -197,6 +200,38 @@ textarea:focus-visible,
   background:
     radial-gradient(circle at 50% 100%, rgba(255, 115, 0, 0.18), transparent 34%),
     linear-gradient(180deg, var(--bg-page), var(--bg-base));
+}
+
+.pb-login-stage {
+  align-items: center;
+  background: var(--bg-page);
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: 2rem 1.25rem;
+  position: relative;
+}
+
+.pb-login-stage::before {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255, 115, 0, 0.05), transparent 55%),
+    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-page) 38%, var(--bg-void) 100%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.pb-horizon-canvas {
+  height: 100%;
+  inset: 0;
+  mask-image: linear-gradient(180deg, transparent 48%, #000 70%, #000 100%);
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  -webkit-mask-image: linear-gradient(180deg, transparent 48%, #000 70%, #000 100%);
+  z-index: 0;
 }
 
 .pb-ambient-grid {

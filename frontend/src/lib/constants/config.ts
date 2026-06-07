@@ -4,6 +4,10 @@ export const API_VERSION = 'v1'
 
 export const DEFAULT_PAGE_SIZE = 20
 
+export const AUTH_PROVIDERS_STALE_TIME_MS = 30 * 60 * 1000
+
+export const AUTH_PROVIDERS_GC_TIME_MS = 60 * 60 * 1000
+
 export const ROUTES = {
   root: '/',
   login: '/login',
