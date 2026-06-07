@@ -10,6 +10,12 @@ Target frontend stack:
 - TanStack Query for backend/server state, request caching, mutations, invalidation, and loading/error states.
 - Zustand for ephemeral client UI state such as panels, active selections, composer preferences, settings modal state, and temporary fixture-backed UI controls.
 
+Component primitive strategy:
+
+- Use Radix UI primitives directly for accessible overlays, menus, tabs, tooltips, and switches.
+- Do not initialize shadcn/ui for the wireframe port unless the team explicitly decides to adopt its generator/registry workflow later.
+- Treat shadcn/ui as an optional reference pattern only: it is built on Radix and Tailwind, but the production components should be local Playbook primitives styled from the `docs/design/` handoff.
+
 Target route model:
 
 - `/login` for SSO entry.
@@ -27,6 +33,16 @@ Implementation should wire currently implemented backend APIs immediately and is
 - Add global utility styles for semantic type classes, reduced-motion-safe animations, scrollbars, ambient background layers, focus-visible rings, and dark app shell defaults.
 - Build shared primitives under `frontend/src/components/ui/`: Playbook mark, button, icon button, badge, card/surface, segmented control, switch, dialog, dropdown menu, tooltip, tabs, agent avatar, Microsoft logo, and Google logo.
 - Use Radix primitives for dialogs, dropdown menus, tabs, tooltips, and switches. Keep styling token-backed and local to reusable primitives or feature components.
+- Keep the component layer Playbook-owned instead of shadcn-generated: create local wrappers around Radix primitives where needed, with Playbook names, tokens, and interaction states.
+- Update the style folders in `.cursor/style/`, `.agents/style/`, and `.claude/style/` during Phase 1 so all agent surfaces use the same Playbook design tokens, UI patterns, typography, motion, icon exceptions, and Radix primitive strategy.
+- Update every reference to those style guides across `.cursor`, `.agents`, and `.claude` so agents are pointed at the correct folder-local style files instead of stale `.claude`-only paths.
+- Update frontend rules 13 and 14 in all three agent folders:
+  - `.cursor/rules/13-frontend-design-standards.mdc`
+  - `.cursor/rules/14-frontend-code-organization.mdc`
+  - `.agents/rules/13-frontend-design-standards.md`
+  - `.agents/rules/14-frontend-code-organization.md`
+  - `.claude/rules/13-frontend-design-standards.md`
+  - `.claude/rules/14-frontend-code-organization.md`
 - Preserve the design handoff's explicit exceptions: the Playbook mark and SSO provider logos may be inline SVG components; other icons should use `lucide-react` unless a custom SVG asset is genuinely needed.
 - Remove scaffold visual assumptions from the frontend, including the generic blue/gray token system and example app styling.
 
@@ -100,8 +116,8 @@ Implementation should wire currently implemented backend APIs immediately and is
 ## Phase 6: Documentation and Agent Guidance
 - Update `docs/design/README.md` to link to this plan near the top.
 - Update `frontend/FRONTEND.md` with the new route model, feature folders, Radix usage, auth/session assumptions, fixture-adapter policy, and verification commands.
-- Update `.claude/style/design-tokens.md` and `.claude/style/ui-patterns.md` to replace placeholder starter guidance with Playbook-specific tokens, type, surfaces, motion, buttons, chat messages, admin widgets, and role-gated patterns.
-- Update `.claude/rules/13-frontend-design-standards.md` so it allows the Playbook mark and provider-logo inline SVG exceptions while still requiring imported icons elsewhere.
+- Confirm `.cursor/style/`, `.agents/style/`, and `.claude/style/` all contain matching Playbook-specific design tokens and UI patterns after the Phase 1 style-guide update.
+- Confirm frontend rules 13 and 14 are synchronized across `.cursor/rules/`, `.agents/rules/`, and `.claude/rules/`, including Playbook's inline SVG exceptions, Tailwind v4 token policy, Radix primitive usage, TanStack Query/Zustand state boundaries, and actual frontend folder structure.
 - Update `.claude/skills/frontend-design/SKILL.md` so Playbook UI work follows the provided handoff rather than inventing a new aesthetic direction.
 - Update `AGENTS.md` and `CLAUDE.md` to name `docs/design/` and this plan as required context for frontend wireframe work.
 - Update `docs/guides/setup.md` if new frontend dependencies, env vars, or auth redirect behavior affect local setup.
@@ -135,6 +151,7 @@ Implementation should wire currently implemented backend APIs immediately and is
   - Tailwind CSS v4, already present in the frontend package.
   - TanStack Query, already present in the frontend package.
   - Zustand, already present in the frontend package.
+  - Radix UI primitives for accessible unstyled component behavior.
   - `@radix-ui/react-dialog`
   - `@radix-ui/react-dropdown-menu`
   - `@radix-ui/react-tabs`
@@ -184,6 +201,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 - The static HTML files in `docs/design/design-reference/` are visual references, not production code to copy verbatim.
 - The source JSX in `docs/design/source/` is structural reference material; production code must use TypeScript, imports/exports, route files, hooks, and feature modules.
 - Prototype Tweaks controls are not part of the product.
+- Radix UI is the primary primitive layer for accessible component behavior; shadcn/ui should not be initialized unless a later plan explicitly adopts its code-generation workflow.
 - `/chat` is athlete-first per the PRD and current backend authorization model.
 - Admin-only controls must be gated by real role data, not prototype role toggles.
 - Implemented backend APIs should be wired directly.
