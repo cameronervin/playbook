@@ -1,301 +1,38 @@
-# Code Organisation Standards
+# Frontend Code Organization
 
-> These rules govern how code is structured, where it lives, and how it is written. They apply to every frontend file regardless of feature or domain.
+## Structure
 
----
-
-## 1. File Size — 400 line hard limit
-
-**No file may exceed 400 lines.** If adding code will push a file past 400 lines, split it first.
-
-### Split signals — act on any of these
-
-| Signal | Action |
-|--------|--------|
-| File approaching 400 lines | Split before adding more |
-| Component has 3+ distinct visual sections | Each section → its own component |
-| JSX return block > 80 lines | Extract inner sections to sub-components |
-| Multiple unrelated `useState` / `useEffect` groups | Extract to a custom hook |
-| Helper functions defined inside a component | Move to a `utils` file or hook |
-| A `// --- Section ---` comment separating blocks | That block belongs in its own file |
-| Same logic copy-pasted in 2+ places | Extract to shared util or hook |
-
-### File type responsibilities
-
-| File type | Contains | Must NOT contain |
-|-----------|----------|-----------------|
-| `src/app/**/page.tsx` | Route wiring, layout, params, data fetching | Business logic, inline styles |
-| `Feature component` | One UI concern | Logic from other features |
-| `src/hooks/useX.ts` | State, effects, derived values | JSX, Tailwind classes |
-| `src/lib/utils/*.ts` | Pure functions | React hooks, side effects, JSX |
-| `src/lib/constants/*.ts` | Static values, enums, maps | Functions, React code |
-| `src/types/*.ts` | Interfaces, type aliases | Runtime code |
-
----
-
-## 2. Constants — `src/lib/constants/`
-
-### Rule: no magic values in components
-
-Every hardcoded string, number, or configuration value used in more than one place **must** live in `src/lib/constants/`.
-
-```ts
-// ❌ WRONG — magic value inline in component
-if (files.length > 10) { ... }
-<div className="max-w-[816px]">
-
-// ✅ CORRECT — named constant
-import { MAX_UPLOAD_FILES, MODAL_WIDTH_UPLOAD } from '@/src/lib/constants/upload'
-if (files.length > MAX_UPLOAD_FILES) { ... }
+```text
+frontend/src/app/                  App Router routes
+frontend/src/components/ui/         Local Playbook primitives
+frontend/src/components/features/   Route and feature components
+frontend/src/hooks/                 TanStack Query hooks
+frontend/src/lib/api/endpoints/     API modules
+frontend/src/lib/fixtures/          Typed adapters for planned APIs
+frontend/src/lib/store/             Zustand UI state
+frontend/src/lib/constants/         Routes, query keys, dimensions
+frontend/src/types/                 Shared contracts
 ```
 
-### Existing constant files — add to these before creating new ones
+## State Boundaries
 
-| File | Contains |
-|------|----------|
-| `src/lib/constants/config.ts` | API URLs, timeouts, file size limits, pagination, UI config |
+- Server state: TanStack Query only.
+- Client UI state: Zustand only.
+- Do not store backend data in Zustand.
+- Do not fetch backend data directly in component bodies.
 
-### When to create a new constants file
+## Code Rules
 
-Create a new file in `src/lib/constants/` when:
-- The constants belong to a domain not covered by existing files
-- You have 3+ related constants for the same feature
+- Route files default export; everything else named exports.
+- Components use `interface Props`.
+- No `any`.
+- Keep files under 400 lines; split before adding unrelated sections.
+- Use `cn()` for conditional classes.
+- Repeated strings/numbers belong in constants.
+- API functions call `apiClient`; hooks call API functions.
 
-Name the file after the domain: `src/lib/constants/admin.ts`, `src/lib/constants/stepper.ts`.
+## API Compatibility
 
-### How to write constants
-
-```ts
-// ✅ Use SCREAMING_SNAKE_CASE for primitive constants
-export const MAX_UPLOAD_FILES = 10
-export const SIDE_PANEL_COLLAPSED_WIDTH = 65
-export const SIDE_PANEL_EXPANDED_WIDTH = 372
-
-// ✅ Use const objects for grouped config
-export const STEPPER_DIMENSIONS = {
-  navHeight: 124,
-  stepWidth: 140,
-  stepHeight: 60,
-} as const
-
-// ✅ Use string union types or enums for finite sets of values
-export const SECTIONS = ['Overview', 'Details', 'Settings'] as const
-export type Section = typeof SECTIONS[number]
-
-// ❌ Never export mutable objects or functions from constants files
-export let count = 0          // ❌ mutable
-export const getLabel = () => // ❌ function — this belongs in utils
-```
-
----
-
-## 3. Utils — `src/lib/utils/`
-
-### Rule: extract reusable pure functions
-
-Any function that:
-- Has no React hooks or side effects
-- Could be called from more than one component or hook
-- Transforms, formats, or validates data
-
-...belongs in `src/lib/utils/`, not inside a component or hook file.
-
-### Existing util files — check before creating new ones
-
-| File | Contains |
-|------|----------|
-| `src/lib/utils/cn.ts` | `cn()` — Tailwind class merging |
-| `src/lib/utils/formatters.ts` | `formatFileSize`, `truncateText`, `capitalize`, `pluralize`, `formatNumber` |
-| `src/lib/utils/date.ts` | Date formatting helpers |
-| `src/lib/utils/errorMessage.ts` | Error message extraction |
-| `src/lib/utils/fileValidation.ts` | File type/size validation |
-
-### Decision: utils vs hook
-
-```
-Does it use useState / useEffect / useRef / useContext?
-  YES → it is a hook → put in src/hooks/useX.ts
-  NO  → it is a util → put in src/lib/utils/
-```
-
-### How to write utils
-
-```ts
-// ✅ Pure function — predictable input/output, no side effects
-export const formatPhaseLabel = (phase: string): string =>
-  phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-
-// ✅ Group related utils in the same file
-// src/lib/utils/stepper.ts
-export const getStepNumber = (phase: string): number => { ... }
-export const isPhaseComplete = (phase: string, currentPhase: string): boolean => { ... }
-export const getNextPhaseLabel = (phase: string): string => { ... }
-
-// ❌ Don't scatter one-liner helpers across component files
-// ❌ Don't put API calls or async fetching in utils (that's a hook or server function)
-```
-
-### Naming
-
-- File: `camelCase.ts` matching the domain — `formatters.ts`, `stepper.ts`, `validation.ts`
-- Functions: `camelCase` verbs — `formatFileSize`, `isValidEmail`, `getPhaseLabel`
-
----
-
-## 4. ES6+ — always use modern JavaScript
-
-### Must use
-
-```tsx
-// ✅ Arrow functions for callbacks and handlers
-const handleClick = () => setOpen(true)
-const labels = phases.map(p => p.label)
-
-// ✅ Destructuring — always, everywhere
-const { data, isLoading, error } = useQuery(...)
-const { name, phase, onClick } = props
-const [first, ...rest] = items
-
-// ✅ Template literals — never string concatenation
-const label = `Step ${index + 1} of ${total}`
-const url = `${config.apiUrl}/items/${id}`
-
-// ✅ Optional chaining
-const name = user?.profile?.displayName
-const count = data?.items?.length
-
-// ✅ Nullish coalescing (use ?? not || when 0 or '' are valid values)
-const size = config.pageSize ?? 20
-const label = phase.label ?? 'Unknown'
-
-// ✅ Spread for immutable updates
-const updated = { ...node, label: newLabel }
-const allFiles = [...existingFiles, ...newFiles]
-
-// ✅ Short-circuit for conditional rendering
-{isLoading && <Spinner />}
-{error && <ErrorMessage message={error.message} />}
-{items.length === 0 && <EmptyState />}
-
-// ✅ Named exports — not default exports (except Next.js page/layout/route files, which require default)
-export function SessionCard(...) {}      // ✅
-export default function SessionCard()   // ❌ avoid (allowed only for app/ route files)
-
-// ✅ const by default, let only when reassignment needed, never var
-const label = 'Submit'
-let retryCount = 0    // reassigned in loop — ok
-// var                // ❌ never
-```
-
-### Forbidden patterns
-
-```tsx
-// ❌ String concatenation
-'Hello ' + name + '!'                    // ❌
-`Hello ${name}!`                         // ✅
-
-// ❌ Nested ternaries (more than one level)
-const x = a ? b ? c : d : e             // ❌ unreadable
-// Use early return or if/else blocks instead
-
-// ❌ .bind(this)
-onClick={this.handleClick.bind(this)}    // ❌ (we use functional components anyway)
-
-// ❌ Implicit return without parens on multiline JSX
-items.map(item =>
-  <div>{item.name}</div>                 // ❌ missing parens
-)
-items.map(item => (
-  <div>{item.name}</div>                 // ✅
-))
-
-// ❌ var
-var x = 1   // ❌
-const x = 1 // ✅
-```
-
-### Async / data fetching
-
-```tsx
-// ✅ async/await everywhere — no raw .then() chains
-const data = await api.getItems()
-
-// ✅ Server Component: fetch directly with await
-// ✅ Client Component: TanStack Query for ALL server state
-const { data } = useQuery({ queryKey: ['items'], queryFn: api.getItems })
-
-// ❌ Never fetch in useEffect
-useEffect(() => {
-  fetch('/api/items').then(r => r.json()).then(setItems)  // ❌
-}, [])
-```
-
----
-
-## 5. General Code Quality
-
-### Naming conventions
-
-| Thing | Convention | Example |
-|-------|-----------|---------|
-| Component | PascalCase | `SessionCard`, `NodeEditPanel` |
-| Hook | camelCase, `use` prefix | `useNodeEdit`, `useAdmin` |
-| Util function | camelCase verb | `formatFileSize`, `isValidEmail` |
-| Constant (primitive) | SCREAMING_SNAKE_CASE | `MAX_FILES`, `PANEL_WIDTH` |
-| Constant (object/config) | SCREAMING_SNAKE_CASE | `STEPPER_DIMENSIONS` |
-| Type / Interface | PascalCase | `SessionCardProps`, `UploadFile` |
-| File (component) | PascalCase | `SessionCard.tsx` |
-| File (hook/util/constant) | camelCase | `useNodeEdit.ts`, `formatters.ts` |
-| CSS class / Tailwind | kebab-case | n/a — use Tailwind utilities |
-
-### Early returns over nesting
-
-```tsx
-// ❌ Deeply nested
-function Component({ user, data }) {
-  if (user) {
-    if (data) {
-      return <div>{data.name}</div>
-    }
-  }
-  return null
-}
-
-// ✅ Early returns — flat and readable
-function Component({ user, data }: Props) {
-  if (!user) return null
-  if (!data) return <Spinner />
-  return <div>{data.name}</div>
-}
-```
-
-### No commented-out code
-
-Do not leave commented-out code blocks in committed files. If code is no longer needed, delete it — git history preserves it.
-
-```tsx
-// ❌
-// const oldHandler = () => { ... }
-// <OldComponent prop={value} />
-
-// ✅ Just delete it
-```
-
-### No console.log in committed code
-
-`console.log`, `console.warn`, `console.error` are for debugging only. Remove before committing. Use the project's error handling utilities (`errorMessage.ts`) for user-facing errors.
-
----
-
-## 6. Pre-commit Checklist (Code Organisation)
-
-- [ ] No file exceeds 400 lines — split if needed
-- [ ] All magic strings/numbers extracted to `src/lib/constants/`
-- [ ] Reusable pure functions placed in `src/lib/utils/` (checked existing files first)
-- [ ] No logic duplicated — extracted if used in 2+ places
-- [ ] ES6+ used throughout: arrow functions, destructuring, template literals, `?.`, `??`
-- [ ] No `var`, no `.bind()`, no nested ternaries, no raw `.then()` chains
-- [ ] Named exports used (default only for Next.js `app/` route files)
-- [ ] No commented-out code blocks
-- [ ] No `console.log` statements
-- [ ] Naming follows conventions table (§5)
+- Use the existing FastAPI OAuth/session system.
+- Do not add Auth.js/NextAuth for MVP.
+- Missing Phase 2+ APIs must be explicit fixture adapters.

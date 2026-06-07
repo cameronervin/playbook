@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
+from fastapi.responses import RedirectResponse
 
 from app.api.v1.dependencies import AuthServiceDep, CurrentUserDep
 from app.schemas.users import (
@@ -14,6 +15,12 @@ from app.schemas.users import (
 from app.services.auth_service import ProviderName
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def _prefers_html(request: Request) -> bool:
+    """Return whether the caller looks like a browser navigation."""
+    accept = request.headers.get("accept", "")
+    return "text/html" in accept and "application/json" not in accept
 
 
 @router.get("/providers", response_model=AuthProvidersResponse)
@@ -43,15 +50,18 @@ async def callback(
     request: Request,
     response: Response,
     service: AuthServiceDep,
-) -> SessionResponse:
+) -> SessionResponse | RedirectResponse:
     """Complete OAuth login and create an app session."""
-    return await service.callback(
+    session = await service.callback(
         provider=provider,
         code=code,
         state=state,
         request=request,
         response=response,
     )
+    if _prefers_html(request):
+        return service.browser_redirect_response(session)
+    return session
 
 
 @router.post("/logout", response_model=LogoutResponse)

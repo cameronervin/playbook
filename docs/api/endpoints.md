@@ -39,7 +39,7 @@ Example error response:
 | GET | `/health` | Liveness/readiness check |
 | GET | `/auth/providers` | List configured Google/Microsoft OAuth providers |
 | GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
-| GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session |
+| GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session; browser callers receive a 303 redirect to `FRONTEND_URL + next_route` |
 | POST | `/auth/logout` | Clear the current app session cookie |
 | GET | `/users/me` | Return current authenticated user/profile |
 | PATCH | `/users/me/profile` | Complete/update current athlete profile |

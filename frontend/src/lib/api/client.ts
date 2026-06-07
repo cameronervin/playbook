@@ -1,42 +1,85 @@
 import { API_URL } from '@/src/lib/constants/config'
 
+export interface StructuredError {
+  code: string
+  message: string
+  retryable: boolean
+  details: Record<string, unknown>
+}
+
+interface ErrorEnvelope {
+  error?: Partial<StructuredError>
+}
+
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-  ) {
+  public readonly code: string
+  public readonly retryable: boolean
+  public readonly details: Record<string, unknown>
+
+  constructor(message: string, status: number, error?: Partial<StructuredError>) {
     super(message)
     this.name = 'ApiError'
+    this.status = status
+    this.code = error?.code ?? 'UNKNOWN_ERROR'
+    this.retryable = error?.retryable ?? false
+    this.details = error?.details ?? {}
   }
+
+  public readonly status: number
 }
 
 interface RequestOptions extends RequestInit {
   json?: unknown
 }
 
-/**
- * Thin typed fetch wrapper around the backend API.
- * Prefixes the configured API base URL and parses JSON responses.
- */
+const parseError = async (response: Response): Promise<Partial<StructuredError>> => {
+  const fallback = {
+    code: 'UNKNOWN_ERROR',
+    message: `Request failed: ${response.statusText}`,
+    retryable: false,
+    details: {},
+  }
+  try {
+    const payload = (await response.json()) as ErrorEnvelope
+    return { ...fallback, ...payload.error }
+  } catch {
+    return fallback
+  }
+}
+
 export async function apiClient<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { json, headers, ...rest } = options
+  const { json, headers, body, ...rest } = options
+  const requestHeaders: Record<string, string> = {}
+  new Headers(headers).forEach((value, key) => {
+    requestHeaders[key] = value
+  })
+
+  let requestBody = body
+  if (json !== undefined) {
+    requestBody = JSON.stringify(json)
+    requestHeaders['Content-Type'] = 'application/json'
+  }
 
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-    body: json !== undefined ? JSON.stringify(json) : rest.body,
+    credentials: 'include',
+    headers: requestHeaders,
+    body: requestBody,
   })
 
   if (!response.ok) {
-    throw new ApiError(`Request failed: ${response.statusText}`, response.status)
+    const error = await parseError(response)
+    throw new ApiError(error.message ?? `Request failed: ${response.statusText}`, response.status, error)
   }
 
   if (response.status === 204) {
     return undefined as T
   }
 
-  return (await response.json()) as T
+  const text = await response.text()
+  if (!text) {
+    return undefined as T
+  }
+
+  return JSON.parse(text) as T
 }

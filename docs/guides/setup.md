@@ -98,6 +98,11 @@ http://localhost:8000/api/v1/auth/google/callback
 http://localhost:8000/api/v1/auth/microsoft/callback
 ```
 
+Browser OAuth callbacks set the Playbook session cookie and redirect to
+`FRONTEND_URL + next_route`, usually `/profile` for incomplete athletes or
+`/chat` for complete profiles. API-style callers that do not request
+`text/html` still receive the JSON `SessionResponse`.
+
 The KB service signs status callbacks to
 `http://localhost:8000/api/v1/kb/webhook` with `X-KB-Signature:
 sha256=<hmac>`, where the HMAC secret is `KB_WEBHOOK_SECRET`.
@@ -116,6 +121,10 @@ cp .env.local.example .env.local     # set NEXT_PUBLIC_API_URL=http://localhost:
 # Run the dev server (http://localhost:3000)
 npm run dev
 ```
+
+The frontend routes are `/login`, `/profile`, `/chat`, `/admin`, and `/`.
+The root route resolves the current session and redirects to the appropriate
+Playbook surface.
 
 ## 5. KB Service
 

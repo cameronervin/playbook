@@ -6,11 +6,10 @@ from urllib.parse import urlencode
 
 import jwt
 import pytest
+from httpx_oauth.oauth2 import OAuth2Error
 from sqlalchemy import select
 from structlog.processors import format_exc_info
 from structlog.testing import capture_logs
-
-from httpx_oauth.oauth2 import OAuth2Error
 
 from app.api.v1.dependencies import get_auth_service
 from app.core.config import settings
@@ -201,6 +200,38 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert account.expires_at == TOKEN_EXPIRY
     assert user.auth_provider == provider
     assert user.provider_subject == oauth_client.subject
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_redirects_browser_callers_after_setting_cookie(
+    route_client,
+    db_session,
+    monkeypatch,
+) -> None:
+    _configure_oauth_settings(monkeypatch)
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:3000")
+    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    fake_factory = FakeOAuthClientFactory()
+    _override_auth_service(route_client, db_session, fake_factory)
+
+    login_response = await route_client.client.get("/api/v1/auth/google/login")
+    google_client = fake_factory.clients["google"]
+    assert login_response.status_code == 200
+    assert google_client.last_state is not None
+
+    callback_response = await route_client.client.get(
+        "/api/v1/auth/google/callback",
+        params={"code": "oauth-code", "state": google_client.last_state},
+        headers={"Accept": "text/html"},
+        follow_redirects=False,
+    )
+
+    assert callback_response.status_code == 303
+    assert callback_response.headers["location"] == "http://localhost:3000/profile"
+    set_cookie = callback_response.headers["set-cookie"]
+    assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in set_cookie
+    assert f"{settings.OAUTH_STATE_COOKIE_NAME}=" in set_cookie
+    assert "Max-Age=0" in set_cookie
 
 
 @pytest.mark.asyncio

@@ -161,6 +161,10 @@ prd/
     └── _implementation-plan.md
 ```
 
+Frontend wireframe work must also read `docs/design/README.md`,
+`docs/design/frontend_wireframe_implementation_plan.md`, and the reference
+screens in `docs/design/design-reference/` before changing UI code.
+
 | Need | Read |
 |------|------|
 | User stories | `prd/01-user-stories/_master-user-stories.md` |

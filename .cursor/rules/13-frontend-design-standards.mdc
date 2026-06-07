@@ -1,5 +1,5 @@
 ---
-description: Frontend design standards — design-source fidelity, design tokens, icons, folder structure, and visual consistency rules. Apply to ALL frontend work.
+description: Playbook frontend design standards.
 globs:
   - "frontend/**/*.tsx"
   - "frontend/**/*.ts"
@@ -8,257 +8,33 @@ alwaysApply: false
 ---
 # Frontend Design Standards
 
-> These rules ensure every UI we build matches the design source exactly and uses design tokens consistently. For code organization, file size limits, ES6, constants, and utils rules — see `14-frontend-code-organization.md`. For token values, see `.claude/style/design-tokens.md`.
+For Playbook UI work, read `docs/design/README.md`,
+`docs/design/frontend_wireframe_implementation_plan.md`, and the relevant
+reference screen before editing.
 
----
+## Tokens And Styling
 
-## 1. Design Tokens — ALWAYS use tokens, NEVER hardcode values
+- Use Tailwind v4 tokens from `frontend/src/app/globals.css`.
+- Use the Playbook orange and warm-charcoal system from `.cursor/style/design-tokens.mdc`.
+- Avoid hardcoded colors and repeated arbitrary values. Add named tokens/constants for repeated exact design dimensions.
+- Controls use 8px radius; cards/dialogs use 12px.
+- Do not introduce blue/purple AI gradients, decorative blobs, or generic scaffold palettes.
 
-### Tailwind classes only — no arbitrary values
+## Icons
 
-```tsx
-// ✅ CORRECT — use Tailwind scale
-<div className="p-4 text-sm text-gray-500 rounded-lg">
+- Use `lucide-react` for normal icons.
+- Inline SVG is allowed only for the Playbook mark and Microsoft/Google SSO provider logos.
+- Do not draw icons with CSS boxes or pseudo-elements.
 
-// ❌ WRONG — arbitrary values are forbidden
-<div className="p-[13px] text-[13px] text-[#6b6b6b] rounded-[6px]">
-```
+## Screen Fidelity
 
-**Banned patterns** — never write these:
-- `p-[Xpx]`, `m-[Xpx]`, `w-[Xpx]`, `h-[Xpx]` — use spacing tokens
-- `text-[#hex]` — use color tokens
-- `bg-[#hex]` — use color tokens
-- `rounded-[Xpx]` — use radius tokens
-- `text-[Xpx]` — use font-size tokens
-- `border-[#hex]` — use color tokens
+- Login is SSO-only: Microsoft first, Google second, no email/password.
+- Chat keeps the history rail, center thread/composer, and sources panel open by default.
+- Admin is role gated: athlete access denied, Users & roles super-admin only.
+- Prototype-only Tweaks panels, CDN React/Babel, `window` globals, and fake HTML-page navigation must not ship.
 
-### Exception: fixed layout dimensions from your design source
+## Accessibility
 
-The **only** acceptable arbitrary values are for exact design-specified layout widths/heights that have no Tailwind equivalent and appear exactly once:
-```tsx
-// Acceptable — exact pixel dimension on a layout container, documented inline
-<div className="w-[384px]">   {/* Design: side panel = 384px */}
-```
-If the same dimension appears more than once → add it to your Tailwind theme as a named token. Also add it to `lib/constants/` as a named constant.
-
-### Token reference
-
-Always check `.claude/style/design-tokens.md` before choosing any color, spacing, radius, or font size. If a value from your design source is not in the token file, **add it to the Tailwind theme** (`@theme` in Tailwind v4) — do not use a one-off arbitrary value.
-
-### No duplicate tokens
-
-Before adding a new token, grep for existing tokens with the same or similar value. One value = one token name:
-```
-// ❌ WRONG — two tokens, same hex
-gray-border: #E6E6E6
-border-light: #E6E6E6
-
-// ✅ CORRECT — one canonical token used everywhere
-gray-100: #E6E6E6
-```
-
----
-
-## 2. Icons — Import, never recreate
-
-### Resolution order
-
-**Step 1 — `lucide-react`** (already installed):
-```tsx
-import { Download, Trash2, Search, ChevronDown } from 'lucide-react'
-```
-
-**Step 2 — check `frontend/src/assets/icons/`** for any custom SVGs:
-```tsx
-import SparklesIcon from '@/assets/icons/sparkles.svg?react'
-```
-
-**Step 3 — if the icon truly does not exist anywhere**: create a `.svg` file in `frontend/src/assets/icons/` and import it. Use kebab-case filenames matching the design source icon name.
-
-**Never** draw icons using CSS, divs, borders, or pseudo-elements. **Never** paste raw SVG markup inline in JSX.
-
-```tsx
-// ❌ WRONG — CSS-drawn icon
-<div className="w-4 h-4 border-2 border-green-500 rounded-full" />
-
-// ❌ WRONG — inline SVG in JSX
-<svg width="24" height="24"><path d="M5 12h14..." /></svg>
-
-// ✅ CORRECT
-import { ArrowRight } from 'lucide-react'
-<ArrowRight size={24} />
-```
-
-### Icon sizing — match your design source exactly
-
-| Design size | Tailwind |
-|-----------|---------|
-| 16px | `w-4 h-4` |
-| 20px | `w-5 h-5` |
-| 24px | `w-6 h-6` |
-| 40px | `w-10 h-10` |
-| 56px | `w-14 h-14` |
-
----
-
-## 3. Folder Structure — consistent placement, every time (Next.js App Router)
-
-```
-frontend/src/
-├── app/                # App Router: routes, layouts, page.tsx, loading.tsx — no business logic
-├── features/           # One folder per domain feature
-│   └── {feature}/
-│       ├── components/ # Components used only in this feature
-│       ├── hooks/      # Hooks used only in this feature
-│       └── index.ts    # Public re-exports only
-├── components/
-│   ├── ui/             # Reusable, stateless UI primitives
-│   └── layout/         # App shell: Header, Footer, Sidebar
-├── lib/
-│   ├── api/            # One file per API domain
-│   ├── constants/      # Named constants and config values
-│   ├── store/          # Zustand stores
-│   └── utils/          # Pure utility functions
-├── types/              # Global TypeScript interfaces
-├── assets/icons/       # SVG icons (fallback when lucide is missing)
-└── hooks/              # App-wide shared hooks
-```
-
-### Where does new code go?
-
-| What | Where |
-|------|-------|
-| New route / page | `app/{route}/page.tsx` |
-| Shared layout | `app/{segment}/layout.tsx` |
-| Component used in one feature only | `features/{feature}/components/` |
-| Component used in 2+ features | `components/ui/` |
-| Hook used in one feature only | `features/{feature}/hooks/` |
-| Hook used in 2+ features | `hooks/` |
-| API calls | `lib/api/{domain}.ts` |
-| Zustand store | `lib/store/{name}Store.ts` |
-| Named constants / config | `lib/constants/{domain}.ts` |
-| Pure helper functions | `lib/utils/{domain}.ts` |
-| TypeScript types | `types/{domain}.ts` |
-| SVG icon file | `assets/icons/` |
-
----
-
-## 4. Design Fidelity — match the design source exactly
-
-### Read the screen spec first
-
-Before writing any component code, read the relevant screen specification from your design source. It has exact dimensions, all screen states, field names, and component breakdowns. All implementation and design choices must be made strictly off the agreed design source — not ad-hoc ASCII diagrams found in codebase documentation.
-
-### Dimensions
-
-Match the dimensions in your design source exactly. Define recurring panel widths, button heights, and header/footer heights as named tokens/constants rather than scattering pixel values.
-
-### All screen states must be implemented
-
-Every frame with multiple states requires all states in code:
-- Default, hover, focus, disabled, loading, error
-- Empty state, populated state
-- Collapsed / expanded for panels
-
-Do not ship a component with only the happy-path state.
-
-### Typography — design element → Tailwind class
-
-| Element | Tailwind |
-|-------|---------|
-| h2 | `text-2xl font-semibold` |
-| h3 | `text-xl font-semibold` |
-| h4 | `text-base font-semibold` |
-| Subtitle / description | `text-sm text-gray-500` |
-| Body | `text-sm` |
-| Caption / metadata | `text-xs text-gray-400` |
-| Form label | `text-xs font-semibold uppercase tracking-wide` |
-
----
-
-## 5. Component Writing Standards
-
-### One component = one file = one responsibility
-
-```tsx
-interface SessionCardProps {
-  name: string
-  phase: string
-  updatedAt: string
-  onClick: () => void
-}
-
-export function SessionCard({ name, phase, updatedAt, onClick }: SessionCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full p-4 rounded-lg border border-gray-100 hover:border-primary transition-colors"
-    >
-      <span className="text-sm font-semibold">{name}</span>
-    </button>
-  )
-}
-```
-
-### Props
-- Always `interface XxxProps {}` — never inline `{ prop: type }` or `type Props = {}`
-- Never `any`
-- More than 6 props → split the component or use composition
-
-### Conditional classes — always `cn()`
-
-```tsx
-import { cn } from '@/lib/utils/cn'
-
-<div className={cn('base-class', isActive && 'bg-primary', isDisabled && 'opacity-50')} />
-```
-
-Never string-concatenate class names.
-
----
-
-## 6. Styling Anti-Patterns Cheatsheet
-
-| ❌ Do NOT | ✅ Do instead |
-|-----------|--------------|
-| `style={{ color: '#10b981' }}` | `className="text-primary"` |
-| `className="text-[13px]"` | `className="text-sm"` |
-| `className="p-[13px]"` | `className="p-3"` or `p-4` |
-| `className="bg-[#F7F7F7]"` | `className="bg-gray-50"` |
-| `className="rounded-[6px]"` | `className="rounded-md"` |
-| Inline `<svg>` in JSX | Import from `lucide-react` or `assets/icons/` |
-| CSS/div-drawn icon shape | Import the icon |
-| New token for an existing value | Reuse the existing token |
-| `import X from '../../..'` | `import X from '@/...'` |
-| Fetch in component body | Server Component `await` or custom hook |
-
----
-
-## 7. Import Paths — always `@/` alias
-
-```tsx
-// ✅ CORRECT
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils/cn'
-import { MAX_FILES } from '@/lib/constants/config'
-
-// ❌ WRONG
-import { Button } from '../../../components/ui/button'
-```
-
----
-
-## 8. Pre-submit Checklist — Design
-
-- [ ] No arbitrary Tailwind values (`-[Xpx]`, `-[#hex]`)
-- [ ] All colors and spacing reference tokens from `design-tokens.md`
-- [ ] No duplicate tokens for the same design value
-- [ ] All icons imported — not drawn with CSS or inlined as SVG
-- [ ] Missing icons saved to `assets/icons/` as `.svg`
-- [ ] Component placed in the correct folder (see §3)
-- [ ] All screen states implemented — not just happy path
-- [ ] Design source used as single source of truth
-- [ ] Typography classes match element types (see §4 table)
-- [ ] Props typed with `interface`, no `any`
-- [ ] `cn()` used for all conditional classes
-- [ ] `@/` alias used for every import
+- Use Radix primitives for dialogs, menus, tabs, tooltips, and switches.
+- All buttons and icon buttons need accessible names.
+- Preserve keyboard focus rings and reduced-motion behavior.

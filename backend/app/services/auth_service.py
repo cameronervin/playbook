@@ -9,6 +9,7 @@ from typing import Any, Literal
 import jwt
 import structlog
 from fastapi import Request, Response
+from fastapi.responses import RedirectResponse
 from httpx_oauth.oauth2 import HTTPXOAuthError, OAuth2Error
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,6 +76,14 @@ def set_access_token_cookie(response: Response, token: str) -> None:
         httponly=True,
         secure=settings.ENVIRONMENT.lower() in {"prod", "production"},
         samesite="lax",
+        domain=_cookie_domain(),
+    )
+
+
+def clear_oauth_state_cookie(response: Response) -> None:
+    """Clear the OAuth CSRF state cookie."""
+    response.delete_cookie(
+        settings.OAUTH_STATE_COOKIE_NAME,
         domain=_cookie_domain(),
     )
 
@@ -220,10 +229,7 @@ class AuthService:
         await self.session.commit()
         access_token = create_access_token(user)
         set_access_token_cookie(response, access_token)
-        response.delete_cookie(
-            settings.OAUTH_STATE_COOKIE_NAME,
-            domain=_cookie_domain(),
-        )
+        clear_oauth_state_cookie(response)
         logger.info(
             "auth_oauth_login_succeeded",
             provider=provider,
@@ -235,6 +241,16 @@ class AuthService:
             access_token=access_token,
             next_route="/chat" if is_profile_complete(user) else "/profile",
         )
+
+    def browser_redirect_response(self, session: SessionResponse) -> RedirectResponse:
+        """Build a browser redirect response with session cookies attached."""
+        redirect = RedirectResponse(
+            url=f"{settings.FRONTEND_URL.rstrip('/')}{session.next_route}",
+            status_code=303,
+        )
+        set_access_token_cookie(redirect, session.access_token)
+        clear_oauth_state_cookie(redirect)
+        return redirect
 
     def logout(self, response: Response) -> None:
         """Clear the app access token cookie."""
