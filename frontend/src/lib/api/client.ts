@@ -1,4 +1,4 @@
-import { API_URL } from '@/lib/constants/config'
+import { API_URL } from '@/src/lib/constants/config'
 
 export class ApiError extends Error {
   constructor(

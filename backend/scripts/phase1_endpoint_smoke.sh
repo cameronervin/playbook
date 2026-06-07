@@ -129,11 +129,12 @@ expect_status "create athlete conversation" "201" \
   -X POST "$BASE/api/v1/conversations" \
   -H "Authorization: Bearer $ATHLETE_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"title":"NIL question"}'
+  -d '{"initial_message":"Can I accept this NIL deal?"}'
 CONV_ID="$(jq -r '.id // empty' "$BODY_FILE")"
 if [ -z "$CONV_ID" ]; then
   fail "conversation create did not return id"
 fi
+expect_jq "conversation create includes initial message" '.title == null and (.messages | length) == 1 and .messages[0].role == "user"'
 
 expect_status "list athlete conversations" "200" \
   -H "Authorization: Bearer $ATHLETE_TOKEN" \

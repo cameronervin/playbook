@@ -24,20 +24,20 @@
 
 | File type | Contains | Must NOT contain |
 |-----------|----------|-----------------|
-| `app/**/page.tsx` | Route wiring, layout, params, data fetching | Business logic, inline styles |
+| `src/app/**/page.tsx` | Route wiring, layout, params, data fetching | Business logic, inline styles |
 | `Feature component` | One UI concern | Logic from other features |
-| `hooks/useX.ts` | State, effects, derived values | JSX, Tailwind classes |
-| `lib/utils/*.ts` | Pure functions | React hooks, side effects, JSX |
-| `lib/constants/*.ts` | Static values, enums, maps | Functions, React code |
-| `types/*.ts` | Interfaces, type aliases | Runtime code |
+| `src/hooks/useX.ts` | State, effects, derived values | JSX, Tailwind classes |
+| `src/lib/utils/*.ts` | Pure functions | React hooks, side effects, JSX |
+| `src/lib/constants/*.ts` | Static values, enums, maps | Functions, React code |
+| `src/types/*.ts` | Interfaces, type aliases | Runtime code |
 
 ---
 
-## 2. Constants — `lib/constants/`
+## 2. Constants — `src/lib/constants/`
 
 ### Rule: no magic values in components
 
-Every hardcoded string, number, or configuration value used in more than one place **must** live in `lib/constants/`.
+Every hardcoded string, number, or configuration value used in more than one place **must** live in `src/lib/constants/`.
 
 ```ts
 // ❌ WRONG — magic value inline in component
@@ -45,7 +45,7 @@ if (files.length > 10) { ... }
 <div className="max-w-[816px]">
 
 // ✅ CORRECT — named constant
-import { MAX_UPLOAD_FILES, MODAL_WIDTH_UPLOAD } from '@/lib/constants/upload'
+import { MAX_UPLOAD_FILES, MODAL_WIDTH_UPLOAD } from '@/src/lib/constants/upload'
 if (files.length > MAX_UPLOAD_FILES) { ... }
 ```
 
@@ -53,15 +53,15 @@ if (files.length > MAX_UPLOAD_FILES) { ... }
 
 | File | Contains |
 |------|----------|
-| `lib/constants/config.ts` | API URLs, timeouts, file size limits, pagination, UI config |
+| `src/lib/constants/config.ts` | API URLs, timeouts, file size limits, pagination, UI config |
 
 ### When to create a new constants file
 
-Create a new file in `lib/constants/` when:
+Create a new file in `src/lib/constants/` when:
 - The constants belong to a domain not covered by existing files
 - You have 3+ related constants for the same feature
 
-Name the file after the domain: `lib/constants/admin.ts`, `lib/constants/stepper.ts`.
+Name the file after the domain: `src/lib/constants/admin.ts`, `src/lib/constants/stepper.ts`.
 
 ### How to write constants
 
@@ -89,7 +89,7 @@ export const getLabel = () => // ❌ function — this belongs in utils
 
 ---
 
-## 3. Utils — `lib/utils/`
+## 3. Utils — `src/lib/utils/`
 
 ### Rule: extract reusable pure functions
 
@@ -98,24 +98,24 @@ Any function that:
 - Could be called from more than one component or hook
 - Transforms, formats, or validates data
 
-...belongs in `lib/utils/`, not inside a component or hook file.
+...belongs in `src/lib/utils/`, not inside a component or hook file.
 
 ### Existing util files — check before creating new ones
 
 | File | Contains |
 |------|----------|
-| `lib/utils/cn.ts` | `cn()` — Tailwind class merging |
-| `lib/utils/formatters.ts` | `formatFileSize`, `truncateText`, `capitalize`, `pluralize`, `formatNumber` |
-| `lib/utils/date.ts` | Date formatting helpers |
-| `lib/utils/errorMessage.ts` | Error message extraction |
-| `lib/utils/fileValidation.ts` | File type/size validation |
+| `src/lib/utils/cn.ts` | `cn()` — Tailwind class merging |
+| `src/lib/utils/formatters.ts` | `formatFileSize`, `truncateText`, `capitalize`, `pluralize`, `formatNumber` |
+| `src/lib/utils/date.ts` | Date formatting helpers |
+| `src/lib/utils/errorMessage.ts` | Error message extraction |
+| `src/lib/utils/fileValidation.ts` | File type/size validation |
 
 ### Decision: utils vs hook
 
 ```
 Does it use useState / useEffect / useRef / useContext?
-  YES → it is a hook → put in hooks/useX.ts
-  NO  → it is a util → put in lib/utils/
+  YES → it is a hook → put in src/hooks/useX.ts
+  NO  → it is a util → put in src/lib/utils/
 ```
 
 ### How to write utils
@@ -126,7 +126,7 @@ export const formatPhaseLabel = (phase: string): string =>
   phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
 // ✅ Group related utils in the same file
-// lib/utils/stepper.ts
+// src/lib/utils/stepper.ts
 export const getStepNumber = (phase: string): number => { ... }
 export const isPhaseComplete = (phase: string, currentPhase: string): boolean => { ... }
 export const getNextPhaseLabel = (phase: string): string => { ... }
@@ -290,8 +290,8 @@ Do not leave commented-out code blocks in committed files. If code is no longer 
 ## 6. Pre-commit Checklist (Code Organisation)
 
 - [ ] No file exceeds 400 lines — split if needed
-- [ ] All magic strings/numbers extracted to `lib/constants/`
-- [ ] Reusable pure functions placed in `lib/utils/` (checked existing files first)
+- [ ] All magic strings/numbers extracted to `src/lib/constants/`
+- [ ] Reusable pure functions placed in `src/lib/utils/` (checked existing files first)
 - [ ] No logic duplicated — extracted if used in 2+ places
 - [ ] ES6+ used throughout: arrow functions, destructuring, template literals, `?.`, `??`
 - [ ] No `var`, no `.bind()`, no nested ternaries, no raw `.then()` chains

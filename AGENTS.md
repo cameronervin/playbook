@@ -31,7 +31,7 @@ Ask before deciding when: multiple approaches exist, requirements are ambiguous,
 
 ```
 backend/app/ api/v1/ -> services/ -> repositories/ -> models/
-frontend/ app/ -> features/ -> components/ -> hooks -> lib/store
+frontend/src/{app,components,hooks,lib,types}/
 kb-service/ api/ -> services/ -> repositories/ -> models/   (+ workers/ Celery pipeline)
 ```
 

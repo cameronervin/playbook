@@ -62,7 +62,13 @@ async def upload_document(
     service: KBDocumentServiceDep,
     file: Annotated[UploadFile, File()],
     title: Annotated[str | None, Form()] = None,
-    metadata_tags: Annotated[str | None, Form()] = None,
+    metadata_tags: Annotated[
+        str | None,
+        Form(
+            description="JSON object encoded as a string.",
+            examples=['{"topic":"nil","source_type":"policy"}'],
+        ),
+    ] = None,
     source_date: Annotated[date | None, Form()] = None,
     is_official: Annotated[bool, Form()] = False,
     priority: Annotated[int, Form(ge=0)] = 0,

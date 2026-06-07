@@ -1,4 +1,4 @@
-"""Athlete conversation shell routes."""
+"""Athlete conversation routes."""
 
 from __future__ import annotations
 
@@ -34,15 +34,15 @@ async def list_conversations(
 
 @router.post(
     "",
-    response_model=ConversationSummaryResponse,
+    response_model=ConversationDetailResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_conversation(
     request: ConversationCreateRequest,
     athlete: AthleteUserDep,
     service: ConversationServiceDep,
-) -> ConversationSummaryResponse:
-    """Create a current-athlete conversation shell."""
+) -> ConversationDetailResponse:
+    """Create a current-athlete conversation with an initial user message."""
     return await service.create(athlete=athlete, request=request)
 
 

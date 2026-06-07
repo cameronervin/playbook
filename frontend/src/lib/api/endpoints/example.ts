@@ -1,6 +1,6 @@
-import { apiClient } from '@/lib/api/client'
-import { API_VERSION } from '@/lib/constants/config'
-import type { Example } from '@/types/example'
+import { apiClient } from '@/src/lib/api/client'
+import { API_VERSION } from '@/src/lib/constants/config'
+import type { Example } from '@/src/types/example'
 
 const BASE_PATH = `/api/${API_VERSION}/examples`
 

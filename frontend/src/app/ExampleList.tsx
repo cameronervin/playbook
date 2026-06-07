@@ -1,8 +1,8 @@
 'use client'
 
-import { useExamples } from '@/hooks/useExample'
-import { useExampleStore } from '@/lib/store/exampleStore'
-import { cn } from '@/lib/utils/cn'
+import { useExamples } from '@/src/hooks/useExample'
+import { useExampleStore } from '@/src/lib/store/exampleStore'
+import { cn } from '@/src/lib/utils/cn'
 
 export function ExampleList() {
   const { data, isLoading, isError } = useExamples()

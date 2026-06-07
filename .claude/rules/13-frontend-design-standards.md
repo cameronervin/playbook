@@ -31,7 +31,7 @@ The **only** acceptable arbitrary values are for exact design-specified layout w
 // Acceptable — exact pixel dimension on a layout container, documented inline
 <div className="w-[384px]">   {/* Design: side panel = 384px */}
 ```
-If the same dimension appears more than once → add it to your Tailwind theme as a named token. Also add it to `lib/constants/` as a named constant.
+If the same dimension appears more than once → add it to your Tailwind theme as a named token. Also add it to `src/lib/constants/` as a named constant.
 
 ### Token reference
 
@@ -98,13 +98,9 @@ import { ArrowRight } from 'lucide-react'
 ```
 frontend/src/
 ├── app/                # App Router: routes, layouts, page.tsx, loading.tsx — no business logic
-├── features/           # One folder per domain feature
-│   └── {feature}/
-│       ├── components/ # Components used only in this feature
-│       ├── hooks/      # Hooks used only in this feature
-│       └── index.ts    # Public re-exports only
 ├── components/
 │   ├── ui/             # Reusable, stateless UI primitives
+│   ├── features/       # Components used only in one feature
 │   └── layout/         # App shell: Header, Footer, Sidebar
 ├── lib/
 │   ├── api/            # One file per API domain
@@ -120,18 +116,18 @@ frontend/src/
 
 | What | Where |
 |------|-------|
-| New route / page | `app/{route}/page.tsx` |
-| Shared layout | `app/{segment}/layout.tsx` |
-| Component used in one feature only | `features/{feature}/components/` |
-| Component used in 2+ features | `components/ui/` |
-| Hook used in one feature only | `features/{feature}/hooks/` |
-| Hook used in 2+ features | `hooks/` |
-| API calls | `lib/api/{domain}.ts` |
-| Zustand store | `lib/store/{name}Store.ts` |
-| Named constants / config | `lib/constants/{domain}.ts` |
-| Pure helper functions | `lib/utils/{domain}.ts` |
-| TypeScript types | `types/{domain}.ts` |
-| SVG icon file | `assets/icons/` |
+| New route / page | `src/app/{route}/page.tsx` |
+| Shared layout | `src/app/{segment}/layout.tsx` |
+| Component used in one feature only | `src/components/features/{feature}/` |
+| Component used in 2+ features | `src/components/ui/` |
+| Hook used in one feature only | `src/hooks/use{Feature}.ts` |
+| Hook used in 2+ features | `src/hooks/` |
+| API calls | `src/lib/api/{domain}.ts` or `src/lib/api/endpoints/{domain}.ts` |
+| Zustand store | `src/lib/store/{name}Store.ts` |
+| Named constants / config | `src/lib/constants/{domain}.ts` |
+| Pure helper functions | `src/lib/utils/{domain}.ts` |
+| TypeScript types | `src/types/{domain}.ts` |
+| SVG icon file | `src/assets/icons/` |
 
 ---
 
@@ -200,7 +196,7 @@ export function SessionCard({ name, phase, updatedAt, onClick }: SessionCardProp
 ### Conditional classes — always `cn()`
 
 ```tsx
-import { cn } from '@/lib/utils/cn'
+import { cn } from '@/src/lib/utils/cn'
 
 <div className={cn('base-class', isActive && 'bg-primary', isDisabled && 'opacity-50')} />
 ```
@@ -226,13 +222,13 @@ Never string-concatenate class names.
 
 ---
 
-## 7. Import Paths — always `@/` alias
+## 7. Import Paths — use the current `@/src/...` alias
 
 ```tsx
 // ✅ CORRECT
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils/cn'
-import { MAX_FILES } from '@/lib/constants/config'
+import { Button } from '@/src/components/ui/button'
+import { cn } from '@/src/lib/utils/cn'
+import { MAX_FILES } from '@/src/lib/constants/config'
 
 // ❌ WRONG
 import { Button } from '../../../components/ui/button'

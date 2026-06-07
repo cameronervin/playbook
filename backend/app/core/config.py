@@ -17,6 +17,17 @@ def _is_production_environment(value: str) -> bool:
     return value.lower() in {"prod", "production"}
 
 
+def _require_min_secret_length(
+    errors: list[str],
+    *,
+    name: str,
+    value: str,
+    minimum: int = 32,
+) -> None:
+    if len(value) < minimum:
+        errors.append(f"{name} must be at least {minimum} characters")
+
+
 class Settings(BaseSettings):
     # --- Application -----------------------------------------------------------
     PROJECT_NAME: str = "Playbook"
@@ -204,6 +215,22 @@ class Settings(BaseSettings):
                 errors.append("SECRET_KEY must be changed in production")
             if self.OAUTH_STATE_SECRET in ("change-me", "change-me-oauth-state"):
                 errors.append("OAUTH_STATE_SECRET must be changed in production")
+            _require_min_secret_length(errors, name="SECRET_KEY", value=self.SECRET_KEY)
+            _require_min_secret_length(
+                errors,
+                name="OAUTH_STATE_SECRET",
+                value=self.OAUTH_STATE_SECRET,
+            )
+            _require_min_secret_length(
+                errors,
+                name="KB_API_SECRET",
+                value=self.KB_API_SECRET,
+            )
+            _require_min_secret_length(
+                errors,
+                name="KB_WEBHOOK_SECRET",
+                value=self.KB_WEBHOOK_SECRET,
+            )
             if "*" in self.CORS_ORIGINS:
                 errors.append("CORS_ORIGINS cannot contain '*' in production")
             if _is_local_url(self.FRONTEND_URL):

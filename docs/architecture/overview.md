@@ -66,15 +66,11 @@ app/
 ```
 src/
 ├── app/             # Next.js App Router routes (layouts, pages, route handlers)
-├── features/        # Feature modules
-│   └── [feature]/
-│       ├── components/  # Feature-specific components
-│       ├── hooks/       # Feature-specific hooks
-│       └── index.ts     # Public exports
-├── components/      # Reusable UI (ui/, layout/)
+├── components/      # Reusable UI and feature components
+│   ├── ui/          # Reusable, stateless UI primitives
+│   └── features/    # Feature-specific components
 ├── hooks/           # App-wide hooks
-├── store/           # Zustand stores (client state)
-├── lib/             # API client, constants, utils
+├── lib/             # API client, constants, Zustand stores, utils
 └── types/           # TypeScript type definitions
 ```
 

@@ -1,4 +1,4 @@
-"""Route-level tests for athlete conversation shell endpoints."""
+"""Route-level tests for athlete conversation endpoints."""
 
 from __future__ import annotations
 
@@ -107,6 +107,17 @@ async def test_create_conversation_validates_initial_message(
     error = response.json()["error"]
     assert error["code"] == "VALIDATION_ERROR"
     assert error["details"]["request_id"] == "req-initial-message"
+
+
+@pytest.mark.asyncio
+async def test_conversation_create_openapi_uses_initial_message(route_client) -> None:
+    response = await route_client.client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()["components"]["schemas"]["ConversationCreateRequest"]
+    assert "initial_message" in schema["properties"]
+    assert "title" not in schema["properties"]
+    assert "initial_message" in schema["required"]
 
 
 @pytest.mark.asyncio

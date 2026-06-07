@@ -46,7 +46,7 @@ Example error response:
 | GET | `/admin/users` | List organization users for super-admin role management |
 | PATCH | `/admin/users/{user_id}/role` | Update a user's Playbook role |
 | GET | `/conversations` | List current athlete conversations |
-| POST | `/conversations` | Create a current-athlete conversation shell |
+| POST | `/conversations` | Create a current-athlete conversation from the initial message |
 | GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations |
 | GET | `/admin/kb/documents` | List KB documents and status |
 | POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
@@ -71,7 +71,7 @@ For a repeatable local Swagger and curl validation pass, see
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/conversations/{conversation_id}/messages` | Submit a user message |
+| POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks |
 | POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 

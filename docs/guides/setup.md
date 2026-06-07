@@ -111,7 +111,7 @@ cd frontend
 npm install
 
 # Configure environment (point at the backend)
-cp .env.example .env.local           # set NEXT_PUBLIC_API_URL=http://localhost:8000
+cp .env.local.example .env.local     # set NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # Run the dev server (http://localhost:3000)
 npm run dev

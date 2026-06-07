@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import HomePage from '@/app/page'
+import HomePage from '@/src/app/page'
 
 function renderWithProviders(ui: React.ReactElement) {
   const queryClient = new QueryClient({

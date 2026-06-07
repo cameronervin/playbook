@@ -1,4 +1,4 @@
-import { ExampleList } from '@/app/ExampleList'
+import { ExampleList } from '@/src/app/ExampleList'
 
 export default function HomePage() {
   return (

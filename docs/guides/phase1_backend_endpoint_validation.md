@@ -56,7 +56,7 @@ Validate:
 - Public routes: `GET /api/v1/health`, `GET /api/v1/auth/providers`, and
   `GET /api/v1/auth/google/login`.
 - Athlete routes: `GET /api/v1/users/me`,
-  `PATCH /api/v1/users/me/profile`, and conversation list/create/detail.
+  `PATCH /api/v1/users/me/profile`, and conversation list/create-from-initial-message/detail.
 - Admin routes: KB document list/upload/get/metadata/retry/delete.
 - Super-admin routes: user list, role update, and audit log query.
 - Webhook error path: call `POST /api/v1/kb/webhook` without
@@ -93,7 +93,8 @@ checks enabled while skipping storage-backed KB document lifecycle checks.
   `422 VALIDATION_ERROR`.
 - Athlete users cannot access admin KB routes, and admin users cannot access
   super-admin routes.
-- Athletes can create, list, and get their own conversation shells.
+- Athletes can create conversations from an initial message, list them, and get
+  their own conversation details.
 - Super admins can update the role target and query the resulting audit event.
 - KB document upload, metadata update, retry, signed webhook, audit, and delete
   work when storage and KB dependencies are configured.

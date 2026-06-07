@@ -15,7 +15,7 @@ token there; reference it everywhere via Tailwind utility classes
 ## Tailwind v4 `@theme` block (starter)
 
 ```css
-/* app/globals.css */
+/* src/app/globals.css */
 @import "tailwindcss";
 
 @theme {

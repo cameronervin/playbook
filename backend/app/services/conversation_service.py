@@ -1,4 +1,4 @@
-"""Athlete conversation shell service."""
+"""Athlete conversation service."""
 
 from __future__ import annotations
 
@@ -60,15 +60,27 @@ class ConversationService:
         *,
         athlete: User,
         request: ConversationCreateRequest,
-    ) -> ConversationSummaryResponse:
-        """Create an athlete conversation shell."""
-        row = await self.conversation_repo.create(
+    ) -> ConversationDetailResponse:
+        """Create an athlete conversation seeded with the first user message."""
+        conversation = await self.conversation_repo.create(
             organization_id=athlete.organization_id,
             athlete_id=athlete.id,
-            title=request.title,
+            title=None,
+        )
+        message = await self.message_repo.create(
+            conversation_id=conversation.id,
+            role="user",
+            content=request.initial_message,
+        )
+        conversation = await self.conversation_repo.update_last_message_at(
+            conversation,
+            last_message_at=message.created_at,
         )
         await self.session.commit()
-        return ConversationSummaryResponse.model_validate(row)
+        return ConversationDetailResponse(
+            **ConversationSummaryResponse.model_validate(conversation).model_dump(),
+            messages=[await self._message_response(message)],
+        )
 
     async def get_detail(
         self,

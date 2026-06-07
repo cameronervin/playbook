@@ -15,6 +15,10 @@ Voice: confident, plain-spoken, "coaching staff" calm. Address the user as **"yo
 the product is **"Playbook"** or **"your agents."** Sentence case everywhere except big
 display headlines. **No emoji, anywhere.**
 
+For phased implementation across coding-agent cycles, start with the
+[Frontend Wireframe Implementation Plan](frontend_wireframe_implementation_plan.md)
+before porting the reference screens.
+
 ---
 
 ## About the design files
@@ -40,7 +44,7 @@ Two representations of the same three screens are included:
 - Components are hung off `window` via `Object.assign(window, {...})` and a **mount poller**
   that waits for globals → **replace with real ES `import`/`export`.**
 - Design tokens are **inlined into each page's `<style>`** (a workaround for a MIME-type
-  issue on the served `.css`) → **move to a single `app/globals.css` imported once.**
+  issue on the served `.css`) → **move to a single `src/app/globals.css` imported once.**
 - A **Tweaks panel** (`bg`, `motion`, `density`, `role`, etc.) is a *prototyping*
   affordance for exploring options. **It is not part of the product.** Bake the chosen
   defaults in and wire `role` to real auth. (Chosen defaults are listed per-screen below.)
@@ -62,7 +66,7 @@ The user is porting to a **Next.js** application (App Router). Suggested mapping
 
 | Prototype concern | Next.js target |
 |---|---|
-| Design tokens (inlined `:root`) | `app/globals.css`, imported in `app/layout.tsx` |
+| Design tokens (inlined `:root`) | `src/app/globals.css`, imported in `src/app/layout.tsx` |
 | Fonts in `source/fonts/*.ttf` | `next/font/local` → exposes `--font-display`, `--font-body`, `--font-display-alt` |
 | `window`-global components + mount poller | one file per component, real `import`/`export`; `"use client"` on any with state/effects/canvas |
 | CDN React + Babel script tags | delete — Next provides React |

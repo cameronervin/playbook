@@ -1,4 +1,4 @@
-"""Athlete conversation shell schemas."""
+"""Athlete conversation schemas."""
 
 from __future__ import annotations
 
@@ -6,13 +6,22 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ConversationCreateRequest(BaseModel):
-    """Create a conversation shell."""
+    """Create a conversation from the athlete's first message."""
 
-    title: str | None = Field(default=None, max_length=255)
+    initial_message: str = Field(min_length=1)
+
+    @field_validator("initial_message")
+    @classmethod
+    def trim_initial_message(cls, value: str) -> str:
+        """Normalize accidental edge whitespace and reject empty content."""
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("initial_message must contain message content")
+        return trimmed
 
 
 class ConversationSummaryResponse(BaseModel):
