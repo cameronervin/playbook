@@ -27,7 +27,7 @@ function AuthProviderSkeleton() {
       <span className="flex items-center justify-center border-r border-border bg-surface-raised">
         <span className="h-5 w-5 rounded-sm bg-fg-4/40 motion-safe:animate-pulse" />
       </span>
-      <span className="flex items-center justify-center py-[15px] pr-[50px]">
+      <span className="flex items-center justify-start py-[15px] pl-8 pr-4">
         <span className="h-4 w-[190px] max-w-[80%] rounded-sm bg-fg-4/35 motion-safe:animate-pulse" />
       </span>
     </div>
@@ -84,7 +84,7 @@ export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
               <span className="flex items-center justify-center border-r border-border bg-surface-raised">
                 {providerLogo[provider.provider]}
               </span>
-              <span className="flex items-center justify-center py-[15px] pr-[50px]">
+              <span className="flex items-center justify-start py-[15px] pl-8 pr-4">
                 Continue with {provider.label}
               </span>
             </button>

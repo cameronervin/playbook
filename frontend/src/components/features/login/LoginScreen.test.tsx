@@ -53,9 +53,13 @@ describe('LoginScreen', () => {
   it('renders Microsoft before Google with SSO-only controls', () => {
     renderLogin()
     const buttons = screen.getAllByRole('button')
+    const microsoftLabel = screen.getByText('Continue with Microsoft')
+    const googleLabel = screen.getByText('Continue with Google')
 
     expect(buttons[0]).toHaveAccessibleName(/continue with microsoft/i)
     expect(buttons[1]).toHaveAccessibleName(/continue with google/i)
+    expect(microsoftLabel).toHaveClass('justify-start', 'pl-8')
+    expect(googleLabel).toHaveClass('justify-start', 'pl-8')
     expect(screen.getByRole('heading', { name: 'Log in to continue' })).toHaveTextContent('LOG IN TO CONTINUE')
     expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
