@@ -243,6 +243,151 @@ textarea:focus-visible,
   line-height: 1.25;
 }
 
+.pb-admin-header-control {
+  height: 36px;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 10px;
+  white-space: nowrap;
+  width: 136px;
+}
+
+.pb-admin-nav-item {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.pb-admin-nav-icon {
+  flex: none;
+  height: 16px;
+  width: 16px;
+}
+
+.pb-admin-table-text {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.pb-admin-table-meta {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.pb-admin-table-search {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 8px;
+  height: 32px;
+  padding-inline: 10px;
+  width: min(100%, 240px);
+}
+
+.pb-admin-table-search input {
+  background: transparent;
+  border: 0;
+  color: var(--fg-1);
+  flex: 1;
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  line-height: 1;
+  min-width: 0;
+  outline: none;
+}
+
+.pb-admin-table-search input::placeholder {
+  color: var(--fg-4);
+}
+
+.pb-admin-table-search-icon {
+  color: var(--fg-4);
+  flex: none;
+  height: 14px;
+  width: 14px;
+}
+
+.pb-admin-table-action {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--fg-1);
+  display: inline-flex;
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  height: 30px;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1;
+  padding-inline: 10px;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.pb-admin-table-action:hover,
+.pb-admin-table-action[data-state="open"] {
+  background: var(--surface-hover);
+}
+
+.pb-admin-table-action-icon {
+  color: var(--fg-3);
+  flex: none;
+  height: 12px;
+  width: 12px;
+}
+
+.pb-admin-menu {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--fg-2);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  line-height: 1.15;
+  padding: 6px;
+  width: 210px;
+  z-index: 50;
+}
+
+.pb-admin-menu-item {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  font-weight: 500;
+  gap: 10px;
+  outline: none;
+  padding: 8px 9px;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.pb-admin-menu-item:focus {
+  background: var(--surface-hover);
+  color: var(--fg-1);
+}
+
+.pb-admin-menu-item[data-disabled] {
+  color: var(--fg-4);
+  cursor: default;
+}
+
 .pb-stage {
   min-height: 100dvh;
   background:

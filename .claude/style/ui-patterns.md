@@ -15,6 +15,10 @@ Use `docs/design/` as the visual source of truth.
 - Login: SSO-only card, Microsoft first, Google second, no email/password.
 - Chat: left history rail, center chat surface, sources panel open by default.
 - Admin: admin-only shell; athletes see access denied; Users & roles is super-admin only.
+- Admin tables: keep row actions, dropdown menus, metadata, and column labels compact
+  with the shared `pb-admin-table-*` and `pb-admin-menu*` globals. Search/filter
+  controls for a table should sit in the table surface header when they operate
+  only on that table.
 
 ## Behavior
 

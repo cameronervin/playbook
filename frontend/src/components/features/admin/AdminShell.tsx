@@ -6,11 +6,12 @@ import { Lock } from 'lucide-react'
 import { AdminChatPanel } from '@/src/components/features/admin/AdminChatPanel'
 import { AdminInsightsDashboard } from '@/src/components/features/admin/AdminInsightsDashboard'
 import { AdminNav } from '@/src/components/features/admin/AdminNav'
-import { KBPanel, UsersPanel } from '@/src/components/features/admin/AdminPanels'
+import { KBPanel } from '@/src/components/features/admin/AdminPanels'
+import { AdminUsersPanel } from '@/src/components/features/admin/AdminUsersPanel'
 import { SettingsModal } from '@/src/components/features/common/SettingsModal'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { Button } from '@/src/components/ui'
-import { useAdminUsers, useAuditLogs, useUpdateUserRole } from '@/src/hooks/useAdmin'
+import { useAdminUsers, useUpdateUserRole } from '@/src/hooks/useAdmin'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
 import {
   useDeleteKBDocument,
@@ -42,7 +43,6 @@ export function AdminShell() {
   const isAdmin = user?.role === 'admin' || isSuperAdmin
   const { data: documents = [] } = useKBDocuments()
   const { data: users = [] } = useAdminUsers(Boolean(isSuperAdmin))
-  const { data: auditLogs = [] } = useAuditLogs(Boolean(isSuperAdmin))
   const retryDocument = useRetryKBDocument()
   const deleteDocument = useDeleteKBDocument()
   const updateDocument = useUpdateKBDocumentMetadata()
@@ -139,8 +139,8 @@ export function AdminShell() {
           />
         )}
         {adminTab === 'users' && isSuperAdmin && (
-          <UsersPanel
-            auditCount={auditLogs.length}
+          <AdminUsersPanel
+            currentUserId={user?.id}
             onRoleChange={(id, role) => updateRole.mutate({ userId: id, role })}
             users={users}
           />

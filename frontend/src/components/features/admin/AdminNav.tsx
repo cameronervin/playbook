@@ -24,9 +24,9 @@ interface AdminNavProps {
 }
 
 const navItems: Array<{ id: AdminTab; icon: ReactNode; label: string }> = [
-  { id: 'insights', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, label: 'Insights' },
-  { id: 'kb', icon: <Database className="h-[18px] w-[18px]" />, label: 'Knowledge base' },
-  { id: 'users', icon: <Users className="h-[18px] w-[18px]" />, label: 'Users & roles' },
+  { id: 'insights', icon: <LayoutDashboard className="pb-admin-nav-icon" />, label: 'Insights' },
+  { id: 'kb', icon: <Database className="pb-admin-nav-icon" />, label: 'Knowledge base' },
+  { id: 'users', icon: <Users className="pb-admin-nav-icon" />, label: 'Users & roles' },
 ]
 
 export function AdminNav({
@@ -61,7 +61,7 @@ export function AdminNav({
           <button
             aria-label={getNavLabel(item.id, item.label, failedDocsCount)}
             className={cn(
-              'relative mb-0.5 flex w-full items-center gap-[11px] rounded-sm px-[11px] py-2.5 text-left text-[13.5px] font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
+              'pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm px-[11px] py-2.5 text-left font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
               activeTab === item.id && 'bg-brand-soft font-semibold text-brand hover:bg-brand-soft hover:text-brand',
             )}
             key={item.id}

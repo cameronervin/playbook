@@ -40,12 +40,16 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 - Fonts are loaded locally in `src/app/layout.tsx`: Archivo, Sora, and Inter.
 - Tailwind v4 tokens live in `src/app/globals.css` using `@theme`.
 - Compact product typography utilities live in `src/app/globals.css`: `pb-page-title`, `pb-page-subtitle`, `pb-card-title`, `pb-ui-sm`, and `pb-ui-xs`.
+- Admin chrome uses shared globals such as `pb-admin-header-control`, `pb-admin-nav-item`, and `pb-admin-nav-icon` so Insights, Knowledge base, and Users & roles keep the same compact rhythm.
+- Dense admin tables use shared globals such as `pb-admin-table-text`, `pb-admin-table-meta`, `pb-admin-table-action`, `pb-admin-menu`, and `pb-admin-menu-item`; avoid generic `text-sm`/`text-base` row controls that overpower table content.
 - The palette is Playbook orange on warm charcoal. Avoid blue/purple AI gradients.
 - Use local Playbook primitives in `src/components/ui/`.
 - Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions.
 - `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
 - `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`.
 - Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.
+- Admin pages share `AdminPageScaffold` for the Claude header, grid layer, toolbar band, content padding, and max-width rhythm across Insights, Knowledge base, and Users & roles.
+- Super-admin Users & roles uses the design-backed table surface with search, role pills, locked current-user state, and Radix role-change menus wired to the existing admin user mutation.
 - Radix powers accessible dialog, dropdown menu, tabs, tooltip, and switch behavior.
 - Inline SVG is allowed only for the Playbook mark and SSO provider logos; use `lucide-react` for normal icons.
 

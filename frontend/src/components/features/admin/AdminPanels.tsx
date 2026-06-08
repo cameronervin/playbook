@@ -1,4 +1,5 @@
 import { RefreshCw, Shield, Trash2 } from 'lucide-react'
+import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { Badge, IconButton, Surface } from '@/src/components/ui'
 
 interface KBPanelProps {
@@ -11,9 +12,12 @@ interface KBPanelProps {
 
 export function KBPanel({ canManage, documents, onDelete, onRetry, onToggleOfficial }: KBPanelProps) {
   return (
-    <div className="mx-auto w-full max-w-[1000px] px-7 py-7">
-      <h1 className="pb-page-title">Knowledge base</h1>
-      <div className="mt-6 grid gap-3">
+    <AdminPageScaffold
+      contentClassName="py-7"
+      subtitle={`${documents.length} ${documents.length === 1 ? 'document' : 'documents'} in knowledge base`}
+      title="Knowledge base"
+    >
+      <div className="grid gap-3">
         {documents.length === 0 && <Surface className="p-5 text-sm text-fg-3">No documents yet.</Surface>}
         {documents.map((doc) => (
           <Surface className="flex items-center justify-between gap-4 p-4" key={doc.id}>
@@ -40,41 +44,6 @@ export function KBPanel({ canManage, documents, onDelete, onRetry, onToggleOffic
           </Surface>
         ))}
       </div>
-    </div>
-  )
-}
-
-interface UsersPanelProps {
-  auditCount: number
-  onRoleChange: (id: string, role: 'athlete' | 'admin' | 'super_admin') => void
-  users: Array<{ id: string; name: string; email: string; role: 'athlete' | 'admin' | 'super_admin' }>
-}
-
-export function UsersPanel({ auditCount, onRoleChange, users }: UsersPanelProps) {
-  return (
-    <div className="mx-auto w-full max-w-[1000px] px-7 py-7">
-      <h1 className="pb-page-title">Users & roles</h1>
-      <p className="mt-2 text-sm text-fg-3">{auditCount} audit events available.</p>
-      <div className="mt-6 grid gap-3">
-        {users.length === 0 && <Surface className="p-5 text-sm text-fg-3">No users returned yet.</Surface>}
-        {users.map((adminUser) => (
-          <Surface className="flex items-center justify-between gap-4 p-4" key={adminUser.id}>
-            <div>
-              <p className="text-sm font-semibold text-fg-1">{adminUser.name}</p>
-              <p className="text-xs text-fg-4">{adminUser.email}</p>
-            </div>
-            <select
-              className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-fg-1"
-              onChange={(event) => onRoleChange(adminUser.id, event.target.value as 'athlete' | 'admin' | 'super_admin')}
-              value={adminUser.role}
-            >
-              <option value="athlete">Athlete</option>
-              <option value="admin">Admin</option>
-              <option value="super_admin">Super admin</option>
-            </select>
-          </Surface>
-        ))}
-      </div>
-    </div>
+    </AdminPageScaffold>
   )
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, LoaderCircle, RefreshCw, Sparkles, Zap } from 'lucide-react'
+import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { Button } from '@/src/components/ui'
 import { cn } from '@/src/lib/utils/cn'
 import type {
@@ -28,7 +29,7 @@ const timeWindowLabels: Record<AdminTimeWindow, string> = {
   custom: 'Custom range',
 }
 
-const headerControlClassName = 'h-9 w-[156px] justify-center pb-ui-sm'
+const headerControlClassName = 'pb-admin-header-control pb-ui-sm'
 
 export function AdminInsightsDashboard({
   insight,
@@ -42,45 +43,36 @@ export function AdminInsightsDashboard({
   const generating = insightStatus === 'pending' || insightStatus === 'processing'
 
   return (
-    <div className="flex min-h-full flex-col">
-      <header className="relative shrink-0 border-b border-border bg-bg-base px-7">
-        <div className="admin-grid" aria-hidden="true" />
-        <div className="relative z-10 flex min-h-[68px] items-center gap-5">
-          <div className="min-w-0">
-            <h1 className="pb-page-title">Insights</h1>
-            <p className="pb-page-subtitle mt-0.5">AI generated insights from user queries</p>
-          </div>
-          <div className="ml-auto flex items-center gap-2.5">
-            <TimeWindowMenu onChange={onTimeWindowChange} value={timeWindow} />
-            <Button className={headerControlClassName} disabled={generating} onClick={onGenerate} size="sm" variant="secondary">
-              {generating ? <LoaderCircle className="h-[15px] w-[15px] animate-spin" /> : <RefreshCw className="h-[15px] w-[15px]" />}
-              {generating ? 'Regenerating...' : 'Regenerate'}
-            </Button>
-            <Button className={headerControlClassName} onClick={onOpenChat} size="sm">
-              <Zap className="h-[15px] w-[15px]" />
-              Explore with AI
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex-1 px-7 py-4">
-        <div className="mx-auto w-full max-w-[1000px]">
-          <AISummaryCard generating={generating} insight={insight} />
-          <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.55fr_1fr]">
-            <DashboardCard title="Common topics">
-              <TopicBars items={summary.top_topics} />
-            </DashboardCard>
-            <DashboardCard title="Risk flags">
-              <RiskFlags insight={insight} />
-            </DashboardCard>
-          </div>
-          <DashboardCard className="mt-3.5" title="Query volume" titleAside={`${summary.query_volume} this week`}>
-            <QueryVolumeChart series={summary.volume_series} />
-          </DashboardCard>
-        </div>
+    <AdminPageScaffold
+      actions={
+        <>
+          <TimeWindowMenu onChange={onTimeWindowChange} value={timeWindow} />
+          <Button className={headerControlClassName} disabled={generating} onClick={onGenerate} size="sm" variant="secondary">
+            {generating ? <LoaderCircle className="h-[15px] w-[15px] animate-spin" /> : <RefreshCw className="h-[15px] w-[15px]" />}
+            {generating ? 'Regenerating...' : 'Regenerate'}
+          </Button>
+          <Button className={headerControlClassName} onClick={onOpenChat} size="sm">
+            <Zap className="h-[15px] w-[15px]" />
+            Explore with AI
+          </Button>
+        </>
+      }
+      subtitle="AI generated insights from user queries"
+      title="Insights"
+    >
+      <AISummaryCard generating={generating} insight={insight} />
+      <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <DashboardCard title="Common topics">
+          <TopicBars items={summary.top_topics} />
+        </DashboardCard>
+        <DashboardCard title="Risk flags">
+          <RiskFlags insight={insight} />
+        </DashboardCard>
       </div>
-    </div>
+      <DashboardCard className="mt-3.5" title="Query volume" titleAside={`${summary.query_volume} this week`}>
+        <QueryVolumeChart series={summary.volume_series} />
+      </DashboardCard>
+    </AdminPageScaffold>
   )
 }
 
