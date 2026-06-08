@@ -24,6 +24,11 @@ Target route model:
 - `/admin` for admin-only operations.
 - `/` as an auth-aware redirect to the appropriate route.
 
+Current route organization keeps `/login` and `/profile` under `src/app/(auth)/`
+for the shared auth stage, and `/chat` and `/admin` under
+`src/app/(workspace)/` for the shared left/main/right workspace geometry. Route
+groups must not change the public URL paths above.
+
 Implementation should wire currently implemented backend APIs immediately and isolate planned-but-missing APIs behind typed fixture adapters so each phase can land cleanly.
 
 ## Phase 1: Design System Foundation
@@ -48,6 +53,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 
 ## Phase 2: Routing, Auth, and API Interfaces
 - Add frontend routes for `/login`, `/profile`, `/chat`, and `/admin`; replace the scaffold home page with a redirecting root route.
+- Organize the routes with non-URL-changing App Router groups: `(auth)` for login/profile and `(workspace)` for chat/admin.
 - Update `frontend/src/app/layout.tsx` metadata from scaffold copy to Playbook-specific title, description, favicon, font variables, and body class.
 - Update `frontend/src/lib/api/client.ts` to:
   - Send `credentials: "include"` for cookie-backed backend sessions.
@@ -99,13 +105,14 @@ Implementation should wire currently implemented backend APIs immediately and is
 - Recreate the Admin wireframe at `/admin` with an admin-only shell and the access-denied state for athletes.
 - Build admin feature components under `frontend/src/components/features/admin/` for:
   - Admin navigation and account/settings menu.
-  - Insights dashboard with KPI cards, AI summary panel, time-window selector, and generate action.
+  - Insights dashboard with the AI summary as the hero hierarchy, embedded insight KPIs, topic/risk modules, query-volume chart, time-window selector, and generate action.
   - Knowledge-base management with collections, document rows, status pills, upload, retry, delete, official toggle, and metadata edit drawer.
   - Users & roles for super admins.
   - Admin analytics chat side panel.
 - Wire KB document management to implemented admin KB APIs.
 - Wire Users & roles to implemented super-admin user APIs.
 - Keep Insights, dashboard insight generation, analytics query review, and admin chat on typed fixture adapters until Phase 4 backend APIs exist.
+- Keep the admin analytics chat side panel on the shared `WorkspaceShell` side-panel geometry so it stays consistent with the chat sources panel.
 - Enforce role behavior:
   - `admin` can access Insights and Knowledge base management where backend permits.
   - `super_admin` additionally sees Users & roles and can update roles.

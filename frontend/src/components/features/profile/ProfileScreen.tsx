@@ -35,7 +35,7 @@ export function ProfileScreen() {
         Complete your profile
       </h1>
       <p className="mt-3 max-w-[28ch] text-sm font-medium leading-5 text-fg-3">
-        Add the basics Playbook needs before continuing.
+        We just need a few more details before getting started.
       </p>
       <form className="mt-7 grid w-full gap-5 text-left" onSubmit={handleSubmit}>
         <label className="grid gap-2 text-sm font-semibold text-fg-2">
@@ -61,10 +61,10 @@ export function ProfileScreen() {
         <Button
           className="min-h-[52px] w-full text-base"
           disabled={updateProfile.isPending}
-          size="lg"
+          size="sm"
           type="submit"
         >
-          {"Let's get started"}
+          {"I'm ready"}
         </Button>
       </form>
     </AuthCard>

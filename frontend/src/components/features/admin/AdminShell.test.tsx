@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AdminShell } from '@/src/components/features/admin/AdminShell'
+import { useUIStore } from '@/src/lib/store/uiStore'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -31,7 +33,18 @@ vi.mock('@/src/hooks/useAdmin', () => ({
 }))
 
 vi.mock('@/src/hooks/useKBDocuments', () => ({
-  useKBDocuments: () => ({ data: [], isLoading: false }),
+  useKBDocuments: () => ({
+    data: [
+      {
+        id: 'doc-failed',
+        title: 'RECRUITING_DEAD_PERIODS.PDF',
+        processing_status: 'failed',
+        is_official: false,
+        failure_reason: 'Scanned PDF',
+      },
+    ],
+    isLoading: false,
+  }),
   useUploadKBDocument: () => ({ mutate: vi.fn(), isPending: false }),
   useRetryKBDocument: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteKBDocument: () => ({ mutate: vi.fn(), isPending: false }),
@@ -48,6 +61,16 @@ function renderAdmin() {
 }
 
 describe('AdminShell', () => {
+  beforeEach(() => {
+    useUIStore.setState({
+      adminTab: 'insights',
+      adminChatOpen: false,
+      adminTimeWindow: '7d',
+      adminInsightStatus: 'completed',
+      adminChatMessages: [],
+    })
+  })
+
   it('denies athlete access', () => {
     currentUser.role = 'athlete'
     renderAdmin()
@@ -60,5 +83,45 @@ describe('AdminShell', () => {
     renderAdmin()
 
     expect(screen.getByRole('button', { name: /users & roles/i })).toBeInTheDocument()
+  })
+
+  it('renders the Claude design Insights dashboard hierarchy for admins', () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
+    expect(screen.getByText(/AI generated insights from user queries/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Last 7 days/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Regenerate/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Explore with AI/i })).toBeInTheDocument()
+    expect(screen.getByText(/AI summary/i)).toBeInTheDocument()
+    expect(screen.getByText(/NIL disclosure timing is the clearest support gap/i)).toBeInTheDocument()
+    expect(screen.getByText(/NIL questions/i)).toBeInTheDocument()
+    expect(screen.getByText(/High-risk flags/i)).toBeInTheDocument()
+    expect(screen.getByText(/Common topics/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Risk flags$/i })).toBeInTheDocument()
+    expect(screen.getByText(/Query volume/i)).toBeInTheDocument()
+    expect(screen.getByText(/128 this week/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Knowledge base 1 failed document/i })).toBeInTheDocument()
+    expect(screen.queryByText(/Fixture-backed until Phase 4 APIs land/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Grounded rate/i)).not.toBeInTheDocument()
+  })
+
+  it('expands insight details and opens the analytics chat side panel', async () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Show details/i }))
+
+    expect(screen.getByText(/Recommended focus/i)).toBeInTheDocument()
+    expect(screen.getByText(/Clarify NIL disclosure timing/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Explore with AI/i }))
+
+    expect(screen.getByRole('complementary', { name: /Analytics AI Agent/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /What are athletes most confused about this week/i }))
+
+    expect(await screen.findByText(/The clearest confusion this week is NIL disclosure timing/i)).toBeInTheDocument()
   })
 })

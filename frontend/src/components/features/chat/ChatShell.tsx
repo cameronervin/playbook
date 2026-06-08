@@ -9,6 +9,7 @@ import { ChatThread } from '@/src/components/features/chat/ChatThread'
 import { ChatTopBar } from '@/src/components/features/chat/ChatTopBar'
 import { SettingsModal } from '@/src/components/features/common/SettingsModal'
 import { HorizonBackground } from '@/src/components/features/common/HorizonBackground'
+import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
 import { useConversationDetail, useConversations, useCreateConversation } from '@/src/hooks/useConversations'
 import { ROUTES } from '@/src/lib/constants/config'
@@ -104,52 +105,57 @@ export function ChatShell() {
     router.push(ROUTES.login)
   }
 
+  const leftRail = (
+    <ChatNavRail
+      activeConversationId={activeConversationId}
+      groups={conversationGroups}
+      isLoggingOut={logout.isPending}
+      onLogout={handleLogout}
+      onNewChat={handleNewChat}
+      onOpenSettings={() => setSettingsOpen(true)}
+      onSelectConversation={handleSelectConversation}
+      user={user}
+    />
+  )
+
+  const main = (
+    <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-base">
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <HorizonBackground />
+      </div>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        {hasMessages && (
+          <ChatTopBar
+            onToggleSources={toggleSources}
+            sourcesOpen={sourcesOpen}
+            title={activeConversationTitle}
+          />
+        )}
+        <ChatThread messages={messages} onCitationSelect={handleCitationSelect} />
+        <ChatComposer disabled={createConversation.isPending} onSend={handleSend} ref={composerRef} />
+      </div>
+    </section>
+  )
+
+  const sidePanel = showSourcesPanel ? (
+    <ChatSourcesPanel
+      citations={citations}
+      onClose={() => setSourcesOpen(false)}
+      onSelectCitation={handleCitationSelect}
+      selectedCitationTitle={selectedCitationTitle}
+    />
+  ) : undefined
+
   return (
-    <main className="flex h-dvh overflow-hidden bg-bg-base text-fg-1">
-      <ChatNavRail
-        activeConversationId={activeConversationId}
-        groups={conversationGroups}
-        isLoggingOut={logout.isPending}
-        onLogout={handleLogout}
-        onNewChat={handleNewChat}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onSelectConversation={handleSelectConversation}
-        user={user}
-      />
-
-      <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-base">
-        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-          <HorizonBackground />
-        </div>
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-          {hasMessages && (
-            <ChatTopBar
-              onToggleSources={toggleSources}
-              sourcesOpen={sourcesOpen}
-              title={activeConversationTitle}
-            />
-          )}
-          <ChatThread messages={messages} onCitationSelect={handleCitationSelect} />
-          <ChatComposer disabled={createConversation.isPending} onSend={handleSend} ref={composerRef} />
-        </div>
-      </section>
-
-      {showSourcesPanel && (
-        <ChatSourcesPanel
-          citations={citations}
-          onClose={() => setSourcesOpen(false)}
-          onSelectCitation={handleCitationSelect}
-          selectedCitationTitle={selectedCitationTitle}
-        />
-      )}
-
+    <>
+      <WorkspaceShell leftRail={leftRail} main={main} sidePanel={sidePanel} />
       <SettingsModal
         email={user?.email}
         name={user?.name}
         onOpenChange={setSettingsOpen}
         open={settingsOpen}
       />
-    </main>
+    </>
   )
 }
 

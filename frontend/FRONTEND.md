@@ -42,6 +42,8 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 - The palette is Playbook orange on warm charcoal. Avoid blue/purple AI gradients.
 - Use local Playbook primitives in `src/components/ui/`.
 - `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
+- `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`.
+- Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.
 - Radix powers accessible dialog, dropdown menu, tabs, tooltip, and switch behavior.
 - Inline SVG is allowed only for the Playbook mark and SSO provider logos; use `lucide-react` for normal icons.
 
@@ -59,6 +61,7 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 src/app/                  App Router routes, grouped layouts, providers
 src/components/ui/         Shared Playbook primitives
 src/components/features/auth/ Shared auth/profile stage and card components
+src/components/features/workspace/ Shared chat/admin workspace shell components
 src/components/features/   Route/feature-specific components
 src/hooks/                 TanStack Query hooks
 src/lib/api/               Fetch client and endpoint modules

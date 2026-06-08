@@ -1,6 +1,7 @@
 'use client'
 
 import { FileText, X } from 'lucide-react'
+import { WorkspaceSidePanel } from '@/src/components/features/workspace/WorkspaceShell'
 import { cn } from '@/src/lib/utils/cn'
 import type { Citation } from '@/src/types/conversations'
 
@@ -20,10 +21,8 @@ export function ChatSourcesPanel({
   const selectedCitation = citations.find((citation) => citation.source_title === selectedCitationTitle) ?? citations[0]
 
   return (
-    <aside
+    <WorkspaceSidePanel
       aria-label="Sources"
-      className="hidden h-dvh w-[320px] shrink-0 flex-col border-l border-border bg-bg-page text-fg-1 lg:flex"
-      role="complementary"
     >
       <header className="flex h-16 shrink-0 items-center border-b border-border px-[18px]">
         <h2 className="text-sm font-bold text-fg-1">Sources</h2>
@@ -70,7 +69,7 @@ export function ChatSourcesPanel({
           </p>
         )}
       </div>
-    </aside>
+    </WorkspaceSidePanel>
   )
 }
 

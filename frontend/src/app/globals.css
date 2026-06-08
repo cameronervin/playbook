@@ -259,6 +259,19 @@ textarea:focus-visible,
   mask-image: linear-gradient(to bottom, transparent, black 28%, transparent);
 }
 
+.admin-grid {
+  background-image:
+    linear-gradient(rgba(246, 241, 232, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(246, 241, 232, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  inset: 0;
+  mask-image: linear-gradient(180deg, #000 0%, transparent 100%);
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 100%);
+}
+
 @keyframes pb-rise {
   from {
     opacity: 0;
@@ -267,6 +280,26 @@ textarea:focus-visible,
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes pb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pb-panel {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -284,6 +317,14 @@ textarea:focus-visible,
 
 .animate-pb-rise {
   animation: pb-rise var(--dur-med) var(--ease-out) both;
+}
+
+.animate-pb-fade {
+  animation: pb-fade var(--dur-med) var(--ease-out) both;
+}
+
+.animate-pb-panel {
+  animation: pb-panel var(--dur-med) var(--ease-out) both;
 }
 
 .animate-pb-pulse {
