@@ -37,7 +37,7 @@ and insight generation for department operators.
 | LLM gateway | LiteLLM gateway mode, with direct provider mode for local or break-glass use |
 | Knowledge base | Standalone `kb-service` for ingestion, chunking, embeddings, and retrieval |
 | Retrieval | Docling, tiktoken chunking, OpenAI/LiteLLM embeddings, pgvector similarity search |
-| Data and storage | PostgreSQL, pgvector, S3 or LocalStack |
+| Data and storage | PostgreSQL, pgvector, S3-compatible storage (MinIO locally) |
 | Async work | Celery + Valkey for long-running ingestion and background processing |
 | Observability | structlog, audit logs, and privacy-conscious operational logging |
 | Tests | pytest for backend and KB service, Vitest + React Testing Library for frontend |

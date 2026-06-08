@@ -1,4 +1,4 @@
-# ADR 0002 — LLM Provider Modes (Direct vs Gateway)
+# ADR 0002 — LLM Provider Modes (Direct vs LiteLLM)
 
 ## Status
 
@@ -17,7 +17,7 @@ agent graphs). We need to:
 
 Two transport options exist:
 
-1. **Gateway** — route all traffic through a [LiteLLM](https://github.com/BerriAI/litellm)
+1. **LiteLLM** — route all traffic through a [LiteLLM](https://github.com/BerriAI/litellm)
    proxy that exposes an OpenAI-compatible API and can fan out to many providers.
 2. **Direct** — call the provider SDK directly for local or break-glass use.
 
@@ -29,30 +29,30 @@ SDK directly.
 
 Transport is selected at runtime by the `LLM_PROVIDER_MODE` setting:
 
-- `gateway` (**default**) — routes through a LiteLLM proxy. Use for production
+- `litellm` (**default for deployed environments**) — routes through a LiteLLM proxy. Use for production
   traffic that needs centralized credentials, model aliases, multi-provider
   routing, automatic fallbacks, usage/cost tracking, budgets, and rate limiting.
 - `direct` — calls the provider SDK directly. Use only for local development,
   smoke tests, or an explicit break-glass path.
 
-Model identity (`LLM_CHAT_MODEL`, model lists, etc.) is also configuration, so a
-model or provider swap is a config change with no code change.
+Model identity is configured with one chat model setting, `LLM_CHAT_MODEL`, which
+can be either a direct provider model ID or a LiteLLM alias.
 
 ## Consequences
 
 **Positive**
 - Vendor independence — swap providers or models via env vars.
-- Provider credentials are centralized in the gateway instead of spread across app services.
+- Provider credentials are centralized in LiteLLM instead of spread across app services.
 - Local dev and emergency fallback remain possible through `direct`.
 - The eval/judge layer reuses the same factory, so it always tracks production
   model identity.
 
 **Negative**
 - Two transport paths to test and keep behaviorally consistent.
-- Gateway mode adds an extra service (LiteLLM) and a network hop.
+- LiteLLM mode adds an extra service and a network hop.
 - Provider-specific features (e.g. prompt caching headers) must be validated in
   each mode before relying on them.
 
 **Follow-ups**
 - Document required env vars for each mode in `deploy/envs/`.
-- Add smoke tests that exercise gateway mode by default and direct mode as a fallback.
+- Add smoke tests that exercise LiteLLM mode and direct mode as a fallback.

@@ -38,8 +38,11 @@ CREATE TABLE users (
     role VARCHAR(40) NOT NULL DEFAULT 'athlete',
     auth_provider VARCHAR(40) NOT NULL,
     provider_subject VARCHAR(255) NOT NULL,
+    hashed_password VARCHAR(1024) NOT NULL DEFAULT '',
     sport_team VARCHAR(255) NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    is_verified BOOLEAN NOT NULL DEFAULT true,
+    is_superuser BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     UNIQUE (organization_id, email),
@@ -51,6 +54,30 @@ Allowed MVP roles:
 - `athlete`
 - `admin`
 - `super_admin`
+
+Implementation note: Phase 1 includes FastAPI Users-compatible auth fields on
+`users`. Playbook `role` remains authoritative; `is_superuser` is synchronized
+from `role = 'super_admin'` only for adapter compatibility.
+
+### `oauth_accounts`
+```sql
+CREATE TABLE oauth_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    oauth_name VARCHAR(100) NOT NULL,
+    access_token TEXT NOT NULL,
+    expires_at INTEGER NULL,
+    refresh_token TEXT NULL,
+    account_id VARCHAR(255) NOT NULL,
+    account_email VARCHAR(320) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    UNIQUE (oauth_name, account_id)
+);
+```
+
+OAuth provider tokens are stored only in this adapter-compatible table and are
+not returned by API responses or written to application logs.
 
 ### `conversations`
 ```sql

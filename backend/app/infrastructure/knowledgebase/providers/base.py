@@ -15,7 +15,12 @@ from abc import ABC, abstractmethod
 import structlog
 
 from app.core.config import settings
-from app.schemas.knowledgebase import KnowledgebaseResult
+from app.schemas.knowledgebase import (
+    KBDocumentIngestRequest,
+    KBDocumentIngestResponse,
+    KBDocumentStatusResponse,
+    KnowledgebaseResult,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -85,3 +90,19 @@ class BaseKnowledgebaseProvider(ABC):
         Default implementation is a no-op. Providers that hold open connections
         (e.g. an httpx.AsyncClient) must override this and call it on shutdown.
         """
+        logger.debug("knowledgebase_provider_close_noop", provider=self.provider_name)
+
+    async def ingest_document(
+        self,
+        request: KBDocumentIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        """Start ingestion for an admin-uploaded document."""
+        raise NotImplementedError
+
+    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
+        """Return KB-service ingestion status for a task/document."""
+        raise NotImplementedError
+
+    async def delete_document(self, kb_service_document_id: str) -> None:
+        """Delete/archive a document from the KB service."""
+        raise NotImplementedError

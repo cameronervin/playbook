@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Playbook — Home</title>
+<link rel="icon" href="favicon.svg" />
+<style>
+/* ============================================================
+   PLAYBOOK — Design Tokens (inlined from the design system —
+   the served .css can return a wrong MIME type, so inline is reliable).
+   ============================================================ */
+
+@font-face { font-family: 'Archivo'; src: url('fonts/Archivo-Variable.ttf') format('truetype-variations'); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Archivo'; src: url('fonts/Archivo-Italic-Variable.ttf') format('truetype-variations'); font-weight: 100 900; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('fonts/Inter-Variable.ttf') format('truetype-variations'); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Sora'; src: url('fonts/Sora-Variable.ttf') format('truetype-variations'); font-weight: 100 800; font-style: normal; font-display: swap; }
+
+:root {
+  --orange-50:#FFF3E9; --orange-100:#FFE0C4; --orange-200:#FFC089; --orange-300:#FF9D4D;
+  --orange-400:#FF8224; --orange-500:#FF7300; --orange-600:#E85F00; --orange-700:#C24C00;
+  --orange-800:#8F3800; --orange-900:#5E2500;
+  --brand:var(--orange-500); --brand-hover:var(--orange-400); --brand-press:var(--orange-600);
+  --brand-soft:rgba(255,115,0,0.14); --brand-glow:rgba(255,115,0,0.35);
+
+  --ink-1000:#0C0B09; --ink-950:#100F0C; --ink-900:#16140F; --ink-850:#1C1A14; --ink-800:#221F18;
+  --ink-750:#2A271E; --ink-700:#332F25; --ink-600:#423D30; --ink-500:#5A5343; --ink-400:#7E7665;
+  --ink-300:#A89E8B; --ink-200:#CFC6B5; --ink-100:#E9E2D5; --ink-050:#F6F1E8;
+
+  --fg-1:#F6F1E8; --fg-2:#C2B9A8; --fg-3:#8E8674; --fg-4:#5A5343; --fg-on-brand:#16140F;
+
+  --bg-void:var(--ink-1000); --bg-page:var(--ink-950); --bg-base:var(--ink-900);
+  --surface:var(--ink-850); --surface-raised:var(--ink-800); --surface-hover:var(--ink-750);
+
+  --border:rgba(246,241,232,0.08); --border-strong:rgba(246,241,232,0.14);
+  --border-solid:var(--ink-700); --border-brand:rgba(255,115,0,0.45);
+
+  --success:#3FB68B; --success-bg:rgba(63,182,139,0.14);
+  --warning:#F4A93C; --warning-bg:rgba(244,169,60,0.14);
+  --danger:#F0563F;  --danger-bg:rgba(240,86,63,0.14);
+  --info:#4FB6C7;    --info-bg:rgba(79,182,199,0.14);
+
+  --font-display:'Archivo', system-ui, sans-serif;
+  --font-display-alt:'Sora', system-ui, sans-serif;
+  --font-body:'Inter', system-ui, sans-serif;
+  --font-mono:'Inter', system-ui, sans-serif;
+
+  --radius-xs:3px; --radius-sm:5px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px; --radius-pill:999px;
+
+  --shadow-sm:0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md:0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg:0 16px 48px rgba(0,0,0,0.55);
+  --shadow-focus:0 0 0 3px var(--brand-glow);
+
+  --ease-out:cubic-bezier(0.2,0.7,0.2,1);
+  --ease-in-out:cubic-bezier(0.4,0,0.2,1);
+  --dur-fast:120ms; --dur-med:200ms; --dur-slow:360ms;
+}
+</style>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg-base); }
+  body { font-family: var(--font-body); color: var(--fg-1); -webkit-font-smoothing: antialiased; }
+  #root { height: 100vh; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--ink-700); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-600); background-clip: padding-box; }
+  textarea::placeholder, input::placeholder { color: var(--fg-4); }
+  button { font-family: var(--font-body); }
+  mark { background: transparent; color: var(--brand); font-weight: 600; }
+
+  /* agent pulse */
+  .pb-pulse { animation: pbpulse 1.9s var(--ease-in-out) infinite; }
+  @keyframes pbpulse { 0% { box-shadow: 0 0 0 0 var(--pulse-color, var(--brand-glow)); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  /* thinking — pulsing Playbook mark + "Thinking…" */
+  .pb-think { animation: pbthink 1.4s var(--ease-in-out) infinite; }
+  @keyframes pbthink { 0%, 100% { opacity: .38; } 50% { opacity: 1; } }
+  /* streaming caret appended after revealed text */
+  .pb-streaming::after { content: ''; display: inline-block; width: 7px; height: 1.02em; vertical-align: -2px; margin-left: 3px; border-radius: 1px; background: var(--brand); animation: pbblink 1.05s steps(1) infinite; }
+  @keyframes pbblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+  /* overlay entrances */
+  @keyframes pbmenu { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes pbfade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pbrise { from { opacity: 0; transform: translateY(10px) scale(0.99); } to { opacity: 1; transform: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pb-pulse { animation: none; }
+    .pb-think { animation: none; opacity: 1; }
+    .pb-streaming::after { animation: none; }
+    [class^="bg-layer"] *, .ambient .bloom { animation: none !important; }
+  }
+
+  /* ---- ambient background fields (shared with Login) ---- */
+  .bg-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; opacity: 0.7; }
+  .bg-layer::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(90deg, transparent 0%, rgba(22,20,15,0.84) 26%, rgba(22,20,15,0.84) 74%, transparent 100%);
+  }
+  .fx { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .fx-horizon { mask-image: linear-gradient(180deg, transparent 40%, #000 66%, #000 100%); -webkit-mask-image: linear-gradient(180deg, transparent 40%, #000 66%, #000 100%); }
+  .fx-ember { mask-image: radial-gradient(120% 100% at 50% 50%, #000 28%, transparent 84%); -webkit-mask-image: radial-gradient(120% 100% at 50% 50%, #000 28%, transparent 84%); }
+  .grid { position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(246,241,232,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(246,241,232,0.05) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(120% 100% at 50% 40%, #000 30%, transparent 86%);
+    -webkit-mask-image: radial-gradient(120% 100% at 50% 40%, #000 30%, transparent 86%); }
+
+  .ambient { position: absolute; inset: 0; overflow: hidden; }
+  .ambient .bloom { position: absolute; border-radius: 50%; filter: blur(46px); will-change: transform, opacity; mix-blend-mode: screen; }
+  .ambient .bloom-a { width: 62vw; height: 62vw; max-width: 760px; max-height: 760px; left: 6%; top: 0%; background: radial-gradient(circle, rgba(255,115,0,0.16), rgba(255,115,0,0.05) 44%, transparent 70%); animation: driftA 38s var(--ease-in-out) infinite alternate; }
+  .ambient .bloom-b { width: 52vw; height: 52vw; max-width: 620px; max-height: 620px; right: 4%; top: 22%; background: radial-gradient(circle, rgba(255,156,64,0.12), transparent 66%); animation: driftB 50s var(--ease-in-out) infinite alternate; }
+  .ambient .bloom-c { width: 46vw; height: 46vw; max-width: 540px; max-height: 540px; left: 26%; bottom: -10%; background: radial-gradient(circle, rgba(200,70,0,0.10), transparent 68%); animation: driftC 64s var(--ease-in-out) infinite alternate; }
+  .ambient .dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(246,241,232,0.05) 1px, transparent 1.5px); background-size: 23px 23px; mask-image: radial-gradient(120% 100% at 50% 40%, #000 32%, transparent 82%); -webkit-mask-image: radial-gradient(120% 100% at 50% 40%, #000 32%, transparent 82%); }
+  @keyframes driftA { from { transform: translate(-7%, -4%) scale(1); } to { transform: translate(9%, 7%) scale(1.16); } }
+  @keyframes driftB { from { transform: translate(6%, 4%) scale(1.08); } to { transform: translate(-8%, -6%) scale(0.94); } }
+  @keyframes driftC { from { transform: translate(-5%, 4%) scale(1); } to { transform: translate(7%, -5%) scale(1.12); } }
+  .ambient.still .bloom { animation: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" fill="#16140F" />
+<g transform="translate(153.6 153.6) scale(0.4)">
+<path fill="#F6F1E8" d="M32 402.84 L100.86 402.84 L169.72 283.38 L377.13 283.38 L480 104.18 L342.28 104.18 L308.27 163.91 L377.13 163.91 L342.28 223.64 L135.70 223.64 Z" />
+<path fill="#FF7300" d="M204.56 104.18 L272.59 104.18 L238.58 163.91 L169.72 163.91 Z" />
+<path fill="#FF7300" d="M291.67 321.54 L359.70 321.54 L314.90 407.82 L249.36 407.82 Z" />
+</g>
+</svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="Icon.jsx"></script>
+<script type="text/babel" src="ui.jsx"></script>
+<script type="text/babel" src="home/BgFields.jsx"></script>
+<script type="text/babel" src="home/TopBar.jsx"></script>
+<script type="text/babel" src="home/ChatThread.jsx"></script>
+<script type="text/babel" src="home/Composer.jsx"></script>
+<script type="text/babel" src="home/SourcesPanel.jsx"></script>
+<script type="text/babel" src="home/ProfileMenu.jsx"></script>
+<script type="text/babel" src="home/NavRail.jsx"></script>
+<script type="text/babel" src="home/SettingsModal.jsx"></script>
+<script type="text/babel" src="home/app.jsx"></script>
+</body>
+</html>

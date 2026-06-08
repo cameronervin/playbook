@@ -10,13 +10,44 @@ services:
     environment:
       - POSTGRES_USER=app
       - POSTGRES_PASSWORD=${DB_PASSWORD:-localpass}
-      - POSTGRES_DB=appdb
+      - POSTGRES_DB=playbook
 
   valkey:
     ports:
       - "6379:6379"
     env_file:
       - ../envs/.env.local
+
+  litellm-db-init:
+    image: postgres:16-alpine
+    env_file:
+      - ../envs/.env.local
+      - ../envs/.env.litellm.local
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        export PGPASSWORD="$${POSTGRES_PASSWORD:-$${DB_PASSWORD:-localpass}}"
+        db_user="$${POSTGRES_USER:-$${DB_USER:-app}}"
+        db_name="$${POSTGRES_DB:-$${DB_NAME:-playbook}}"
+        psql -h db -U "$${db_user}" -d "$${db_name}" -tAc "SELECT 1 FROM pg_database WHERE datname='litellm'" | grep -q 1 || \
+          psql -h db -U "$${db_user}" -d "$${db_name}" -c "CREATE DATABASE litellm OWNER \"$${db_user}\""
+    restart: "no"
+
+  litellm:
+    ports:
+      - "4000:4000"
+    env_file:
+      - ../envs/.env.litellm.local
+    depends_on:
+      db:
+        condition: service_healthy
+      litellm-db-init:
+        condition: service_completed_successfully
 
   backend:
     ports:
@@ -33,6 +64,10 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      litellm:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
       kb-api:
         condition: service_healthy
 
@@ -47,21 +82,39 @@ services:
       - /app/.next
     command: npm run dev
 
-  # Local S3 via LocalStack (see docs/guides/localstack_setup.md).
-  localstack:
-    image: localstack/localstack:latest
+  # Local S3-compatible object storage via MinIO (see docs/guides/minio_setup.md).
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
     ports:
-      - "4566:4566"
-    environment:
-      - SERVICES=s3
-      - DEBUG=1
+      - "9000:9000"
+      - "9001:9001"
+    env_file:
+      - ../envs/.env.local
     volumes:
-      - localstack_data:/var/lib/localstack
+      - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 3
+
+  minio-bootstrap:
+    image: quay.io/minio/mc:latest
+    env_file:
+      - ../envs/.env.local
+      - ../envs/.env.kb-service.local
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        /usr/bin/mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        /usr/bin/mc mb --ignore-existing "local/$${S3_BUCKET_NAME}"
+        /usr/bin/mc mb --ignore-existing "local/$${AWS_S3_BUCKET}"
 
   celery-worker:
     env_file:
@@ -73,6 +126,8 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
 
   kb-api:
     ports:
@@ -82,6 +137,15 @@ services:
     volumes:
       - ../../kb-service:/app
     command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
 
   kb-valkey:
     ports:
@@ -92,12 +156,31 @@ services:
       - ../envs/.env.kb-service.local
     volumes:
       - ../../kb-service:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
 
   kb-worker-io:
     env_file:
       - ../envs/.env.kb-service.local
     volumes:
       - ../../kb-service:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
 
 volumes:
-  localstack_data:
+  minio_data:
+    name: playbook_minio_data

@@ -6,7 +6,7 @@ from typing import BinaryIO
 
 
 class StorageProvider(ABC):
-    """Abstract base for file storage backends (S3, LocalStack, filesystem)."""
+    """Abstract base for file storage backends (S3-compatible, filesystem)."""
 
     @abstractmethod
     async def upload_file(self, key: str, file: BinaryIO, content_type: str) -> str:

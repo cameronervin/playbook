@@ -27,8 +27,8 @@
     ▼                   ▼                                     ▼
 ┌──────────────┐  ┌──────────────┐       ┌─────────────────────────────┐
 │  PostgreSQL  │  │  AWS S3 /    │       │   LLM Providers             │
-│ Data storage │  │  LocalStack  │       │   Direct (Anthropic-first)  │
-│              │  │ File storage │       │   or Gateway (LiteLLM)      │
+│ Data storage │  │  MinIO       │       │   Direct (Anthropic-first)  │
+│              │  │ File storage │       │   or LiteLLM               │
 └──────────────┘  └──────────────┘       └─────────────────────────────┘
        │
        ▼
@@ -58,7 +58,7 @@ app/
 └── infrastructure/    # External integrations
     ├── db/            # SQLAlchemy engine/session helpers
     ├── storage/       # S3 client (boto3)
-    ├── llm/           # LLM providers (direct + gateway)
+    ├── llm/           # LLM providers (direct + LiteLLM)
     └── workers/       # Celery app + worker tasks (optional)
 ```
 
@@ -66,15 +66,11 @@ app/
 ```
 src/
 ├── app/             # Next.js App Router routes (layouts, pages, route handlers)
-├── features/        # Feature modules
-│   └── [feature]/
-│       ├── components/  # Feature-specific components
-│       ├── hooks/       # Feature-specific hooks
-│       └── index.ts     # Public exports
-├── components/      # Reusable UI (ui/, layout/)
+├── components/      # Reusable UI and feature components
+│   ├── ui/          # Reusable, stateless UI primitives
+│   └── features/    # Feature-specific components
 ├── hooks/           # App-wide hooks
-├── store/           # Zustand stores (client state)
-├── lib/             # API client, constants, utils
+├── lib/             # API client, constants, Zustand stores, utils
 └── types/           # TypeScript type definitions
 ```
 
@@ -84,9 +80,9 @@ src/
 | Frontend | Next.js (App Router), TypeScript, Tailwind v4, TanStack Query, Zustand |
 | Backend | FastAPI, SQLAlchemy 2.0 (async), Pydantic, Alembic |
 | Agents | LangGraph, LangChain |
-| LLM | LiteLLM gateway by default; direct Anthropic/OpenAI only for local or break-glass use |
+| LLM | LiteLLM by default in deployed environments; direct Anthropic/OpenAI only for local or break-glass use |
 | Database | PostgreSQL |
-| Storage | AWS S3, LocalStack (dev) |
+| Storage | AWS S3, MinIO (local dev) |
 | Async (optional) | Valkey (broker/backend) + Celery |
 | Observability | structlog |
 | Deploy | Docker Compose, nginx |
@@ -100,7 +96,7 @@ imports a vendor SDK directly:
   variants). Application code and agents depend on this abstraction, not on a
   concrete client.
 - Transport is selected by `LLM_PROVIDER_MODE`:
-  - `gateway` — route through a LiteLLM proxy (OpenAI-compatible) for
+  - `litellm` — route through a LiteLLM proxy (OpenAI-compatible) for
     centralized credentials, model aliases, routing, fallbacks, spend tracking,
     and cost/rate controls.
   - `direct` — call the provider SDK directly for local development, smoke
@@ -109,7 +105,8 @@ imports a vendor SDK directly:
   [ADR 0002](decisions/0002-llm-provider-modes.md).
 
 The same pattern applies to storage (an S3-compatible client that points at
-LocalStack in dev and real S3 in prod) and any other swappable infrastructure.
+MinIO in local development and real S3 in production) and any other swappable
+infrastructure.
 
 ## Request Lifecycle
 

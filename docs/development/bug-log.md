@@ -20,4 +20,4 @@
 
 | ID | Date | Severity | Description | Status | Fix |
 |----|------|----------|-------------|--------|-----|
-| B-001 | YYYY-MM-DD | — | _Short description of the bug_ | Open | _Link to PR / commit once fixed_ |
+| B-001 | 2026-06-07 | Low | Login page border utilities did not compile to the intended warm hairline tokens, causing visual drift from the Claude design reference. | Fixed | Added missing Tailwind v4 border theme tokens and kept login visual regression tests focused on SSO-only behavior. |

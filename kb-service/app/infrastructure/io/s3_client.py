@@ -1,7 +1,7 @@
 """Process-wide cached S3 client builder.
 
 One boto3 S3 client per process, built with thread-safe double-checked locking.
-The client honours ``settings.AWS_S3_ENDPOINT_URL`` (set it to a LocalStack URL
+The client honours ``settings.AWS_S3_ENDPOINT_URL`` (set it to a MinIO URL
 for local dev), region, explicit access keys, or a named profile — in that
 order of precedence.
 
@@ -27,7 +27,10 @@ def _build_s3_client_uncached():
 
     from app.core.config import settings
 
-    boto_config = Config(retries={"max_attempts": 3, "mode": "adaptive"})
+    boto_config = Config(
+        retries={"max_attempts": 3, "mode": "adaptive"},
+        s3={"addressing_style": "path"},
+    )
     kwargs: dict = {"region_name": settings.AWS_REGION, "config": boto_config}
     if settings.AWS_S3_ENDPOINT_URL:
         kwargs["endpoint_url"] = settings.AWS_S3_ENDPOINT_URL

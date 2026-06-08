@@ -1,135 +1,91 @@
 # API Endpoints
 
-> Template — `examples` is an illustrative resource. Replace it with your real
-> resources, following the REST conventions below. Keep this doc in sync with
-> the code (update it whenever you add or change an endpoint).
-
 Base URL: `/api/v1`
 
-## REST Conventions
+This document tracks the Playbook API surface. Keep it aligned with implemented
+routes and the product API specification in
+`prd/02-technical-docs/01-playbook/api-specification.md`.
+
+## Conventions
 
 | Rule | Detail |
 |------|--------|
-| Plural nouns | `/examples`, not `/example` or `/getExample` |
-| No verbs in URLs | Use the HTTP method to convey the action |
+| Plural nouns | Use resource nouns such as `/conversations` and `/admin/kb/documents` |
 | Versioned | All routes live under `/api/v1` |
-| Typed responses | Every route declares a Pydantic `response_model` |
-| Status codes | 200 GET/PUT · 201 POST · 204 DELETE · 400/401/403/404 errors |
-| Auth | Bearer token via `fastapi-users`; protected routes require it |
+| Thin routes | Routes validate input, call services, and return DTOs |
+| Typed responses | Every route declares a Pydantic `response_model` once implemented |
+| Auth | Protected routes require the app auth dependency or the selected OAuth integration |
+| Errors | API errors use nested `{"error": {"code", "message", "retryable", "details"}}` payloads and include `details.request_id` when available |
 
-## Health
+Example error response:
+
+```json
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Admin role required",
+    "retryable": false,
+    "details": {
+      "request_id": "request-id"
+    }
+  }
+}
+```
+
+## Implemented
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Liveness/readiness check |
+| GET | `/auth/providers` | List configured Google/Microsoft OAuth providers |
+| GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
+| GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session; browser callers receive a 303 redirect to `FRONTEND_URL + next_route` |
+| POST | `/auth/logout` | Clear the current app session cookie |
+| GET | `/users/me` | Return current authenticated user/profile |
+| PATCH | `/users/me/profile` | Complete/update current athlete profile |
+| GET | `/admin/users` | List organization users for super-admin role management |
+| PATCH | `/admin/users/{user_id}/role` | Update a user's Playbook role |
+| GET | `/conversations` | List current athlete conversations |
+| POST | `/conversations` | Create a current-athlete conversation from the initial message |
+| GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations |
+| GET | `/admin/kb/documents` | List KB documents and status |
+| POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
+| GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
+| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags, official flag, priority, and source date |
+| POST | `/admin/kb/documents/{document_id}/retry` | Retry document ingestion |
+| DELETE | `/admin/kb/documents/{document_id}` | Delete backend document record, original file, and searchable KB vectors |
+| POST | `/kb/webhook` | Receive signed KB-service status callbacks |
+| GET | `/admin/audit-logs` | Query org-scoped audit log records |
 
 ```bash
 curl http://localhost:8000/api/v1/health
-# {"status": "ok"}
+# {"status": "healthy"}
 ```
 
-## Auth
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Register user |
-| POST | `/auth/jwt/login` | JWT login |
-| POST | `/auth/jwt/logout` | JWT logout |
-| GET | `/auth/users/me` | Current user |
+For a repeatable local Swagger and curl validation pass, see
+[`phase1_backend_endpoint_validation.md`](../guides/phase1_backend_endpoint_validation.md).
 
-Auth is provided by `fastapi-users`. Add SSO/OAuth routes (e.g. `/auth/oauth/*`)
-here when you configure a provider.
+## Remaining Planned Surface
 
-## Examples
-| Method | Endpoint | Description | Success |
-|--------|----------|-------------|---------|
-| GET | `/examples` | List the current user's examples | 200 |
-| POST | `/examples` | Create an example | 201 |
-| GET | `/examples/{id}` | Get one example | 200 |
-| PUT | `/examples/{id}` | Update an example | 200 |
-| DELETE | `/examples/{id}` | Delete an example | 204 |
+### Athlete Chat
 
-### List Examples
-```bash
-curl http://localhost:8000/api/v1/examples \
-  -H "Authorization: Bearer <token>"
-```
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks |
+| POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 
-**Response** (200 OK):
-```json
-{
-  "items": [
-    {
-      "id": "uuid",
-      "name": "First example",
-      "description": null,
-      "status": "draft",
-      "created_at": "2026-01-01T10:00:00Z",
-      "updated_at": "2026-01-01T10:00:00Z"
-    }
-  ],
-  "total": 1
-}
-```
+### Admin Analytics and Governance
 
-### Create Example
-```bash
-curl -X POST http://localhost:8000/api/v1/examples \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "First example", "description": "Optional text"}'
-```
-
-**Response** (201 Created):
-```json
-{
-  "id": "uuid",
-  "name": "First example",
-  "description": "Optional text",
-  "status": "draft",
-  "data": {},
-  "created_at": "2026-01-01T10:00:00Z",
-  "updated_at": "2026-01-01T10:00:00Z"
-}
-```
-
-### Get Example
-```bash
-curl http://localhost:8000/api/v1/examples/{id} \
-  -H "Authorization: Bearer <token>"
-```
-
-Returns 200 with the example, or 404 if not found / not owned by the caller.
-
-### Update Example
-```bash
-curl -X PUT http://localhost:8000/api/v1/examples/{id} \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Renamed", "status": "active"}'
-```
-
-Returns 200 with the updated example.
-
-### Delete Example
-```bash
-curl -X DELETE http://localhost:8000/api/v1/examples/{id} \
-  -H "Authorization: Bearer <token>"
-```
-
-Returns 204 No Content.
-
-## Error Shape
-
-Errors return a consistent JSON body:
-
-```json
-{
-  "detail": "Example not found"
-}
-```
-
-| Code | Meaning |
-|------|---------|
-| 400 | Validation error (malformed body, failed Pydantic validation) |
-| 401 | Not authenticated |
-| 403 | Authenticated but not authorized for this resource |
-| 404 | Resource not found or not owned by caller |
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/admin/analytics/summary` | Query volume, topics, unanswered, risk summary |
+| GET | `/admin/analytics/queries` | Anonymized query list |
+| GET | `/admin/dashboard-insights/current` | Get latest completed insight output |
+| GET | `/admin/dashboard-insights/outputs` | List generated insight outputs |
+| GET | `/admin/dashboard-insights/runs` | List dashboard insight runs |
+| POST | `/admin/dashboard-insights/runs` | Start manual insight generation |
+| GET | `/admin/chat/sessions` | List current admin chat sessions |
+| POST | `/admin/chat/sessions` | Create an admin chat session |
+| GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question |

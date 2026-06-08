@@ -44,7 +44,7 @@ _manager = _StorageManager()
 def get_storage_provider() -> StorageProvider:
     """Factory for the storage provider (cached singleton).
 
-    Controlled by S3_ENDPOINT_URL: set to a LocalStack URL for local dev, leave
+    Controlled by S3_ENDPOINT_URL: set to a MinIO URL for local dev, leave
     empty/unset for production AWS S3.
     """
     return _manager.get_provider()

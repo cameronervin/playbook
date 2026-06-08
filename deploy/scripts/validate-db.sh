@@ -12,7 +12,7 @@ NC='\033[0m'
 
 CONTAINER_NAME="${DB_CONTAINER:-agentic-app-db-1}"
 DB_USER="${DB_USER:-app}"
-DB_NAME="${DB_NAME:-appdb}"
+DB_NAME="${DB_NAME:-playbook}"
 
 print_status() {
     if [ "$1" -eq 0 ]; then

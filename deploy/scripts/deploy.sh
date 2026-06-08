@@ -44,6 +44,16 @@ if [[ "$ENV" == "prod" && ! -f "$ENVS_DIR/.env.prod" ]]; then
     exit 1
 fi
 
+if [[ "$ENV" == "local" ]]; then
+    for file in ".env.local" ".env.kb-service.local" ".env.litellm.local"; do
+        if [[ ! -f "$ENVS_DIR/$file" ]]; then
+            echo "Error: local env file not found at $ENVS_DIR/$file"
+            echo "Create it from $file.example and fill in local placeholder values."
+            exit 1
+        fi
+    done
+fi
+
 echo "=========================================="
 echo "Environment: $ENV"
 echo "Compose dir: $COMPOSE_DIR"

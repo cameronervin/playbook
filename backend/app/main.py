@@ -1,14 +1,7 @@
 """FastAPI application — composition root.
 
 Wires together all components but contains no implementation details.
-Infrastructure lifecycle is owned by the lifespan, in this order:
-
-    observability -> llm -> kb -> storage -> checkpointer -> graph compile
-    -> executors -> yield -> reverse cleanup
-
-The agent layer (app/agents/**) is owned by a separate module. It is wired here
-inside a clearly-commented try/except block so this file still imports and the
-API still boots even when the agent layer is stubbed or absent.
+Infrastructure lifecycle is owned by the lifespan.
 """
 
 import sys
@@ -25,7 +18,16 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1 import example, health
+from app.api.v1 import (
+    admin_users,
+    audit,
+    auth,
+    conversations,
+    health,
+    kb_documents,
+    kb_webhook,
+    users,
+)
 from app.core.config import settings
 from app.core.exception_handlers import (
     app_error_handler,
@@ -34,16 +36,16 @@ from app.core.exception_handlers import (
     validation_exception_handler,
 )
 from app.core.exceptions import AppError
-from app.infrastructure.db.session import cleanup_db_engine, get_db
 from app.infrastructure.checkpointer import (
     cleanup_checkpointer_pool,
     create_checkpointer,
     create_checkpointer_pool,
 )
+from app.infrastructure.db.session import cleanup_db_engine
 from app.infrastructure.knowledgebase import get_kb_provider, is_kb_feature_enabled
 from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import cleanup_storage_provider, get_storage_provider
-from app.middleware import setup_cors
+from app.middleware import setup_cors, setup_request_context
 from app.observability.agent_trace import verify_tracing_configuration
 
 logger = structlog.get_logger(__name__)
@@ -53,7 +55,6 @@ API_V2_PREFIX = "/api/v2"
 
 OPENAPI_TAGS = [
     {"name": "Health", "description": "Platform liveness and dependency health checks."},
-    {"name": "Examples", "description": "Generic example entity CRUD (replace with your domain)."},
 ]
 
 
@@ -72,7 +73,7 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
 
     # 2. LLM provider
     llm_provider = get_llm_provider()
-    chat_model = llm_provider.get_chat_model()
+    llm_provider.get_chat_model()
     logger.info("Initialized LLM provider", provider=llm_provider.provider_name, mode=settings.LLM_PROVIDER_MODE)
 
     # 3. Knowledgebase provider
@@ -86,7 +87,7 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
         try:
             config_id = await kb_provider.resolve_configuration()
             logger.info("KB configuration resolved", config_id=config_id)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "KB configuration not resolved at startup — retrieval may fail "
                 "until the KB service is reachable",
@@ -96,43 +97,14 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
         logger.info("Knowledgebase disabled (KB_ENABLED=false)")
 
     # 4. Storage
-    storage = get_storage_provider()
+    get_storage_provider()
     logger.info("Initialized storage provider")
 
     # 5. Checkpointer
     checkpointer_pool = await create_checkpointer_pool()
-    checkpointer = await create_checkpointer(checkpointer_pool)
+    await create_checkpointer(checkpointer_pool)
     logger.info("Created checkpointer connection pool")
 
-    # 6 & 7. LangGraph graph compile + executors (AGENT LAYER WIRED HERE)
-    # ---------------------------------------------------------------------
-    # The agent layer (app/agents/**) is owned separately. It is expected to
-    # expose `compile_example_graph(...)` and an `ExampleExecutor`. Wrapped in
-    # try/except so a stubbed/absent agent layer never blocks API startup —
-    # dependency injection will raise a clear error at first dispatch instead.
-    example_executor = None
-    try:
-        from app.agents.builders import compile_example_graph  # type: ignore[import-not-found]
-        from app.agents.executors import ExampleExecutor  # type: ignore[import-not-found]
-
-        example_graph = compile_example_graph(
-            chat_model=chat_model,
-            get_session=get_db,
-            storage=storage,
-            checkpointer=checkpointer,
-        )
-        example_executor = ExampleExecutor(example_graph, tracing_enabled=settings.TRACING_ENABLED)
-        app.state.example_graph = example_graph
-        logger.info("Compiled agent graph with PostgreSQL checkpointer")
-    except Exception as exc:
-        # Agent layer not yet present / stubbed — keep the API up.
-        logger.warning(
-            "Agent layer not wired — agent endpoints will be unavailable until "
-            "app/agents/** provides compile_example_graph() / ExampleExecutor",
-            error=str(exc),
-        )
-
-    app.state.example_executor = example_executor
     app.state.checkpointer_pool = checkpointer_pool
     app.state.kb_provider = kb_provider
 
@@ -144,26 +116,26 @@ async def _shutdown_infrastructure(checkpointer_pool: object, kb_provider: objec
     try:
         await cleanup_checkpointer_pool(checkpointer_pool)  # type: ignore[arg-type]
         logger.info("Checkpointer connection pool closed")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error closing checkpointer pool", error=str(e))
 
     if kb_provider is not None:
         try:
             await kb_provider.close()  # type: ignore[attr-defined]
             logger.info("Knowledgebase provider closed")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Error closing knowledgebase provider", error=str(e))
 
     try:
         cleanup_storage_provider()
         logger.info("Storage provider cleaned up")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error cleaning up storage provider", error=str(e))
 
     try:
         await cleanup_db_engine()
         logger.info("Database engine disposed")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Error disposing database engine", error=str(e))
 
 
@@ -190,35 +162,39 @@ async def lifespan(app: FastAPI):
     logger.info("%s API shutdown complete", settings.PROJECT_NAME)
 
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    debug=settings.DEBUG,
-    lifespan=lifespan,
-    openapi_tags=OPENAPI_TAGS,
-)
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI app."""
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        debug=settings.DEBUG,
+        lifespan=lifespan,
+        openapi_tags=OPENAPI_TAGS,
+    )
 
-# Register global exception handlers
-app.add_exception_handler(AppError, app_error_handler)
-app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
-logger.info("Registered global exception handlers")
+    app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, generic_exception_handler)
+    logger.info("Registered global exception handlers")
 
-# Middleware
-setup_cors(app)
+    setup_cors(app)
+    setup_request_context(app)
 
-# ============================================================
-# Routes
-# ============================================================
-app.include_router(health.router, prefix=API_V1_PREFIX)
-app.include_router(example.router, prefix=API_V1_PREFIX)
+    app.include_router(auth.router, prefix=API_V1_PREFIX)
+    app.include_router(users.router, prefix=API_V1_PREFIX)
+    app.include_router(admin_users.router, prefix=API_V1_PREFIX)
+    app.include_router(audit.router, prefix=API_V1_PREFIX)
+    app.include_router(kb_documents.router, prefix=API_V1_PREFIX)
+    app.include_router(kb_webhook.router, prefix=API_V1_PREFIX)
+    app.include_router(conversations.router, prefix=API_V1_PREFIX)
+    app.include_router(health.router, prefix=API_V1_PREFIX)
 
-# V2 async task-pattern routers are included here as they are added:
-# from app.api.v2 import example as example_v2
-# app.include_router(example_v2.router, prefix=API_V2_PREFIX)
+    @app.get("/")
+    async def root() -> dict[str, str]:
+        """Root endpoint."""
+        return {"message": f"{settings.PROJECT_NAME} API", "status": "ok"}
+
+    return app
 
 
-@app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint."""
-    return {"message": f"{settings.PROJECT_NAME} API", "status": "ok"}
+app = create_app()

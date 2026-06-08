@@ -26,9 +26,9 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | Method | Endpoint | Purpose | Role |
 |--------|----------|---------|------|
 | GET | `/conversations` | List current athlete conversations | athlete |
-| POST | `/conversations` | Create a new conversation | athlete |
+| POST | `/conversations` | Create a new conversation from the initial user message | athlete |
 | GET | `/conversations/{conversation_id}` | Get conversation with messages, citations, files | athlete-owner |
-| POST | `/conversations/{conversation_id}/messages` | Submit user message and start streamed generation | athlete-owner |
+| POST | `/conversations/{conversation_id}/messages` | Submit follow-up user message and start streamed generation | athlete-owner |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks | athlete-owner |
 | POST | `/conversations/{conversation_id}/files` | Upload conversation-scoped file | athlete-owner |
 
@@ -104,6 +104,20 @@ Response:
 ```
 
 ### Submit Chat Message
+Create a new conversation with the athlete's first message:
+
+```json
+POST /api/v1/conversations
+{
+  "initial_message": "Can I accept this NIL deal?"
+}
+```
+
+Response includes the created conversation and the initial user message. The
+conversation title is `null` until agent-generated title logic updates it.
+
+Submit a follow-up message to an existing conversation:
+
 ```json
 POST /api/v1/conversations/{conversation_id}/messages
 {

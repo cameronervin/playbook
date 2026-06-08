@@ -1,0 +1,11 @@
+ARG LITELLM_IMAGE_TAG=1.84.1
+
+FROM docker.litellm.ai/berriai/litellm:${LITELLM_IMAGE_TAG}
+
+WORKDIR /app
+
+COPY deploy/litellm/config.yaml /app/config.yaml
+
+EXPOSE 4000/tcp
+
+CMD ["--config", "/app/config.yaml", "--port", "4000"]

@@ -76,7 +76,7 @@ Recommended MVP metrics:
 Environment-configured values:
 - service auth token,
 - webhook signing secret,
-- S3/LocalStack bucket and endpoint,
+- S3-compatible bucket and endpoint,
 - Valkey broker URL,
 - PostgreSQL/pgvector URL,
 - embedding provider mode (`gateway` by default),

@@ -21,7 +21,7 @@ async def worker_db_session():
     Usage::
 
         async with worker_db_session() as session:
-            repo = ExampleRepository(session=session)
+            repo = SomeRepository(session=session)
             await repo.create({...})
     """
     session_factory = get_session_factory()

@@ -2,7 +2,7 @@
 
 ## Layers
 ```
-app/ (routes, layouts) → features/ → components/ (UI) → hooks/ (logic) → lib/store (state)
+src/app/ (routes, layouts) -> src/components/ -> src/hooks/ -> src/lib/store/ (state)
 ```
 
 ## Server vs Client Components
@@ -19,7 +19,7 @@ app/ (routes, layouts) → features/ → components/ (UI) → hooks/ (logic) →
 - Zustand for client UI state (auth, panels, toggles)
 - Custom hooks to encapsulate client logic (must be in `'use client'` files)
 - `cn()` for conditional classes
-- Co-locate routes in `app/`; use `layout.tsx`, `page.tsx`, `loading.tsx`, `error.tsx`
+- Co-locate routes in `src/app/`; use `layout.tsx`, `page.tsx`, `loading.tsx`, `error.tsx`
 
 ## DON'T
 - Use `any` type
@@ -42,9 +42,9 @@ app/ (routes, layouts) → features/ → components/ (UI) → hooks/ (logic) →
 
 ## Examples
 ```tsx
-// Server Component (default) — app/items/page.tsx
-import { getItems } from '@/lib/api/items'
-import { ItemList } from '@/features/items/components/ItemList'
+// Server Component (default) - src/app/items/page.tsx
+import { getItems } from '@/src/lib/api/items'
+import { ItemList } from '@/src/components/features/items/ItemList'
 
 export default async function ItemsPage() {
   const items = await getItems()
@@ -57,7 +57,7 @@ export default async function ItemsPage() {
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api/client'
+import { api } from '@/src/lib/api/client'
 
 interface Props { id: string }
 

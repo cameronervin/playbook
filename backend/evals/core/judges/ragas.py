@@ -117,7 +117,7 @@ def _retrieved_contexts(run: GraphRun) -> list[str]:
 
 @dataclass
 class RagasJudge:
-    """RAG retrieval/generation judge backed by injected LiteLLM-gateway models."""
+    """RAG retrieval/generation judge backed by injected LiteLLM models."""
 
     chat_model: Any  # langchain BaseChatModel (gateway-routed)
     embeddings: Any | None = None  # langchain Embeddings (gateway-routed) or None

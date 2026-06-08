@@ -23,9 +23,9 @@ never imported.
 
 | Component        | Interface / entry            | Modes                | Real backend         |
 |------------------|------------------------------|----------------------|----------------------|
-| **LLM**          | `llm/` — `BaseLLMProvider`   | `direct`, `gateway`  | Anthropic / LiteLLM  |
+| **LLM**          | `llm/` — `BaseLLMProvider`   | `direct`, `litellm`  | Anthropic / LiteLLM  |
 | **Knowledgebase**| `knowledgebase/` — `BaseKnowledgebaseProvider` | `mock`, `local` | KB service (httpx)   |
-| **Storage**      | `storage/` — `StorageProvider` | (single)           | S3 / LocalStack (boto3) |
+| **Storage**      | `storage/` — `StorageProvider` | (single)           | S3-compatible / AWS S3 (boto3) |
 | **Database**     | `db/` — engine/session helpers | (single)           | Postgres (SQLAlchemy) |
 | **Checkpointer** | `checkpointer.py`            | (single)             | Postgres (LangGraph) |
 

@@ -10,12 +10,37 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import AppError
 from app.schemas.errors import (
+    ErrorDetail,
     ErrorResponse,
     ValidationErrorDetail,
-    ValidationErrorResponse,
 )
 
 logger = structlog.get_logger(__name__)
+
+
+def _request_id(request: Request) -> str | None:
+    request_id = getattr(request.state, "request_id", None)
+    if isinstance(request_id, str) and request_id:
+        return request_id
+    header_value = request.headers.get("X-Request-ID")
+    return header_value or None
+
+
+def _error_response(
+    *,
+    code: str,
+    message: str,
+    retryable: bool,
+    details: dict,
+) -> ErrorResponse:
+    return ErrorResponse(
+        error=ErrorDetail(
+            code=code,
+            message=message,
+            retryable=retryable,
+            details=details,
+        )
+    )
 
 
 def _http_exception_message(detail: object) -> str:
@@ -45,11 +70,15 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         exc_info=True,
     )
 
-    error_response = ErrorResponse(
-        error_code=exc.error_code.value,
+    details = dict(exc.details)
+    if (request_id := _request_id(request)) is not None:
+        details.setdefault("request_id", request_id)
+
+    error_response = _error_response(
+        code=exc.error_code.value,
         message=exc.message,
         retryable=exc.retryable,
-        details=exc.details,
+        details=details,
     )
 
     return JSONResponse(status_code=exc.status, content=error_response.model_dump())
@@ -78,11 +107,15 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     error_code = error_code_map.get(exc.status_code, "UNKNOWN_ERROR")
     retryable = exc.status_code in (429, 500, 503, 504)
 
-    error_response = ErrorResponse(
-        error_code=error_code,
+    details = {}
+    if (request_id := _request_id(request)) is not None:
+        details["request_id"] = request_id
+
+    error_response = _error_response(
+        code=error_code,
         message=_http_exception_message(exc.detail),
         retryable=retryable,
-        details={},
+        details=details,
     )
 
     return JSONResponse(status_code=exc.status_code, content=error_response.model_dump())
@@ -106,12 +139,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         for error in exc.errors()
     ]
 
-    error_response = ValidationErrorResponse(
-        error_code="VALIDATION_ERROR",
+    details: dict = {"validation_errors": [error.model_dump() for error in validation_errors]}
+    if (request_id := _request_id(request)) is not None:
+        details["request_id"] = request_id
+
+    error_response = _error_response(
+        code="VALIDATION_ERROR",
         message="Request validation failed",
         retryable=False,
-        details={},
-        validation_errors=validation_errors,
+        details=details,
     )
 
     return JSONResponse(
@@ -131,11 +167,15 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         exc_info=True,
     )
 
-    error_response = ErrorResponse(
-        error_code="INTERNAL_SERVER_ERROR",
+    details = {"error_type": type(exc).__name__}
+    if (request_id := _request_id(request)) is not None:
+        details["request_id"] = request_id
+
+    error_response = _error_response(
+        code="INTERNAL_SERVER_ERROR",
         message="An unexpected error occurred",
         retryable=False,
-        details={"error_type": type(exc).__name__},
+        details=details,
     )
 
     return JSONResponse(

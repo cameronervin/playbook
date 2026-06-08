@@ -26,7 +26,13 @@ from app.core.exceptions import (
 )
 from app.infrastructure.knowledgebase.context import assemble_context
 from app.infrastructure.knowledgebase.dedup import deduplicate_chunks
-from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
+from app.schemas.knowledgebase import (
+    KBDocumentIngestRequest,
+    KBDocumentIngestResponse,
+    KBDocumentStatusResponse,
+    KnowledgebaseResult,
+    RetrievedChunk,
+)
 
 from .base import BaseKnowledgebaseProvider
 
@@ -97,10 +103,11 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
     async def health_check(self) -> bool:
         try:
             response = await self._client.get("/health")
-            return response.status_code == 200
         except httpx.HTTPError as exc:
             logger.warning("kb_local_health_check_failed", error=str(exc))
             return False
+        else:
+            return response.status_code == 200
 
     async def resolve_configuration(self) -> str:
         if self._config_id is not None:
@@ -122,6 +129,54 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    async def ingest_document(
+        self,
+        request: KBDocumentIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        """Start ingestion through the current KB-service /ingest/url route."""
+        config_id = await self.resolve_configuration()
+        payload = {
+            "document_id": str(request.playbook_document_id),
+            "configuration_id": config_id,
+            "url": request.source_uri,
+            "filename": request.filename,
+            "metadata": {
+                "playbook_document_id": str(request.playbook_document_id),
+                "source_title": request.source_title,
+                "source_date": (
+                    request.source_date.isoformat() if request.source_date else None
+                ),
+                "is_official": request.is_official,
+                "priority": request.priority,
+                "visibility_policy": request.visibility_policy,
+                "metadata_tags": request.metadata_tags,
+                "content_type": request.content_type,
+                "size_bytes": request.size_bytes,
+            },
+        }
+        data = await self._post("/api/kb/ingest/url", payload)
+        return KBDocumentIngestResponse(
+            kb_service_document_id=data["document_id"],
+            playbook_document_id=request.playbook_document_id,
+            task_id=data.get("task_id"),
+            status="pending",
+        )
+
+    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
+        """Fetch task status through the current KB-service polling route."""
+        data = await self._get(f"/api/kb/status/{task_id}")
+        return KBDocumentStatusResponse(
+            document_id=data.get("document_id"),
+            task_id=data.get("task_id", task_id),
+            status=data.get("celery_state"),
+            error_message=data.get("error_message"),
+            metadata={"stages": data.get("stages", [])},
+        )
+
+    async def delete_document(self, kb_service_document_id: str) -> None:
+        """Delete a document through the current KB-service route."""
+        await self._delete(f"/api/kb/document/{kb_service_document_id}")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -147,6 +202,19 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         except httpx.HTTPError as exc:
             raise KBConnectionError(f"KB request to {path} failed: {exc}") from exc
 
+        return self._handle_response(path, response)
+
+    async def _delete(self, path: str) -> Any:
+        """DELETE and map transport/HTTP errors to KB exceptions."""
+        try:
+            response = await self._client.delete(path)
+        except httpx.TimeoutException as exc:
+            raise KBTimeoutError(f"KB request to {path} timed out") from exc
+        except httpx.HTTPError as exc:
+            raise KBConnectionError(f"KB request to {path} failed: {exc}") from exc
+
+        if response.status_code == 204:
+            return None
         return self._handle_response(path, response)
 
     @staticmethod

@@ -10,7 +10,7 @@
 deploy/
 ├── compose/
 │   ├── base.yml      # Shared service definitions (db, backend, frontend, valkey, ...)
-│   ├── local.yml     # Local dev: bind mounts, hot reload, exposed ports, LocalStack
+│   ├── local.yml     # Local dev: bind mounts, hot reload, exposed ports, MinIO
 │   ├── dev.yml       # Dev server: built images, exposed API
 │   └── prod.yml      # Production: no volumes, replicas, internal DB, resource limits
 ├── docker/
@@ -32,6 +32,11 @@ what differs.
 ```bash
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up
 ```
+
+Python service images use `uv sync --locked --no-dev` against each service's
+committed `pyproject.toml` and `uv.lock`. The container virtual environment is
+created at `/opt/venv`, which keeps local bind mounts from hiding installed
+packages during hot-reload development.
 
 ## Deploy Script
 
@@ -71,7 +76,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
   healthcheck — keep them.
 - **Reverse proxy**: nginx serves the frontend and proxies `/api` to the
   backend (see `deploy/docker/nginx.conf`).
-- **LLM transport**: production should use `LLM_PROVIDER_MODE=gateway` and route
+- **LLM transport**: production should use `LLM_PROVIDER_MODE=litellm` and route
   backend, KB-service, and eval traffic through LiteLLM Proxy. Direct mode is
   reserved for local smoke tests or an explicit break-glass path.
 
@@ -79,7 +84,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 
 LiteLLM should run as its own service/container in deployed environments. The
 application services should not hold provider API keys directly; they should
-call the proxy with `LLM_GATEWAY_BASE_URL` and a LiteLLM virtual/service key.
+call the proxy with `LITELLM_BASE_URL` and a LiteLLM virtual/service key.
 
 Recommended deployment shape:
 
@@ -88,8 +93,9 @@ Recommended deployment shape:
 | `litellm` service | Runs LiteLLM Proxy on the internal network, usually port `4000` |
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, and `playbook-embed` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
-| Backend env | `LLM_PROVIDER_MODE=gateway`, `LLM_GATEWAY_BASE_URL=http://litellm:4000`, `LLM_GATEWAY_API_KEY=<service key>` |
-| KB-service env | Gateway base URL/key plus embedding alias for ingestion |
+| Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat` |
+| KB-service env | `KB_LLM_PROVIDER_MODE=gateway`, LiteLLM base URL/key, and `LLM_GATEWAY_EMBED_MODEL=playbook-embed` |
+| LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, and `LITELLM_DATABASE_URL` |
 
 Use a separate LiteLLM database or at least a separate database/user in the
 Postgres cluster. Do not add LiteLLM tables to the Playbook application data
@@ -100,6 +106,27 @@ LiteLLM's database is optional for a minimal proxy, but it is required for the
 features Playbook wants in scope: virtual keys, spend tracking, budgets, and the
 admin UI. That means the production deployment should include a LiteLLM DB
 connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
+Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` should be
+available only to the LiteLLM proxy service. The backend and KB-service should
+hold only LiteLLM virtual/service keys.
+
+The project-owned LiteLLM image is defined in
+`deploy/docker/Dockerfile.litellm` and uses `deploy/litellm/config.yaml` for
+model aliases:
+
+| Alias | Provider model | Used by |
+|-------|----------------|---------|
+| `playbook-chat` | `LITELLM_PLAYBOOK_CHAT_MODEL` | athlete chat, admin chat, eval judge default |
+| `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries or future fast paths |
+| `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
+
+For local Compose, `litellm-db-init` creates a separate `litellm` database in
+the local Postgres container. Production should provision the LiteLLM database
+through infrastructure or a managed database workflow and provide
+`LITELLM_DATABASE_URL` through the secrets manager.
+
+See [Self-Hosted LiteLLM](litellm_self_hosting.md) for the concise operations
+guide.
 
 ## Verifying a Deploy
 
@@ -109,4 +136,15 @@ connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
 
 # Backend health
 curl http://<host>/api/v1/health
+
+# LiteLLM proxy health
+curl http://<host-or-internal-litellm>:4000/health/liveliness
+curl http://<host-or-internal-litellm>:4000/health/readiness
+```
+
+To verify Python dependency resolution before a deploy:
+
+```bash
+cd backend && uv sync --locked
+cd ../kb-service && uv sync --locked
 ```

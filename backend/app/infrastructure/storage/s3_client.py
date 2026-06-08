@@ -1,7 +1,7 @@
 """S3-compatible storage provider with retry logic and timeouts.
 
-Works with LocalStack, AWS S3, and AWS profiles. boto3 calls are synchronous,
-so each one is dispatched to a thread executor with an asyncio timeout.
+Works with MinIO, AWS S3, and AWS profiles. boto3 calls are synchronous, so each
+one is dispatched to a thread executor with an asyncio timeout.
 """
 
 import asyncio
@@ -23,22 +23,23 @@ logger = structlog.get_logger()
 
 
 class S3StorageProvider(StorageProvider):
-    """S3 storage provider — works with LocalStack, AWS S3, and AWS profiles.
+    """S3 storage provider — works with MinIO, AWS S3, and AWS profiles.
 
     Authentication methods (in order of precedence):
-    1. Explicit credentials (S3_ACCESS_KEY_ID + S3_SECRET_ACCESS_KEY) — LocalStack.
+    1. Explicit credentials (S3_ACCESS_KEY_ID + S3_SECRET_ACCESS_KEY) — MinIO.
     2. AWS profile (AWS_PROFILE) — e.g. CLI-issued temporary credentials.
     3. Default AWS credentials chain — default profile or IAM role.
 
     Environment:
-    - LocalStack: S3_ENDPOINT_URL=http://localstack:4566 + explicit keys.
-    - AWS S3:     S3_ENDPOINT_URL=None + profile or explicit keys.
+    - MinIO:  S3_ENDPOINT_URL=http://minio:9000 + explicit keys.
+    - AWS S3: S3_ENDPOINT_URL=None + profile or explicit keys.
     """
 
     def __init__(self) -> None:
         boto_config = BotoConfig(
             signature_version="s3v4",
             region_name=settings.S3_REGION,
+            s3={"addressing_style": "path"},
             retries={"max_attempts": 3, "mode": "adaptive"},
             connect_timeout=settings.S3_TIMEOUT,
             read_timeout=settings.S3_TIMEOUT,
@@ -71,10 +72,10 @@ class S3StorageProvider(StorageProvider):
     # ------------------------------------------------------------------
 
     def _ensure_bucket(self) -> None:
-        """Create the bucket if it does not exist (useful for LocalStack).
+        """Create the bucket if it does not exist (useful for local MinIO).
 
         Connection failures are logged as warnings so the app can still start
-        when S3/LocalStack is temporarily unavailable.
+        when S3-compatible storage is temporarily unavailable.
         """
         try:
             self._client.head_bucket(Bucket=self._bucket)

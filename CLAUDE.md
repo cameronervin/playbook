@@ -31,7 +31,7 @@ Ask before deciding when: multiple approaches exist, requirements are ambiguous,
 
 ```
 backend/app/ api/v1/ -> services/ -> repositories/ -> models/
-frontend/ app/ -> features/ -> components/ -> hooks -> lib/store
+frontend/src/{app,components,hooks,lib,types}/
 kb-service/ api/ -> services/ -> repositories/ -> models/   (+ workers/ Celery pipeline)
 ```
 
@@ -91,7 +91,7 @@ docs/
 │   ├── deployment.md
 │   ├── contributing.md
 │   ├── postgresql_setup.md
-│   └── localstack_setup.md
+│   └── minio_setup.md
 └── agents/
     ├── tools.md
     └── context-engineering.md
@@ -160,6 +160,10 @@ prd/
 └── 03-implementation/
     └── _implementation-plan.md
 ```
+
+Frontend wireframe work must also read `docs/design/README.md`,
+`docs/design/frontend_wireframe_implementation_plan.md`, and the reference
+screens in `docs/design/design-reference/` before changing UI code.
 
 | Need | Read |
 |------|------|
@@ -232,7 +236,7 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 
 | Task | Reference |
 |------|-----------|
-| Start dev services (Postgres, LocalStack, Valkey, backend, frontend) | [.claude/commands/start-services.md](.claude/commands/start-services.md) |
+| Start dev services (Postgres, MinIO, Valkey, backend, frontend) | [.claude/commands/start-services.md](.claude/commands/start-services.md) |
 | Git commit conventions | [.claude/commands/git-commits.md](.claude/commands/git-commits.md) |
 | Bug squash workflow | [.claude/commands/bug-squasher.md](.claude/commands/bug-squasher.md) |
 | Code review workflow | [.claude/commands/code-review.md](.claude/commands/code-review.md) |
@@ -251,7 +255,8 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 ./deploy/scripts/deploy.sh dev --build --detach
 
 # Backend standalone
-cd backend && uvicorn app.main:app --reload && pytest -v
+cd backend && uv run uvicorn app.main:app --reload
+cd backend && uv run pytest -v
 
 # Frontend standalone
 cd frontend && npm run dev && npm test

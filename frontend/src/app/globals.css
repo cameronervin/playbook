@@ -1,0 +1,285 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: var(--font-archivo), system-ui, sans-serif;
+  --font-display-alt: var(--font-sora), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-inter), system-ui, sans-serif;
+
+  --color-orange-50: #fff3e9;
+  --color-orange-100: #ffe0c4;
+  --color-orange-200: #ffc089;
+  --color-orange-300: #ff9d4d;
+  --color-orange-400: #ff8224;
+  --color-orange-500: #ff7300;
+  --color-orange-600: #e85f00;
+  --color-orange-700: #c24c00;
+  --color-orange-800: #8f3800;
+  --color-orange-900: #5e2500;
+
+  --color-brand: #ff7300;
+  --color-brand-hover: #ff8224;
+  --color-brand-press: #e85f00;
+  --color-brand-soft: rgba(255, 115, 0, 0.14);
+  --color-brand-glow: rgba(255, 115, 0, 0.35);
+  --color-bg-void: #0c0b09;
+  --color-bg-page: #100f0c;
+  --color-bg-base: #16140f;
+  --color-surface: #1c1a14;
+  --color-surface-raised: #221f18;
+  --color-surface-hover: #2a271e;
+  --color-border: rgba(246, 241, 232, 0.08);
+  --color-border-strong: rgba(246, 241, 232, 0.14);
+  --color-border-solid: #332f25;
+  --color-border-brand: rgba(255, 115, 0, 0.45);
+  --color-fg-1: #f6f1e8;
+  --color-fg-2: #c2b9a8;
+  --color-fg-3: #8e8674;
+  --color-fg-4: #5a5343;
+  --color-fg-on-brand: #16140f;
+  --color-success: #3fb68b;
+  --color-success-bg: rgba(63, 182, 139, 0.14);
+  --color-warning: #f4a93c;
+  --color-warning-bg: rgba(244, 169, 60, 0.14);
+  --color-danger: #f0563f;
+  --color-danger-bg: rgba(240, 86, 63, 0.14);
+  --color-info: #4fb6c7;
+  --color-info-bg: rgba(79, 182, 199, 0.14);
+
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --shadow-focus: 0 0 0 3px rgba(255, 115, 0, 0.35);
+
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root {
+  --brand: #ff7300;
+  --brand-hover: #ff8224;
+  --brand-press: #e85f00;
+  --brand-soft: rgba(255, 115, 0, 0.14);
+  --brand-glow: rgba(255, 115, 0, 0.35);
+  --bg-void: #0c0b09;
+  --bg-page: #100f0c;
+  --bg-base: #16140f;
+  --surface: #1c1a14;
+  --surface-raised: #221f18;
+  --surface-hover: #2a271e;
+  --border: rgba(246, 241, 232, 0.08);
+  --border-strong: rgba(246, 241, 232, 0.14);
+  --border-solid: #332f25;
+  --border-brand: rgba(255, 115, 0, 0.45);
+  --fg-1: #f6f1e8;
+  --fg-2: #c2b9a8;
+  --fg-3: #8e8674;
+  --fg-4: #5a5343;
+  --fg-on-brand: #16140f;
+  --success: #3fb68b;
+  --success-bg: rgba(63, 182, 139, 0.14);
+  --warning: #f4a93c;
+  --warning-bg: rgba(244, 169, 60, 0.14);
+  --danger: #f0563f;
+  --danger-bg: rgba(240, 86, 63, 0.14);
+  --info: #4fb6c7;
+  --info-bg: rgba(79, 182, 199, 0.14);
+  --shadow-focus: 0 0 0 3px var(--brand-glow);
+  --dur-fast: 120ms;
+  --dur-med: 200ms;
+  --dur-slow: 360ms;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--bg-base);
+  color: var(--fg-1);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body), system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+::selection {
+  background: var(--brand-soft);
+  color: var(--fg-1);
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-solid);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pb-h1,
+.pb-h2,
+.pb-h3 {
+  color: var(--fg-1);
+  font-family: var(--font-display), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.pb-h1 {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.02;
+}
+
+.pb-h2 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.08;
+}
+
+.pb-h3 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.12;
+}
+
+.pb-body {
+  color: var(--fg-2);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.pb-small {
+  color: var(--fg-3);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.pb-label {
+  color: var(--fg-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pb-stage {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 50% 100%, rgba(255, 115, 0, 0.18), transparent 34%),
+    linear-gradient(180deg, var(--bg-page), var(--bg-base));
+}
+
+.pb-login-stage {
+  align-items: center;
+  background: var(--bg-page);
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: 2rem 1.25rem;
+  position: relative;
+}
+
+.pb-login-stage::before {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255, 115, 0, 0.05), transparent 55%),
+    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-page) 38%, var(--bg-void) 100%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.pb-horizon-canvas {
+  height: 100%;
+  inset: 0;
+  mask-image: linear-gradient(180deg, transparent 48%, #000 70%, #000 100%);
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  -webkit-mask-image: linear-gradient(180deg, transparent 48%, #000 70%, #000 100%);
+  z-index: 0;
+}
+
+.pb-ambient-grid {
+  background-image:
+    linear-gradient(rgba(255, 115, 0, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 115, 0, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, transparent, black 28%, transparent);
+}
+
+@keyframes pb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pb-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-pb-rise {
+  animation: pb-rise var(--dur-med) var(--ease-out) both;
+}
+
+.animate-pb-pulse {
+  animation: pb-pulse 1.4s var(--ease-in-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}

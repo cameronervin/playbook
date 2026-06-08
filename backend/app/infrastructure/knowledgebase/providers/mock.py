@@ -9,10 +9,17 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from uuid import uuid4
 
 from app.core.config import settings
 from app.infrastructure.knowledgebase.context import assemble_context
-from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
+from app.schemas.knowledgebase import (
+    KBDocumentIngestRequest,
+    KBDocumentIngestResponse,
+    KBDocumentStatusResponse,
+    KnowledgebaseResult,
+    RetrievedChunk,
+)
 
 from .base import BaseKnowledgebaseProvider
 
@@ -83,3 +90,20 @@ class MockProvider(BaseKnowledgebaseProvider):
 
     async def resolve_configuration(self) -> str:
         return _MOCK_CONFIG_ID
+
+    async def ingest_document(
+        self,
+        request: KBDocumentIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        return KBDocumentIngestResponse(
+            kb_service_document_id=request.playbook_document_id or uuid4(),
+            playbook_document_id=request.playbook_document_id,
+            task_id=f"mock-task-{request.playbook_document_id}",
+            status="pending",
+        )
+
+    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
+        return KBDocumentStatusResponse(task_id=task_id, status="SUCCESS")
+
+    async def delete_document(self, kb_service_document_id: str) -> None:
+        return None

@@ -13,6 +13,21 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
+def _is_production_environment(value: str) -> bool:
+    return value.lower() in {"prod", "production"}
+
+
+def _require_min_secret_length(
+    errors: list[str],
+    *,
+    name: str,
+    value: str,
+    minimum: int = 32,
+) -> None:
+    if len(value) < minimum:
+        errors.append(f"{name} must be at least {minimum} characters")
+
+
 class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Database — async driver (postgresql+asyncpg://...). Models live in the
@@ -55,10 +70,10 @@ class Settings(BaseSettings):
     LLM_GATEWAY_EMBED_MODEL: str = "text-embedding-3-small"
 
     # -------------------------------------------------------------------------
-    # S3 / LocalStack — where original uploads + staged NDJSON live
+    # S3-compatible storage — where original uploads + staged NDJSON live
     # -------------------------------------------------------------------------
     AWS_S3_BUCKET: str = "kb-documents"
-    AWS_S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to LocalStack URL for local dev
+    AWS_S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
     AWS_REGION: str = "us-east-1"
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
@@ -159,12 +174,30 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_provider_config(self) -> "Settings":
+        errors: list[str] = []
         if self.KB_LLM_PROVIDER_MODE == "direct" and not self.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is required when KB_LLM_PROVIDER_MODE=direct")
+            errors.append("OPENAI_API_KEY is required when KB_LLM_PROVIDER_MODE=direct")
         if self.KB_LLM_PROVIDER_MODE == "gateway" and not self.LLM_GATEWAY_BASE_URL:
-            raise ValueError("LLM_GATEWAY_BASE_URL is required when KB_LLM_PROVIDER_MODE=gateway")
+            errors.append(
+                "LLM_GATEWAY_BASE_URL is required when KB_LLM_PROVIDER_MODE=gateway"
+            )
         if self.KB_LLM_PROVIDER_MODE == "gateway" and not self.LLM_GATEWAY_API_KEY:
-            raise ValueError("LLM_GATEWAY_API_KEY is required when KB_LLM_PROVIDER_MODE=gateway")
+            errors.append(
+                "LLM_GATEWAY_API_KEY is required when KB_LLM_PROVIDER_MODE=gateway"
+            )
+        if _is_production_environment(self.ENVIRONMENT):
+            _require_min_secret_length(
+                errors,
+                name="KB_API_SECRET",
+                value=self.KB_API_SECRET,
+            )
+            _require_min_secret_length(
+                errors,
+                name="KB_WEBHOOK_SECRET",
+                value=self.KB_WEBHOOK_SECRET,
+            )
+        if errors:
+            raise ValueError("; ".join(errors))
         return self
 
     model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}

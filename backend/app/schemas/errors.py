@@ -5,13 +5,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class ErrorResponse(BaseModel):
-    """Standardized error response schema.
+class ErrorDetail(BaseModel):
+    """Nested API error detail."""
 
-    All API errors return this format for consistency.
-    """
-
-    error_code: str = Field(
+    code: str = Field(
         ...,
         description="Standardized error code identifying the error type",
         examples=["VALIDATION_ERROR", "AGENT_FAILED", "NOT_FOUND"],
@@ -31,13 +28,21 @@ class ErrorResponse(BaseModel):
         description="Additional context about the error (request_id, resource IDs, etc.)",
     )
 
+
+class ErrorResponse(BaseModel):
+    """Standardized nested API error response."""
+
+    error: ErrorDetail
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "error_code": "AGENT_FAILED",
-                "message": "Agent execution failed after 3 retry attempts",
-                "retryable": True,
-                "details": {"request_id": "123e4567-e89b-12d3-a456-426614174000"},
+                "error": {
+                    "code": "AGENT_FAILED",
+                    "message": "Agent execution failed after 3 retry attempts",
+                    "retryable": True,
+                    "details": {"request_id": "123e4567-e89b-12d3-a456-426614174000"},
+                }
             }
         }
     )
@@ -51,11 +56,8 @@ class ValidationErrorDetail(BaseModel):
     type: str = Field(..., description="Error type")
 
 
-class ValidationErrorResponse(ErrorResponse):
-    """Validation error response with field-level details (422)."""
-
-    error_code: str = Field(default="VALIDATION_ERROR", description="Always VALIDATION_ERROR")
-    validation_errors: list[ValidationErrorDetail] = Field(
-        default_factory=list,
-        description="List of specific validation errors",
-    )
+__all__ = [
+    "ErrorDetail",
+    "ErrorResponse",
+    "ValidationErrorDetail",
+]

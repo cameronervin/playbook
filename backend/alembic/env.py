@@ -10,9 +10,7 @@ from app.models.base import Base
 
 # Import all models for Alembic autodiscovery. Add new models to app.models
 # (via app/models/__init__.py) so their tables are registered on Base.metadata.
-from app.models import (  # noqa: F401
-    Example,
-)
+import app.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

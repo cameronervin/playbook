@@ -38,7 +38,7 @@ def extract_s3_parts(presigned_url: str) -> tuple[str, str]:
         bucket = hostname.split(".s3.")[0]
         key = path
     else:
-        # Path-style (LocalStack or path-style AWS): /{bucket}/{key}
+        # Path-style (MinIO or path-style AWS): /{bucket}/{key}
         bucket, _, key = path.partition("/")
     if not bucket or not key:
         raise ValueError(f"Could not parse S3 bucket/key from URL: {presigned_url}")

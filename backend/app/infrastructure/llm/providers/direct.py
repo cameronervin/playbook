@@ -1,14 +1,4 @@
-"""Direct LLM provider with per-use-case routing (Anthropic-first).
-
-Routes to a provider SDK directly based on configuration, rather than through
-a gateway. Defaults to Anthropic Claude:
-    CHAT_PROVIDER=anthropic   CHAT_MODEL=claude-sonnet-4-6
-    RESEARCH_PROVIDER=anthropic ADVANCED_MODEL=claude-opus-4-8
-
-Alternatives: set the provider to "openai" (langchain_openai.ChatOpenAI) or
-"google" (langchain_google_genai.ChatGoogleGenerativeAI). Those integration
-packages are optional — install them only if used.
-"""
+"""Direct LLM provider with one configured chat model."""
 
 from functools import lru_cache
 
@@ -25,12 +15,8 @@ class DirectLLMProvider(BaseLLMProvider):
     """
 
     def get_chat_model(self) -> BaseChatModel:
-        """Get the chat model based on CHAT_PROVIDER / CHAT_MODEL."""
+        """Get the chat model based on LLM_DIRECT_PROVIDER / LLM_CHAT_MODEL."""
         return _get_chat_model_cached()
-
-    def get_research_model(self) -> BaseChatModel:
-        """Get the advanced/research model (stub — raises NotImplementedError)."""
-        return _get_research_model_cached()
 
     @property
     def provider_name(self) -> str:
@@ -45,35 +31,17 @@ class DirectLLMProvider(BaseLLMProvider):
 @lru_cache
 def _get_chat_model_cached() -> BaseChatModel:
     return _create_chat_model(
-        provider=settings.CHAT_PROVIDER,
-        model=settings.CHAT_MODEL,
+        provider=settings.LLM_DIRECT_PROVIDER,
+        model=settings.LLM_CHAT_MODEL,
         temperature=settings.LLM_TEMPERATURE,
     )
-
-
-@lru_cache
-def _get_research_model_cached() -> BaseChatModel:
-    """Stub — implementation pending.
-
-    Will call ``_create_chat_model(settings.RESEARCH_PROVIDER, settings.ADVANCED_MODEL, ...)``
-    once a research/advanced-tier consumer is wired up.
-    """
-    raise NotImplementedError(
-        "Direct research model is a stub — implementation pending. "
-        f"Configured provider/model: {settings.RESEARCH_PROVIDER}/{settings.ADVANCED_MODEL}"
-    )
-
-
-# =============================================================================
-# Model creation helpers
-# =============================================================================
 
 
 def _create_chat_model(provider: str, model: str, temperature: float) -> BaseChatModel:
     """Create a LangChain chat model for the specified provider.
 
     Args:
-        provider: 'anthropic' (default), 'openai', 'google', or 'gateway'.
+        provider: 'anthropic' (default), 'openai', or 'google'.
         model: Model name/identifier.
         temperature: Sampling temperature.
 
@@ -118,25 +86,7 @@ def _create_chat_model(provider: str, model: str, temperature: float) -> BaseCha
             timeout=settings.LLM_TIMEOUT,
         )
 
-    if provider == "gateway":
-        # Route through the LiteLLM gateway via the OpenAI-compatible client.
-        from langchain_openai import ChatOpenAI
-
-        if not settings.LLM_GATEWAY_API_KEY:
-            raise ValueError("LLM_GATEWAY_API_KEY must be set when using the gateway provider")
-
-        return ChatOpenAI(
-            model=model,
-            base_url=settings.LLM_GATEWAY_BASE_URL,
-            api_key=settings.LLM_GATEWAY_API_KEY,
-            temperature=temperature,
-            max_tokens=settings.LLM_MAX_TOKENS,
-            timeout=settings.LLM_TIMEOUT,
-        )
-
-    raise ValueError(
-        f"Unknown provider: {provider}. Valid options: anthropic, openai, google, gateway"
-    )
+    raise ValueError(f"Unknown provider: {provider}. Valid options: anthropic, openai, google")
 
 
 def _validate_api_key(key: str | None, key_name: str, provider: str) -> None:
@@ -151,4 +101,3 @@ def _validate_api_key(key: str | None, key_name: str, provider: str) -> None:
 def clear_caches() -> None:
     """Clear all cached model instances (useful for tests / config changes)."""
     _get_chat_model_cached.cache_clear()
-    _get_research_model_cached.cache_clear()
