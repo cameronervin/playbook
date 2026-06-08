@@ -81,6 +81,7 @@ Phase 1 auth and KB document control-plane settings:
 ```env
 API_PUBLIC_URL=http://localhost:8000
 OAUTH_STATE_SECRET=replace-with-a-long-random-value
+DEV_AUTH_ENABLED=false
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 MICROSOFT_OAUTH_CLIENT_ID=
@@ -102,6 +103,21 @@ Browser OAuth callbacks set the Playbook session cookie and redirect to
 `FRONTEND_URL + next_route`, usually `/profile` for incomplete athletes or
 `/chat` for complete profiles. API-style callers that do not request
 `text/html` still receive the JSON `SessionResponse`.
+
+For local UI validation without Google/Microsoft OAuth, set
+`DEV_AUTH_ENABLED=true` while `ENVIRONMENT=local` and `DEBUG=true`, then open one
+of these backend URLs in the same browser you use for the frontend:
+
+```text
+http://localhost:8000/api/v1/dev/session/athlete
+http://localhost:8000/api/v1/dev/session/new_athlete
+http://localhost:8000/api/v1/dev/session/admin
+http://localhost:8000/api/v1/dev/session/super_admin
+```
+
+Each URL seeds a throwaway local user, sets the normal Playbook HttpOnly session
+cookie, and redirects to `/chat`, `/profile`, or `/admin` on the frontend. See
+[Dev Auth](dev_auth.md) for the concise reference.
 
 The KB service signs status callbacks to
 `http://localhost:8000/api/v1/kb/webhook` with `X-KB-Signature:

@@ -57,6 +57,17 @@ Example error response:
 | POST | `/kb/webhook` | Receive signed KB-service status callbacks |
 | GET | `/admin/audit-logs` | Query org-scoped audit log records |
 
+## Local Development Only
+
+These routes are absent unless the backend is running with
+`DEV_AUTH_ENABLED=true`, `ENVIRONMENT=local` or `development`, and `DEBUG=true`.
+They are for local browser validation only and must not be enabled in deployed
+environments.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/dev/session/{persona}` | Seed a deterministic local user, set the app session cookie, and redirect to the matching frontend route. Valid personas: `athlete`, `new_athlete`, `admin`, `super_admin` |
+
 ```bash
 curl http://localhost:8000/api/v1/health
 # {"status": "healthy"}

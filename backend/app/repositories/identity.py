@@ -176,7 +176,7 @@ class UserRepository:
         user: User,
         *,
         name: str,
-        sport_team: str,
+        sport_team: str | None,
     ) -> User:
         """Update athlete profile fields without committing the transaction."""
         user.name = name

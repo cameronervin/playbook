@@ -164,7 +164,7 @@ reads as AI-generated and is explicitly avoided).
 
 ### Elevation & motion
 Shadows: `sm 0 1px 2px rgba(0,0,0,.4)` · `md 0 4px 16px rgba(0,0,0,.45)` ·
-`lg 0 16px 48px rgba(0,0,0,.55)` · `focus 0 0 0 3px var(--brand-glow)`.
+`lg 0 16px 48px rgba(0,0,0,.55)` · `focus 0 0 0 2px var(--brand-glow)`.
 Easing: `--ease-out cubic-bezier(.2,.7,.2,1)` · `--ease-in-out cubic-bezier(.4,0,.2,1)`.
 Durations: `fast 120ms` · `med 200ms` · `slow 360ms`. **Honor `prefers-reduced-motion`
 everywhere** — every animation in the prototype already has a reduce guard.
@@ -260,7 +260,9 @@ the department's documents** with citations. Also a place to browse the knowledg
    - **Composer** (`Composer.jsx`) — the input. Enter-to-send (configurable).
    - **Empty state** is fixed: **"Ask PlaybookAI"** + a tagline. **Never topic-specific.**
 3. **SourcesPanel** (right, `SourcesPanel.jsx`) — grounding sources for the current scope,
-   with the cited document highlighted. Toggleable; open by default.
+   with the cited document highlighted. Toggleable; hidden on a brand-new empty chat so
+   the empty state matches the approved screenshot, then opened by citation click or the
+   sources toggle once the conversation has grounded content.
 
 ### Knowledge base view (in `source/home/app.jsx`: `KnowledgeView` / `KnowledgeDetail`)
 Replaces the center+right area when entered from the rail.
@@ -290,8 +292,8 @@ Opened from the profile menu. **MVP scope: Profile + Security & SSO only.** (App
 density live only in the prototype Tweaks — fold into a real settings store or omit.)
 
 ### Baked defaults
-`bg: horizon`, motion on, `density: Comfortable`, `sourcesDefault: true`,
-`role: Super admin`.
+`bg: horizon`, motion on, `density: Comfortable`, `sourcesDefault: true` for conversations
+with grounded content, empty new chat hides sources, `role: Super admin`.
 
 ### Component inventory (`source/home/`)
 `NavRail`, `ProfileMenu`, `SettingsModal`, `BgFields` (exports the field components),
@@ -349,7 +351,7 @@ route shell + `AccessDenied`. **All mock data → real API.**
 ## Interactions & behavior (summary)
 - **Hover**: surfaces step up one neutral (`--surface` → `--surface-hover` /
   `--surface-raised`), borders strengthen, accent affordances turn orange. ~120ms.
-- **Focus-visible**: `--shadow-focus` ring (`0 0 0 3px brand-glow`) + `--border-brand`.
+- **Focus-visible**: `--shadow-focus` ring (`0 0 0 2px brand-glow`) + `--border-brand`.
 - **Active/press**: subtle `translateY(1px)`.
 - **Agent states**: `thinking` (pulsing mark + "Thinking…"), `streaming` (blinking orange
   caret appended to text), `live/active` (orange pulse ring).

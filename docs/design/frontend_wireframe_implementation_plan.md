@@ -90,7 +90,7 @@ Implementation should wire currently implemented backend APIs immediately and is
   - Knowledge browser visuals only where role policy allows; admin-only creation/deletion controls must be hidden or disabled for athletes.
 - Wire conversation list, create, and detail to the implemented backend APIs.
 - Use typed fixture adapters for message submit, response streaming, citations, and conversation-scoped file upload until Phase 2 backend endpoints are implemented.
-- Preserve key design defaults: horizon background, sources panel open by default, comfortable density, "Ask PlaybookAI" empty state, and grounded citations at the bottom of answers.
+- Preserve key design defaults: horizon background, comfortable density, "Ask PlaybookAI" empty state, grounded citations at the bottom of answers, and sources hidden on an empty new chat but opened after citation click or explicit toggle on grounded conversations.
 - Implement composer behavior with Enter-to-send, Shift+Enter newline, disabled/loading states, and recoverable error display.
 - Add settings modal support for MVP sections only: Profile and Security & SSO. Omit prototype-only Appearance/Tweaks controls unless a real settings store is introduced.
 - Add tests for empty state, conversation selection, new chat, composer submit, streaming placeholder, citation click opening sources, source-panel toggle, settings modal, and role-gated KB controls.

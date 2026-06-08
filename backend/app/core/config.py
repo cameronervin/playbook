@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     OAUTH_STATE_SECRET: str = "change-me-oauth-state"
     OAUTH_STATE_COOKIE_NAME: str = "playbook_oauth_state"
     ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
+    DEV_AUTH_ENABLED: bool = False
 
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
@@ -242,9 +243,22 @@ class Settings(BaseSettings):
             ):
                 errors.append("LITELLM_BASE_URL cannot use localhost in production")
 
+        if self.DEV_AUTH_ENABLED and not self.dev_auth_available():
+            errors.append(
+                "DEV_AUTH_ENABLED can only be true in local/development debug mode"
+            )
+
         if errors:
             raise ValueError("; ".join(errors))
         return self
+
+    def dev_auth_available(self) -> bool:
+        """Whether local-development auth bootstrap routes may be registered."""
+        return (
+            self.DEV_AUTH_ENABLED
+            and self.DEBUG
+            and self.ENVIRONMENT.lower() in {"local", "development"}
+        )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

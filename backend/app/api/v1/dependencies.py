@@ -23,6 +23,7 @@ from app.models.identity import User
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
 from app.services.conversation_service import ConversationService
+from app.services.dev_auth_service import DevAuthService
 from app.services.kb_document_service import (
     KBDocumentService,
     KBDocumentWebhookService,
@@ -69,6 +70,11 @@ def get_conversation_service(session: SessionDep) -> ConversationService:
     return ConversationService(session)
 
 
+def get_dev_auth_service(session: SessionDep) -> DevAuthService:
+    """Return local-development auth service dependency."""
+    return DevAuthService(session)
+
+
 def get_kb_document_service(
     session: SessionDep,
     storage: StorageProviderDep,
@@ -94,6 +100,7 @@ ConversationServiceDep = Annotated[
     ConversationService,
     Depends(get_conversation_service),
 ]
+DevAuthServiceDep = Annotated[DevAuthService, Depends(get_dev_auth_service)]
 KBDocumentServiceDep = Annotated[
     KBDocumentService,
     Depends(get_kb_document_service),

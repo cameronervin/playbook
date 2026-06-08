@@ -56,7 +56,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
-  --shadow-focus: 0 0 0 3px rgba(255, 115, 0, 0.35);
+  --shadow-focus: 0 0 0 2px rgba(255, 115, 0, 0.35);
 
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
@@ -91,7 +91,7 @@
   --danger-bg: rgba(240, 86, 63, 0.14);
   --info: #4fb6c7;
   --info-bg: rgba(79, 182, 199, 0.14);
-  --shadow-focus: 0 0 0 3px var(--brand-glow);
+  --shadow-focus: 0 0 0 2px var(--brand-glow);
   --dur-fast: 120ms;
   --dur-med: 200ms;
   --dur-slow: 360ms;
@@ -129,6 +129,16 @@ textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
+}
+
+.pb-field-shell:focus-within {
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.pb-field-shell :is(input, textarea):focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 ::selection {
