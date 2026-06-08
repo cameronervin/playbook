@@ -5,8 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AdminShell } from '@/src/components/features/admin/AdminShell'
 import { useUIStore } from '@/src/lib/store/uiStore'
 
+const adminRouterMocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  replace: vi.fn(),
+}))
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: adminRouterMocks.push, replace: adminRouterMocks.replace }),
 }))
 
 const currentUser = vi.hoisted(() => ({
@@ -130,6 +135,8 @@ describe('AdminShell', () => {
     currentUser.id = 'u1'
     currentUser.name = 'Jordan Mitchell'
     currentUser.email = 'j.mitchell@okstate.edu'
+    adminRouterMocks.push.mockClear()
+    adminRouterMocks.replace.mockClear()
     updateRoleMutate.mockClear()
     useUIStore.setState({
       adminTab: 'insights',
@@ -152,6 +159,20 @@ describe('AdminShell', () => {
     renderAdmin()
 
     expect(screen.getByRole('button', { name: /users & roles/i })).toBeInTheDocument()
+  })
+
+  it('shows only the chat workspace switcher from the admin account menu', async () => {
+    currentUser.role = 'admin'
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))
+
+    expect(screen.getByRole('menuitem', { name: /chat workspace/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /chat workspace/i }))
+
+    expect(adminRouterMocks.push).toHaveBeenCalledWith('/chat')
   })
 
   it('renders the Claude design Insights dashboard hierarchy for admins', () => {

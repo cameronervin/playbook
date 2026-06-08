@@ -15,6 +15,10 @@ const chatMocks = vi.hoisted(() => ({
   routerReplace: vi.fn(),
 }))
 
+const currentUser = vi.hoisted(() => ({
+  role: 'athlete',
+}))
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: chatMocks.routerPush, replace: chatMocks.routerReplace }),
 }))
@@ -26,7 +30,7 @@ vi.mock('@/src/hooks/useAuth', () => ({
       organization_id: 'org-1',
       name: 'Jordan Mitchell',
       email: 'j.mitchell@okstate.edu',
-      role: 'athlete',
+      role: currentUser.role,
       sport_team: 'OSU Athletics',
       profile_complete: true,
       is_active: true,
@@ -78,6 +82,7 @@ function renderChat() {
 beforeEach(() => {
   chatMocks.conversations = []
   chatMocks.details = new Map()
+  currentUser.role = 'athlete'
   chatMocks.routerPush.mockReset()
   chatMocks.routerReplace.mockReset()
   chatMocks.logoutMutateAsync.mockReset()
@@ -226,6 +231,10 @@ describe('ChatShell', () => {
     renderChat()
 
     await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))
+
+    expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /chat workspace/i })).not.toBeInTheDocument()
+
     await userEvent.click(screen.getByRole('menuitem', { name: /settings/i }))
 
     expect(screen.getByRole('dialog', { name: /settings/i })).toBeInTheDocument()
@@ -235,5 +244,19 @@ describe('ChatShell', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: /sign out/i }))
 
     expect(chatMocks.logoutMutateAsync).toHaveBeenCalledOnce()
+  })
+
+  it('shows only the admin dashboard switcher from the chat account menu for admins', async () => {
+    currentUser.role = 'admin'
+    renderChat()
+
+    await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))
+
+    expect(screen.getByRole('menuitem', { name: /admin dashboard/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /chat workspace/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /admin dashboard/i }))
+
+    expect(chatMocks.routerPush).toHaveBeenCalledWith('/admin')
   })
 })

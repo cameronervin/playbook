@@ -1,11 +1,9 @@
 'use client'
 
 import { type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { ChevronsUpDown, Database, LayoutDashboard, LogOut, MessageCircle, Settings, Users } from 'lucide-react'
 import { BrandLockup } from '@/src/components/ui'
-import { ROUTES } from '@/src/lib/constants/config'
 import { cn } from '@/src/lib/utils/cn'
 import type { CurrentUser } from '@/src/types/auth'
 
@@ -40,7 +38,6 @@ export function AdminNav({
   onOpenSettings,
   user,
 }: AdminNavProps) {
-  const router = useRouter()
   const initials = getInitials(user?.name)
   const roleLabel = isSuperAdmin ? 'Super admin' : 'Department admin'
   const visibleItems = navItems.filter((item) => item.id !== 'users' || isSuperAdmin)
@@ -112,9 +109,6 @@ export function AdminNav({
               </DropdownItem>
               <DropdownItem icon={<MessageCircle className="h-4 w-4" />} onSelect={onOpenChatWorkspace}>
                 Chat workspace
-              </DropdownItem>
-              <DropdownItem icon={<LayoutDashboard className="h-4 w-4" />} onSelect={() => router.push(ROUTES.admin)}>
-                Admin dashboard
               </DropdownItem>
               <div className="mt-1 border-t border-border pt-1">
                 <DropdownItem danger disabled={isLoggingOut} icon={<LogOut className="h-4 w-4" />} onSelect={onLogout}>
