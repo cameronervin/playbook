@@ -212,6 +212,7 @@ textarea:focus-visible,
     linear-gradient(180deg, var(--bg-page), var(--bg-base));
 }
 
+.pb-auth-stage,
 .pb-login-stage {
   align-items: center;
   background: var(--bg-page);
@@ -221,8 +222,10 @@ textarea:focus-visible,
   overflow: hidden;
   padding: 2rem 1.25rem;
   position: relative;
+  width: 100%;
 }
 
+.pb-auth-stage::before,
 .pb-login-stage::before {
   background:
     radial-gradient(120% 80% at 50% -10%, rgba(255, 115, 0, 0.05), transparent 55%),
@@ -231,6 +234,10 @@ textarea:focus-visible,
   inset: 0;
   pointer-events: none;
   position: absolute;
+}
+
+.pb-auth-card {
+  max-width: min(380px, calc(100vw - 2.5rem));
 }
 
 .pb-horizon-canvas {

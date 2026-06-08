@@ -114,5 +114,12 @@ export function HorizonBackground({ motion = true }: HorizonBackgroundProps) {
     }
   }, [motion])
 
-  return <canvas ref={canvasRef} className="pb-horizon-canvas" aria-hidden="true" />
+  return (
+    <canvas
+      ref={canvasRef}
+      className="pb-horizon-canvas"
+      aria-hidden="true"
+      data-testid="horizon-background"
+    />
+  )
 }

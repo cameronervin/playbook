@@ -41,6 +41,7 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 - Tailwind v4 tokens live in `src/app/globals.css` using `@theme`.
 - The palette is Playbook orange on warm charcoal. Avoid blue/purple AI gradients.
 - Use local Playbook primitives in `src/components/ui/`.
+- `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
 - Radix powers accessible dialog, dropdown menu, tabs, tooltip, and switch behavior.
 - Inline SVG is allowed only for the Playbook mark and SSO provider logos; use `lucide-react` for normal icons.
 
@@ -55,8 +56,9 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 ## Structure
 
 ```text
-src/app/                  App Router routes, layout, providers
+src/app/                  App Router routes, grouped layouts, providers
 src/components/ui/         Shared Playbook primitives
+src/components/features/auth/ Shared auth/profile stage and card components
 src/components/features/   Route/feature-specific components
 src/hooks/                 TanStack Query hooks
 src/lib/api/               Fetch client and endpoint modules
