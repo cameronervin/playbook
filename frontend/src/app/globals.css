@@ -243,6 +243,71 @@ textarea:focus-visible,
   line-height: 1.25;
 }
 
+.pb-settings-title {
+  color: var(--fg-1);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.pb-settings-header {
+  color: var(--fg-1);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.pb-settings-nav-item {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.pb-settings-section-title {
+  color: var(--fg-1);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.pb-settings-label {
+  color: var(--fg-2);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.pb-settings-input {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.pb-settings-meta {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 11.5px;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.pb-settings-badge {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
 .pb-admin-header-control {
   height: 36px;
   justify-content: center;

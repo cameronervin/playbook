@@ -14,6 +14,10 @@ reference screen before editing.
   `frontend/src/app/globals.css` (`pb-admin-table-*`, `pb-admin-menu*`,
   `pb-admin-nav-*`) instead of generic `text-sm`, `text-base`, or default
   form-control sizing inside table rows.
+- Compact settings/modal surfaces must use the settings text/control globals
+  from `frontend/src/app/globals.css` (`pb-settings-*`) instead of generic
+  `text-sm`, `text-base`, oversized mobile headings, or one-off arbitrary text
+  sizes.
 - Do not introduce blue/purple AI gradients, decorative blobs, or generic scaffold palettes.
 
 ## Icons

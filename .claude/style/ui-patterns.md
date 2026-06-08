@@ -19,6 +19,9 @@ Use `docs/design/` as the visual source of truth.
   with the shared `pb-admin-table-*` and `pb-admin-menu*` globals. Search/filter
   controls for a table should sit in the table surface header when they operate
   only on that table.
+- Settings modals: keep tab labels, pane headings, field labels, field values,
+  metadata, and badges compact with the shared `pb-settings-*` globals. Avoid
+  translating screenshot text into generic Tailwind type utilities.
 
 ## Behavior
 

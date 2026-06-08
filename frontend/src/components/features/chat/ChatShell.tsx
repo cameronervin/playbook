@@ -150,10 +150,9 @@ export function ChatShell() {
     <>
       <WorkspaceShell leftRail={leftRail} main={main} sidePanel={sidePanel} />
       <SettingsModal
-        email={user?.email}
-        name={user?.name}
         onOpenChange={setSettingsOpen}
         open={settingsOpen}
+        user={user}
       />
     </>
   )
