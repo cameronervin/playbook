@@ -17,6 +17,7 @@ vi.mock('next/navigation', () => ({
 const currentUser = vi.hoisted(() => ({
   email: 'j.mitchell@okstate.edu',
   id: 'u1',
+  isLoading: false,
   name: 'Jordan Mitchell',
   role: 'athlete',
 }))
@@ -83,6 +84,14 @@ const retryDocumentMutate = vi.hoisted(() => vi.fn())
 const deleteDocumentMutate = vi.hoisted(() => vi.fn())
 const updateDocumentMutate = vi.hoisted(() => vi.fn())
 const uploadDocumentMutate = vi.hoisted(() => vi.fn())
+const adminQueryState = vi.hoisted(() => ({
+  kbError: false,
+  kbFetching: false,
+  kbLoading: false,
+  usersError: false,
+  usersFetching: false,
+  usersLoading: false,
+}))
 const kbDocuments = vi.hoisted(() => [
   {
     id: 'doc-nil-policy',
@@ -145,30 +154,39 @@ const kbDocuments = vi.hoisted(() => [
 
 vi.mock('@/src/hooks/useAuth', () => ({
   useCurrentUser: () => ({
-    data: {
-      id: currentUser.id,
-      organization_id: 'org-1',
-      name: currentUser.name,
-      email: currentUser.email,
-      role: currentUser.role,
-      profile_complete: true,
-      is_active: true,
-    },
-    isLoading: false,
+    data: currentUser.isLoading
+      ? undefined
+      : {
+          id: currentUser.id,
+          organization_id: 'org-1',
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role,
+          profile_complete: true,
+          is_active: true,
+        },
+    isLoading: currentUser.isLoading,
   }),
   useLogout: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/src/hooks/useAdmin', () => ({
-  useAdminUsers: () => ({ data: adminUsers, isLoading: false }),
+  useAdminUsers: () => ({
+    data: adminQueryState.usersLoading ? undefined : adminUsers,
+    isError: adminQueryState.usersError,
+    isFetching: adminQueryState.usersFetching,
+    isLoading: adminQueryState.usersLoading,
+  }),
   useUpdateUserRole: () => ({ mutate: updateRoleMutate, isPending: false }),
   useAuditLogs: () => ({ data: new Array(16).fill(null).map((_, index) => ({ id: `audit-${index}` })), isLoading: false }),
 }))
 
 vi.mock('@/src/hooks/useKBDocuments', () => ({
   useKBDocuments: () => ({
-    data: kbDocuments,
-    isLoading: false,
+    data: adminQueryState.kbLoading ? undefined : kbDocuments,
+    isError: adminQueryState.kbError,
+    isFetching: adminQueryState.kbFetching,
+    isLoading: adminQueryState.kbLoading,
   }),
   useUploadKBDocument: () => ({ mutate: uploadDocumentMutate, isPending: false }),
   useRetryKBDocument: () => ({ mutate: retryDocumentMutate, isPending: false }),
@@ -188,8 +206,15 @@ function renderAdmin() {
 describe('AdminShell', () => {
   beforeEach(() => {
     currentUser.id = 'u1'
+    currentUser.isLoading = false
     currentUser.name = 'Jordan Mitchell'
     currentUser.email = 'j.mitchell@okstate.edu'
+    adminQueryState.kbError = false
+    adminQueryState.kbFetching = false
+    adminQueryState.kbLoading = false
+    adminQueryState.usersError = false
+    adminQueryState.usersFetching = false
+    adminQueryState.usersLoading = false
     adminRouterMocks.push.mockClear()
     adminRouterMocks.replace.mockClear()
     updateRoleMutate.mockClear()
@@ -270,6 +295,20 @@ describe('AdminShell', () => {
     renderAdmin()
 
     expect(screen.getByRole('heading', { name: /admins only/i })).toBeInTheDocument()
+  })
+
+  it('renders a workspace skeleton while admin auth resolves', () => {
+    currentUser.isLoading = true
+
+    renderAdmin()
+
+    expect(screen.getByTestId('admin-workspace-skeleton')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
+    expect(screen.getByText('AI summary')).toBeInTheDocument()
+    expect(screen.getByText('Last 7 days')).toBeInTheDocument()
+    expect(screen.queryByText(/ai generated insights from user queries/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/users & roles/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/loading admin/i)).not.toBeInTheDocument()
   })
 
   it('shows super-admin-only users navigation for super admins', () => {
@@ -362,6 +401,63 @@ describe('AdminShell', () => {
     expect(screen.getByRole('button', { name: /Donor Relations collection/i })).toHaveTextContent('No documents yet')
   })
 
+  it('renders collection skeletons for the first knowledge-base load', () => {
+    currentUser.role = 'super_admin'
+    adminQueryState.kbLoading = true
+    useUIStore.setState({ adminTab: 'kb' })
+
+    renderAdmin()
+
+    expect(screen.getByTestId('admin-kb-skeleton')).toBeInTheDocument()
+    expect(screen.getAllByTestId('admin-kb-collection-skeleton')).toHaveLength(4)
+    expect(screen.queryByText(/0 documents across 4 collections/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^No documents yet\.$/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps knowledge-base collections visible during background refreshes', () => {
+    currentUser.role = 'super_admin'
+    adminQueryState.kbFetching = true
+    useUIStore.setState({ adminTab: 'kb' })
+
+    renderAdmin()
+
+    expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toBeInTheDocument()
+    expect(screen.getByText(/refreshing knowledge base/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('admin-kb-skeleton')).not.toBeInTheDocument()
+  })
+
+  it('uses info-tone processing indicators for uploaded and processing documents', async () => {
+    currentUser.role = 'super_admin'
+    kbDocuments.push({
+      id: 'doc-processing',
+      organization_id: 'org-1',
+      uploaded_by: 'u1',
+      title: 'NIL_AGENCY_GUIDE_2027.DOCX',
+      filename: 'NIL_AGENCY_GUIDE_2027.DOCX',
+      content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      size_bytes: 640_000,
+      processing_status: 'uploaded',
+      failure_reason: null,
+      visibility_policy: { scope: 'all_athletes' },
+      metadata_tags: { collection: 'travel', topics: ['Travel'] },
+      source_date: null,
+      is_official: false,
+      priority: 1,
+      kb_service_document_id: null,
+      created_at: '2026-06-03T12:00:00Z',
+      updated_at: '2026-06-03T12:00:00Z',
+    })
+    useUIStore.setState({ adminTab: 'kb' })
+
+    renderAdmin()
+
+    expect(screen.getByRole('button', { name: /Team Travel collection/i })).toHaveTextContent('1 processing')
+
+    await userEvent.click(screen.getByRole('button', { name: /Team Travel collection/i }))
+
+    expect(screen.getByText('Processing').closest('span')).toHaveClass('text-info')
+  })
+
   it('keeps collections visible when there are no documents', () => {
     currentUser.role = 'super_admin'
     kbDocuments.splice(0, kbDocuments.length)
@@ -430,6 +526,33 @@ describe('AdminShell', () => {
     expect(within(usersTable).getByText('Super admin')).toBeInTheDocument()
     expect(within(usersTable).getAllByText('Admin')).toHaveLength(3)
     expect(within(usersTable).getAllByText('Athlete')).toHaveLength(2)
+  })
+
+  it('renders user table skeletons during the first users load', () => {
+    currentUser.role = 'super_admin'
+    adminQueryState.usersLoading = true
+    useUIStore.setState({ adminTab: 'users' })
+
+    renderAdmin()
+
+    expect(screen.getByTestId('admin-users-skeleton')).toBeInTheDocument()
+    expect(screen.getByText('Search users...')).toBeInTheDocument()
+    expect(screen.getByText('User')).toBeInTheDocument()
+    expect(screen.getByText('Role')).toBeInTheDocument()
+    expect(screen.queryByText(/0 users/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no users returned yet/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps user rows visible during background users refreshes', () => {
+    currentUser.role = 'super_admin'
+    adminQueryState.usersFetching = true
+    useUIStore.setState({ adminTab: 'users' })
+
+    renderAdmin()
+
+    expect(screen.getAllByText('Jordan Mitchell')).not.toHaveLength(0)
+    expect(screen.getByText(/refreshing users/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('admin-users-skeleton')).not.toBeInTheDocument()
   })
 
   it('uses compact admin typography for users table actions and menus', async () => {

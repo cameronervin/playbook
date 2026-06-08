@@ -8,7 +8,12 @@ import type { ConversationDetail, ConversationSummary } from '@/src/types/conver
 
 const chatMocks = vi.hoisted(() => ({
   conversations: [] as ConversationSummary[],
+  conversationsFetching: false,
+  conversationsLoading: false,
   createConversationMutate: vi.fn(),
+  createConversationPending: false,
+  detailFetching: false,
+  detailLoading: false,
   details: new Map<string, ConversationDetail>(),
   logoutMutateAsync: vi.fn(),
   routerPush: vi.fn(),
@@ -16,6 +21,7 @@ const chatMocks = vi.hoisted(() => ({
 }))
 
 const currentUser = vi.hoisted(() => ({
+  isLoading: false,
   role: 'athlete',
 }))
 
@@ -25,27 +31,37 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/src/hooks/useAuth', () => ({
   useCurrentUser: () => ({
-    data: {
-      id: 'user-1',
-      organization_id: 'org-1',
-      name: 'Jordan Mitchell',
-      email: 'j.mitchell@okstate.edu',
-      role: currentUser.role,
-      sport_team: 'OSU Athletics',
-      profile_complete: true,
-      is_active: true,
-    },
-    isLoading: false,
+    data: currentUser.isLoading
+      ? undefined
+      : {
+          id: 'user-1',
+          organization_id: 'org-1',
+          name: 'Jordan Mitchell',
+          email: 'j.mitchell@okstate.edu',
+          role: currentUser.role,
+          sport_team: 'OSU Athletics',
+          profile_complete: true,
+          is_active: true,
+        },
+    isLoading: currentUser.isLoading,
   }),
   useLogout: () => ({ mutateAsync: chatMocks.logoutMutateAsync, isPending: false }),
 }))
 
 vi.mock('@/src/hooks/useConversations', () => ({
-  useConversations: () => ({ data: chatMocks.conversations, isLoading: false }),
-  useCreateConversation: () => ({ mutate: chatMocks.createConversationMutate, isPending: false }),
+  useConversations: () => ({
+    data: chatMocks.conversationsLoading ? undefined : chatMocks.conversations,
+    isFetching: chatMocks.conversationsFetching,
+    isLoading: chatMocks.conversationsLoading,
+  }),
+  useCreateConversation: () => ({
+    mutate: chatMocks.createConversationMutate,
+    isPending: chatMocks.createConversationPending,
+  }),
   useConversationDetail: (conversationId: string | null) => ({
-    data: conversationId ? chatMocks.details.get(conversationId) : undefined,
-    isLoading: false,
+    data: conversationId && !chatMocks.detailLoading ? chatMocks.details.get(conversationId) : undefined,
+    isFetching: chatMocks.detailFetching,
+    isLoading: chatMocks.detailLoading,
   }),
 }))
 
@@ -81,7 +97,13 @@ function renderChat() {
 
 beforeEach(() => {
   chatMocks.conversations = []
+  chatMocks.conversationsFetching = false
+  chatMocks.conversationsLoading = false
+  chatMocks.createConversationPending = false
+  chatMocks.detailFetching = false
+  chatMocks.detailLoading = false
   chatMocks.details = new Map()
+  currentUser.isLoading = false
   currentUser.role = 'athlete'
   chatMocks.routerPush.mockReset()
   chatMocks.routerReplace.mockReset()
@@ -97,6 +119,64 @@ beforeEach(() => {
 })
 
 describe('ChatShell', () => {
+  it('renders a workspace skeleton while auth resolves', () => {
+    currentUser.isLoading = true
+
+    renderChat()
+
+    expect(screen.getByTestId('chat-workspace-skeleton')).toBeInTheDocument()
+    expect(screen.getByTestId('chat-empty-skeleton')).toBeInTheDocument()
+    expect(screen.getByTestId('chat-composer-shell')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /ask playbookai/i })).toBeInTheDocument()
+    const newChat = screen.getByRole('button', { name: /new chat/i })
+    const searchChats = screen.getByPlaceholderText(/search chats/i)
+    const askButton = screen.getByRole('button', { name: /^ask$/i })
+
+    expect(newChat).toHaveClass('pb-ui-sm')
+    expect(newChat).toHaveClass('font-semibold')
+    expect(searchChats).toBeDisabled()
+    expect(askButton).toBeDisabled()
+    expect(askButton).toHaveClass('disabled:bg-surface-raised')
+    expect(screen.queryByText(/get answers to your athletics questions/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/responses are ai generated/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-composer-content-skeleton')).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: /sources/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: /sources loading/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/loading chat/i)).not.toBeInTheDocument()
+  })
+
+  it('renders conversation rail skeleton rows during the first conversation load', () => {
+    chatMocks.conversationsLoading = true
+
+    renderChat()
+
+    expect(screen.getAllByTestId('chat-history-skeleton-row')).toHaveLength(5)
+    expect(screen.getByRole('heading', { name: /ask playbookai/i })).toBeInTheDocument()
+  })
+
+  it('keeps conversation history visible with a quiet refresh indicator during background fetches', () => {
+    chatMocks.conversations = [summary('c1', 'NIL disclosure window', today)]
+    chatMocks.conversationsFetching = true
+
+    renderChat()
+
+    expect(screen.getByRole('button', { name: /nil disclosure window/i })).toBeInTheDocument()
+    expect(screen.getByText(/refreshing chats/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-history-skeleton-row')).not.toBeInTheDocument()
+  })
+
+  it('renders the active thread skeleton while conversation detail resolves', () => {
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.detailLoading = true
+    useUIStore.setState({ activeConversationId: 'c1', sourcesOpen: true })
+
+    renderChat()
+
+    expect(screen.getByTestId('chat-thread-skeleton')).toBeInTheDocument()
+    expect(screen.getByText(/loading conversation/i)).toBeInTheDocument()
+  })
+
   it('renders the design empty state without a top bar or sources panel', () => {
     renderChat()
 
@@ -162,6 +242,27 @@ describe('ChatShell', () => {
     expect(search).not.toHaveClass('shadow-focus')
   })
 
+  it('uses existing app typography classes for chat controls and history', () => {
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.details = new Map([['c1', detail(todayConversation)]])
+
+    renderChat()
+
+    const newChatAction = screen.getAllByRole('button', { name: /new chat/i })[0]
+    const historyRow = screen.getByRole('button', { name: /nil disclosure window/i })
+    const groupLabel = screen.getByText('Today')
+    const composer = screen.getByLabelText(/message playbook/i)
+
+    expect(newChatAction).toHaveClass('pb-ui-sm')
+    expect(historyRow).toHaveClass('pb-ui-sm')
+    expect(groupLabel).toHaveClass('pb-ui-xs')
+    expect(composer).toHaveClass('text-sm')
+    expect(newChatAction).not.toHaveClass('text-sm')
+    expect(historyRow).not.toHaveClass('text-[13.5px]')
+    expect(composer).not.toHaveClass('text-[15px]')
+  })
+
   it('submits non-empty composer text while preserving multiline drafts', async () => {
     renderChat()
     const textarea = screen.getByLabelText(/message playbook/i)
@@ -169,6 +270,8 @@ describe('ChatShell', () => {
     await userEvent.type(textarea, 'Can I travel?')
     await userEvent.click(screen.getByRole('button', { name: /^ask$/i }))
 
+    expect(screen.getByText('Can I travel?')).toBeInTheDocument()
+    expect(screen.getByText(/thinking/i)).toBeInTheDocument()
     expect(chatMocks.createConversationMutate).toHaveBeenCalledWith(
       { initial_message: 'Can I travel?' },
       expect.objectContaining({ onSuccess: expect.any(Function) }),

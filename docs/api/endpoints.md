@@ -82,8 +82,8 @@ For a repeatable local Swagger and curl validation pass, see
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message |
-| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks |
+| POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message, enqueue the Celery agent task, and return `task_id` stream metadata |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks from the Valkey stream/channel for the returned `task_id` |
 | POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 
 ### Admin Analytics and Governance
@@ -95,8 +95,9 @@ For a repeatable local Swagger and curl validation pass, see
 | GET | `/admin/dashboard-insights/current` | Get latest completed insight output |
 | GET | `/admin/dashboard-insights/outputs` | List generated insight outputs |
 | GET | `/admin/dashboard-insights/runs` | List dashboard insight runs |
-| POST | `/admin/dashboard-insights/runs` | Start manual insight generation |
+| POST | `/admin/dashboard-insights/runs` | Start manual insight generation; status is polled by `run_id` |
 | GET | `/admin/chat/sessions` | List current admin chat sessions |
 | POST | `/admin/chat/sessions` | Create an admin chat session |
 | GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
-| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question, enqueue the Celery agent task, and return `task_id` stream metadata |
+| GET | `/admin/chat/sessions/{session_id}/messages/{message_id}/stream` | Stream admin chat answer chunks from the Valkey stream/channel for the returned `task_id` |

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChatComposer, type ChatComposerHandle } from '@/src/components/features/chat/ChatComposer'
 import { ChatNavRail } from '@/src/components/features/chat/ChatNavRail'
@@ -9,6 +9,7 @@ import { ChatThread } from '@/src/components/features/chat/ChatThread'
 import { ChatTopBar } from '@/src/components/features/chat/ChatTopBar'
 import { SettingsModal } from '@/src/components/features/common/SettingsModal'
 import { HorizonBackground } from '@/src/components/features/common/HorizonBackground'
+import { ChatWorkspaceSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
 import { useConversationDetail, useConversations, useCreateConversation } from '@/src/hooks/useConversations'
@@ -18,12 +19,15 @@ import type { ChatMessage, ConversationSummary, Citation } from '@/src/types/con
 import type { ConversationGroup } from './chatTypes'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
+const EMPTY_CONVERSATIONS: ConversationSummary[] = []
 
 export function ChatShell() {
   const router = useRouter()
   const composerRef = useRef<ChatComposerHandle | null>(null)
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null)
   const { data: user, isLoading: userLoading } = useCurrentUser()
-  const { data: conversations = [] } = useConversations()
+  const conversationsQuery = useConversations()
+  const conversations = conversationsQuery.data ?? EMPTY_CONVERSATIONS
   const activeConversationId = useUIStore((state) => state.activeConversationId)
   const selectedCitationTitle = useUIStore((state) => state.selectedCitationTitle)
   const setActiveConversationId = useUIStore((state) => state.setActiveConversationId)
@@ -33,7 +37,8 @@ export function ChatShell() {
   const toggleSources = useUIStore((state) => state.toggleSources)
   const settingsOpen = useUIStore((state) => state.settingsOpen)
   const setSettingsOpen = useUIStore((state) => state.setSettingsOpen)
-  const { data: activeConversation } = useConversationDetail(activeConversationId)
+  const conversationDetailQuery = useConversationDetail(activeConversationId)
+  const activeConversation = conversationDetailQuery.data
   const createConversation = useCreateConversation()
   const logout = useLogout()
 
@@ -72,26 +77,31 @@ export function ChatShell() {
 
   const conversationGroups = useMemo(() => groupConversations(conversations), [conversations])
   const messages = activeConversation?.messages ?? EMPTY_MESSAGES
+  const conversationDetailLoading = Boolean(activeConversationId) && conversationDetailQuery.isLoading && !activeConversation
   const hasMessages = messages.length > 0
   const citations = useMemo(() => collectCitations(messages.flatMap((message) => message.citations)), [messages])
   const showSourcesPanel = hasMessages && sourcesOpen
   const activeConversationTitle = activeConversation?.title?.trim() || 'New chat'
 
   const handleSelectConversation = (conversationId: string) => {
+    setPendingMessage(null)
     setActiveConversationId(conversationId)
     setSelectedCitationTitle(null)
     setSourcesOpen(true)
   }
 
   const handleSend = (message: string) => {
+    setPendingMessage(message)
     createConversation.mutate(
       { initial_message: message },
       {
         onSuccess: (conversation) => {
+          setPendingMessage(null)
           setActiveConversationId(conversation.id)
           setSelectedCitationTitle(null)
           setSourcesOpen(conversation.messages.some((chatMessage) => chatMessage.citations.length > 0))
         },
+        onError: () => setPendingMessage(null),
       },
     )
   }
@@ -105,10 +115,14 @@ export function ChatShell() {
     router.push(ROUTES.login)
   }
 
+  if (userLoading) return <ChatWorkspaceSkeleton />
+
   const leftRail = (
     <ChatNavRail
       activeConversationId={activeConversationId}
       groups={conversationGroups}
+      isFetching={conversationsQuery.isFetching && !conversationsQuery.isLoading}
+      isLoading={conversationsQuery.isLoading && conversations.length === 0}
       isLoggingOut={logout.isPending}
       onLogout={handleLogout}
       onNewChat={handleNewChat}
@@ -131,7 +145,12 @@ export function ChatShell() {
             title={activeConversationTitle}
           />
         )}
-        <ChatThread messages={messages} onCitationSelect={handleCitationSelect} />
+        <ChatThread
+          isLoading={conversationDetailLoading}
+          messages={messages}
+          onCitationSelect={handleCitationSelect}
+          pendingMessage={pendingMessage}
+        />
         <ChatComposer disabled={createConversation.isPending} onSend={handleSend} ref={composerRef} />
       </div>
     </section>

@@ -16,11 +16,11 @@ The scaffold already includes:
 
 | Workflow | Runtime | Trigger | Primary Output |
 |----------|---------|---------|----------------|
-| Athlete chat agent | LangGraph | Athlete message | Streamed cited answer or refusal |
+| Athlete chat agent | LangGraph in Celery worker | Athlete message task | Streamed cited answer or refusal |
 | Conversation file context | Parser/retrieval helper | Athlete file upload + message | Conversation-scoped extracted context |
 | Admin analytics dashboard | Deterministic service/query layer | Admin dashboard load | Metrics, anonymized query lists, filters |
 | Dashboard insights agent | LangGraph or LangChain agent | Nightly cron or admin action | Curated dashboard insight cards and summaries |
-| Admin chat side panel | LangGraph or LangChain agent | Admin dashboard question | Analytics-grounded answer |
+| Admin chat side panel | LangGraph or LangChain agent in Celery worker | Admin dashboard question task | Streamed analytics-grounded answer |
 | Evaluation harness | pytest + LLM/RAG evals | CI/release validation | Retrieval, answer, and safety scores |
 
 ## LLM Gateway
@@ -49,6 +49,15 @@ persistent environments. The checkpointer stores durable graph state keyed by
 thread/session IDs so streamed or multi-step agent runs can resume safely after
 process restarts.
 
+Interactive agent generation must not run inside the request handler. Athlete
+chat and admin chat message APIs persist the user/admin turn and assistant
+placeholder, then dispatch a Celery task. The worker executes the agent and
+publishes ordered `chunk`, `progress`, `complete`, and `error` events to Valkey
+Streams under the returned `task_id`; pub/sub notifications wake the HTTP stream
+endpoint, which validates conversation/message or admin session/message
+ownership before subscribing. Non-interactive long-running work, such as KB
+ingestion and dashboard insight generation, remains polled by task/run status.
+
 ## Athlete Chat Agent
 
 ### Inputs
@@ -75,15 +84,18 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
 
 ### Flow
 
-1. Save user message.
-2. Classify topic/risk labels for analytics.
-3. Run safety pre-check for emergency, medical, legal, mental-health, harassment/reporting, recruiting, NIL, and compliance risk.
-4. Retrieve KB context using organization and visibility filters.
-5. Retrieve conversation file context if file IDs are present.
-6. Rank context using freshness, official-source, and priority metadata.
-7. Generate streamed answer.
-8. Attach bottom citations for grounded answers.
-9. Persist assistant message, citations, topic/risk labels, and safety outcome.
+1. Message submit API saves the user message and assistant placeholder.
+2. Message submit API dispatches a Celery task and returns `task_id` plus stream metadata.
+3. Celery worker loads the conversation/message context and resumes the LangGraph thread.
+4. Classify topic/risk labels for analytics.
+5. Run safety pre-check for emergency, medical, legal, mental-health, harassment/reporting, recruiting, NIL, and compliance risk.
+6. Retrieve KB context using organization and visibility filters.
+7. Retrieve conversation file context if file IDs are present.
+8. Rank context using freshness, official-source, and priority metadata.
+9. Generate answer chunks and publish stream events to Valkey Streams under `task_id`.
+10. Attach bottom citations for grounded answers.
+11. Persist assistant message, citations, topic/risk labels, and safety outcome.
+12. Publish final completion/error event so the HTTP stream endpoint can close cleanly.
 
 ### Output Contract
 
@@ -233,11 +245,14 @@ message records.
 ### Flow
 
 1. Create or load the admin chat session.
-2. Persist the admin question as an `admin_chat_messages` row.
-3. Authorize the admin against analytics permissions.
-4. Retrieve only authorized analytics, anonymized query text, and dashboard insight records.
-5. Generate an analytics-grounded answer or decline out-of-scope questions.
-6. Persist the assistant answer with references to metrics, query IDs, or dashboard insight records.
+2. Persist the admin question and assistant placeholder as `admin_chat_messages` rows.
+3. Dispatch a Celery task and return `task_id` plus stream metadata.
+4. Celery worker authorizes the admin against analytics permissions.
+5. Retrieve only authorized analytics, anonymized query text, and dashboard insight records.
+6. Generate analytics-grounded answer chunks or decline out-of-scope questions.
+7. Publish stream events to Valkey Streams under `task_id`.
+8. Persist the assistant answer with references to metrics, query IDs, or dashboard insight records.
+9. Publish final completion/error event so the HTTP stream endpoint can close cleanly.
 
 ### Output
 

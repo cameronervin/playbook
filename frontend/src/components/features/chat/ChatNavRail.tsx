@@ -4,6 +4,7 @@ import { type ReactNode, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { ChevronsUpDown, LayoutDashboard, LogOut, Plus, Search, Settings, X } from 'lucide-react'
+import { ChatHistorySkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { BrandLockup } from '@/src/components/ui'
 import { ROUTES } from '@/src/lib/constants/config'
 import { cn } from '@/src/lib/utils/cn'
@@ -14,6 +15,8 @@ import type { ConversationGroup } from './chatTypes'
 interface ChatNavRailProps {
   activeConversationId: string | null
   groups: ConversationGroup[]
+  isFetching?: boolean
+  isLoading?: boolean
   isLoggingOut: boolean
   onLogout: () => void
   onNewChat: () => void
@@ -25,6 +28,8 @@ interface ChatNavRailProps {
 export function ChatNavRail({
   activeConversationId,
   groups,
+  isFetching = false,
+  isLoading = false,
   isLoggingOut,
   onLogout,
   onNewChat,
@@ -67,22 +72,22 @@ export function ChatNavRail({
 
       <div className="px-3 pb-2 pt-1">
         <button
-          className="flex h-[42px] w-full items-center gap-3 rounded-md border border-border-strong bg-transparent px-3 text-left text-sm font-semibold text-fg-1 transition hover:bg-surface-hover active:translate-y-px"
+          className="pb-ui-sm flex h-[42px] w-full items-center gap-3 rounded-md border border-border-strong bg-transparent px-3 text-left font-semibold text-fg-1 transition hover:bg-surface-hover active:translate-y-px"
           onClick={onNewChat}
           type="button"
         >
           <Plus className="h-[17px] w-[17px] text-brand" />
           <span className="flex-1">New chat</span>
-          <span className="text-[10.5px] text-fg-4">⌘N</span>
+          <span className="pb-ui-xs text-fg-4">⌘N</span>
         </button>
       </div>
 
       <div className="px-3 pb-2">
-        <label className="pb-field-shell flex h-[34px] items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-sm text-fg-4">
+        <label className="pb-field-shell pb-ui-sm flex h-[34px] items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-fg-4">
           <Search className="h-[15px] w-[15px] shrink-0" />
           <span className="sr-only">Search chats</span>
           <input
-            className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-fg-1 outline-none placeholder:text-fg-4"
+            className="pb-ui-sm min-w-0 flex-1 border-0 bg-transparent text-fg-1 outline-none placeholder:text-fg-4"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search chats"
             value={query}
@@ -100,33 +105,43 @@ export function ChatNavRail({
         </label>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-1" aria-label="Conversation history">
-        {visibleGroups.length === 0 && !showActiveNewChat ? (
-          <p className="px-[11px] py-[18px] text-[13px] text-fg-4">No matching chats.</p>
-        ) : (
-          <>
-            {(showActiveNewChat || visibleGroups.some((group) => group.label === 'Today')) && (
-              <HistoryGroupLabel label="Today" />
-            )}
-            {showActiveNewChat && (
-              <ConversationRow active title="New chat" onClick={onNewChat} />
-            )}
-            {visibleGroups.map((group) => (
-              <div key={group.label}>
-                {group.label !== 'Today' && <HistoryGroupLabel label={group.label} />}
-                {group.conversations.map((conversation) => (
-                  <ConversationRow
-                    active={activeConversationId === conversation.id}
-                    key={conversation.id}
-                    onClick={() => onSelectConversation(conversation.id)}
-                    title={getConversationTitle(conversation)}
-                  />
-                ))}
-              </div>
-            ))}
-          </>
-        )}
-      </nav>
+      {isLoading ? (
+        <ChatHistorySkeleton />
+      ) : (
+        <nav className="flex-1 overflow-y-auto px-3 py-1" aria-label="Conversation history">
+          {isFetching && (
+            <p className="pb-refresh-note px-[11px] py-2">
+              <span className="pb-spin h-2 w-2 rounded-full border border-info border-t-transparent" />
+              Refreshing chats
+            </p>
+          )}
+          {visibleGroups.length === 0 && !showActiveNewChat ? (
+            <p className="pb-ui-sm px-[11px] py-[18px] text-fg-4">No matching chats.</p>
+          ) : (
+            <>
+              {(showActiveNewChat || visibleGroups.some((group) => group.label === 'Today')) && (
+                <HistoryGroupLabel label="Today" />
+              )}
+              {showActiveNewChat && (
+                <ConversationRow active title="New chat" onClick={onNewChat} />
+              )}
+              {visibleGroups.map((group) => (
+                <div key={group.label}>
+                  {group.label !== 'Today' && <HistoryGroupLabel label={group.label} />}
+                  {group.conversations.map((conversation) => (
+                    <ConversationRow
+                      active={activeConversationId === conversation.id}
+                      key={conversation.id}
+                      onClick={() => onSelectConversation(conversation.id)}
+                      title={getConversationTitle(conversation)}
+                    />
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+        </nav>
+      )}
 
       <div className="border-t border-border px-3 py-3.5">
         <DropdownMenuPrimitive.Root>
@@ -137,14 +152,14 @@ export function ChatNavRail({
               aria-label={`${user?.name ?? 'Playbook user'} account menu`}
             >
               <span className="relative shrink-0">
-                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand font-display text-[13px] font-extrabold text-fg-on-brand">
+                <span className="pb-ui-sm flex h-8 w-8 items-center justify-center rounded-md bg-brand font-display font-extrabold text-fg-on-brand">
                   {initials}
                 </span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-void bg-success" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold text-fg-1">{user?.name ?? 'Playbook user'}</span>
-                <span className="block truncate text-[11.5px] text-fg-3">{teamLabel}</span>
+                <span className="pb-ui-sm block truncate font-semibold text-fg-1">{user?.name ?? 'Playbook user'}</span>
+                <span className="pb-ui-xs block truncate text-fg-3">{teamLabel}</span>
               </span>
               <ChevronsUpDown className="h-4 w-4 shrink-0 text-fg-4" />
             </button>
@@ -152,17 +167,17 @@ export function ChatNavRail({
           <DropdownMenuPrimitive.Portal>
             <DropdownMenuPrimitive.Content
               align="start"
-              className="z-50 w-[240px] rounded-lg border border-border-strong bg-surface-raised p-1.5 text-sm text-fg-2 shadow-lg"
+              className="pb-ui-sm z-50 w-[240px] rounded-lg border border-border-strong bg-surface-raised p-1.5 text-fg-2 shadow-lg"
               side="top"
               sideOffset={8}
             >
               <div className="flex items-center gap-3 border-b border-border px-2 py-2.5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand font-display text-base font-extrabold text-fg-on-brand">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand font-display text-sm font-extrabold text-fg-on-brand">
                   {initials}
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-bold text-fg-1">{user?.name ?? 'Playbook user'}</span>
-                  <span className="block truncate text-xs text-fg-3">{user?.email ?? 'Signed in with SSO'}</span>
+                  <span className="pb-ui-sm block truncate font-bold text-fg-1">{user?.name ?? 'Playbook user'}</span>
+                  <span className="pb-ui-xs block truncate text-fg-3">{user?.email ?? 'Signed in with SSO'}</span>
                 </span>
               </div>
               <DropdownItem icon={<Settings className="h-4 w-4" />} onSelect={onOpenSettings}>
@@ -196,7 +211,7 @@ function ConversationRow({ active, onClick, title }: ConversationRowProps) {
   return (
     <button
       className={cn(
-        'relative mb-px flex w-full items-center rounded-sm px-[11px] py-2 text-left text-[13.5px] font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
+        'pb-ui-sm relative mb-px flex w-full items-center rounded-sm px-[11px] py-2 text-left font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
         active && 'bg-brand-soft font-semibold text-brand hover:bg-brand-soft hover:text-brand',
       )}
       onClick={onClick}
@@ -209,7 +224,7 @@ function ConversationRow({ active, onClick, title }: ConversationRowProps) {
 }
 
 function HistoryGroupLabel({ label }: { label: ConversationGroup['label'] }) {
-  return <p className="px-[11px] pb-1.5 pt-3 text-[11.5px] font-semibold tracking-normal text-fg-3">{label}</p>
+  return <p className="pb-ui-xs px-[11px] pb-1.5 pt-3 font-semibold text-fg-3">{label}</p>
 }
 
 interface DropdownItemProps {
@@ -224,7 +239,7 @@ function DropdownItem({ children, danger = false, disabled = false, icon, onSele
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13.5px] font-medium outline-none transition focus:bg-surface-hover focus:text-fg-1 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'pb-ui-sm mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 font-medium outline-none transition focus:bg-surface-hover focus:text-fg-1 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         danger ? 'text-danger focus:bg-danger-bg focus:text-danger' : 'text-fg-2',
       )}
       disabled={disabled}

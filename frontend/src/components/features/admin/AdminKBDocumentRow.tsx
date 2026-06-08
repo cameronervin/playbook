@@ -52,7 +52,7 @@ export function AdminKBDocumentRow({
         )}
         {processing && (
           <span className="pb-admin-kb-status text-info">
-            <LoaderCircle className="animate-spin" size={14} />
+            <LoaderCircle className="pb-spin" size={14} />
             Processing
           </span>
         )}

@@ -48,7 +48,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         >
           <textarea
             aria-label="Message Playbook"
-            className="min-h-[48px] w-full resize-none border-0 bg-transparent px-1 pb-2.5 pt-1 text-[15px] leading-6 text-fg-1 outline-none placeholder:text-fg-4"
+            className="min-h-[48px] w-full resize-none border-0 bg-transparent px-1 pb-2.5 pt-1 text-sm leading-6 text-fg-1 outline-none placeholder:text-fg-4"
             disabled={disabled}
             onChange={(event) => {
               setDraft(event.target.value)
@@ -87,7 +87,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             </Button>
           </div>
         </div>
-        <p className="mt-2.5 text-center text-[11px] text-fg-4">
+        <p className="pb-ui-xs mt-2.5 text-center text-fg-4">
           Responses are AI generated. Review to confirm accuracy.
         </p>
       </div>

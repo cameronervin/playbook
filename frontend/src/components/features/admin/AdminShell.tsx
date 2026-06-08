@@ -9,6 +9,7 @@ import { AdminNav } from '@/src/components/features/admin/AdminNav'
 import { KBPanel } from '@/src/components/features/admin/AdminPanels'
 import { AdminUsersPanel } from '@/src/components/features/admin/AdminUsersPanel'
 import { SettingsModal } from '@/src/components/features/common/SettingsModal'
+import { AdminWorkspaceSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { Button } from '@/src/components/ui'
 import { useAdminUsers, useUpdateUserRole } from '@/src/hooks/useAdmin'
@@ -42,8 +43,10 @@ export function AdminShell() {
   const addAdminChatMessage = useUIStore((state) => state.addAdminChatMessage)
   const isSuperAdmin = user?.role === 'super_admin'
   const isAdmin = user?.role === 'admin' || isSuperAdmin
-  const { data: documents = [] } = useKBDocuments()
-  const { data: users = [] } = useAdminUsers(Boolean(isSuperAdmin))
+  const documentsQuery = useKBDocuments()
+  const documents = documentsQuery.data ?? []
+  const usersQuery = useAdminUsers(Boolean(isSuperAdmin))
+  const users = usersQuery.data ?? []
   const retryDocument = useRetryKBDocument()
   const deleteDocument = useDeleteKBDocument()
   const updateDocument = useUpdateKBDocumentMetadata()
@@ -55,9 +58,7 @@ export function AdminShell() {
     if (!isSuperAdmin && adminTab === 'users') setAdminTab('insights')
   }, [adminTab, isSuperAdmin, setAdminTab])
 
-  if (isLoading) {
-    return <main className="pb-stage flex min-h-dvh items-center justify-center text-sm text-fg-3">Loading admin...</main>
-  }
+  if (isLoading) return <AdminWorkspaceSkeleton />
 
   if (!isAdmin) {
     return (
@@ -135,6 +136,9 @@ export function AdminShell() {
           <KBPanel
             canManage={Boolean(isSuperAdmin)}
             documents={documents}
+            isError={documentsQuery.isError}
+            isFetching={documentsQuery.isFetching && !documentsQuery.isLoading}
+            isLoading={documentsQuery.isLoading && documents.length === 0}
             onDelete={(id) => deleteDocument.mutate(id)}
             onRetry={(id) => retryDocument.mutate(id)}
             onToggleOfficial={(id, isOfficial) => updateDocument.mutate({ documentId: id, isOfficial })}
@@ -145,6 +149,9 @@ export function AdminShell() {
         {adminTab === 'users' && isSuperAdmin && (
           <AdminUsersPanel
             currentUserId={user?.id}
+            isError={usersQuery.isError}
+            isFetching={usersQuery.isFetching && !usersQuery.isLoading}
+            isLoading={usersQuery.isLoading && users.length === 0}
             onRoleChange={(id, role) => updateRole.mutate({ userId: id, role })}
             users={users}
           />

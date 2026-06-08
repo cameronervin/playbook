@@ -31,6 +31,13 @@ groups must not change the public URL paths above.
 
 Implementation should wire currently implemented backend APIs immediately and isolate planned-but-missing APIs behind typed fixture adapters so each phase can land cleanly.
 
+## Loader Policy
+- Route segments that can suspend must define `loading.tsx` fallbacks that preserve the target screen geometry: auth card, chat rail/thread/composer, or admin rail/header/cards. Do not use plain `Loading [page]...` copy as a page fallback.
+- Treat TanStack Query first-load states and background refetch states differently. Use shaped skeletons only when no useful cached data exists; keep existing content visible during `isFetching` and add a quiet token-backed refresh indicator.
+- Loader visuals must use Playbook tokens and motion classes from `globals.css` (`pb-skeleton`, `pb-spin`, `pb-think`, `pb-streaming`) and honor `prefers-reduced-motion`.
+- Skeletons should be structural-only: render stable chrome, headings, fixed controls, and persistent layout chrome directly; skeletonize only unknown data-backed regions; omit nonessential helper copy, subtitles, footer shimmer bars, and fake input-content placeholders. Stable copy that materially defines a control's footprint, such as the chat composer AI disclaimer, should remain visible.
+- Interaction loaders should appear in the workflow surface itself: chat submit shows the user bubble plus PlaybookAI thinking row, admin insight generation skeletonizes the AI summary, and KB document processing uses info-tone spinner status.
+
 ## Phase 1: Design System Foundation
 - Move the Playbook design assets from `docs/design/source/` into the frontend asset structure: fonts, favicon, logo mark reference, and approved provider-logo references.
 - Load Archivo, Sora, and Inter with `next/font/local` in `frontend/src/app/layout.tsx`; expose CSS variables for `--font-display`, `--font-display-alt`, and `--font-body`.
@@ -97,6 +104,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 - Wire conversation list, create, and detail to the implemented backend APIs.
 - Use typed fixture adapters for message submit, response streaming, citations, and conversation-scoped file upload until Phase 2 backend endpoints are implemented.
 - Preserve key design defaults: horizon background, comfortable density, "Ask PlaybookAI" empty state, grounded citations at the bottom of answers, and sources hidden on an empty new chat but opened after citation click or explicit toggle on grounded conversations.
+- Reuse existing app typography utilities such as `pb-ui-sm`, `pb-ui-xs`, and token-backed Tailwind type-scale classes for chat controls, history, menus, composer text, metadata, and source labels; do not carry over prototype-only arbitrary text sizes like `text-[13.5px]`.
 - Implement composer behavior with Enter-to-send, Shift+Enter newline, disabled/loading states, and recoverable error display.
 - Add settings modal support for MVP sections only: Profile and Security & SSO. Omit prototype-only Appearance/Tweaks controls unless a real settings store is introduced.
 - Add tests for empty state, conversation selection, new chat, composer submit, streaming placeholder, citation click opening sources, source-panel toggle, settings modal, and role-gated KB controls.

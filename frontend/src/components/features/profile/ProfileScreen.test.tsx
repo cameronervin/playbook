@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -11,10 +11,14 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
 }))
 
+const currentUserMock = vi.hoisted(() => ({
+  isLoading: false,
+}))
+
 vi.mock('@/src/hooks/useAuth', () => ({
   useCurrentUser: () => ({
-    data: { name: 'Jordan Athlete', email: 'athlete@example.com' },
-    isLoading: false,
+    data: currentUserMock.isLoading ? undefined : { name: 'Jordan Athlete', email: 'athlete@example.com' },
+    isLoading: currentUserMock.isLoading,
   }),
 }))
 
@@ -36,6 +40,25 @@ function renderProfile() {
 }
 
 describe('ProfileScreen', () => {
+  beforeEach(() => {
+    currentUserMock.isLoading = false
+    mutateAsync.mockReset()
+    push.mockReset()
+  })
+
+  it('renders a shaped profile skeleton while current user data resolves', () => {
+    currentUserMock.isLoading = true
+
+    renderProfile()
+
+    expect(screen.getByTestId('profile-card-skeleton')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /complete your profile/i })).toBeInTheDocument()
+    expect(screen.getByText('Name')).toBeInTheDocument()
+    expect(screen.getByText('Sport or team')).toBeInTheDocument()
+    expect(screen.queryByText(/we just need a few more details/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /i'm ready/i })).not.toBeInTheDocument()
+  })
+
   it('renders profile completion inside the shared auth shell', () => {
     renderProfile()
 

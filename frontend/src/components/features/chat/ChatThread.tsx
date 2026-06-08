@@ -1,28 +1,44 @@
 'use client'
 
 import { FileText } from 'lucide-react'
+import { ChatThreadSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { PlaybookMark } from '@/src/components/ui'
 import type { ChatMessage, Citation } from '@/src/types/conversations'
 
 interface ChatThreadProps {
+  isLoading?: boolean
   messages: ChatMessage[]
   onCitationSelect: (citation: Citation) => void
+  pendingMessage?: string | null
 }
 
-export function ChatThread({ messages, onCitationSelect }: ChatThreadProps) {
+export function ChatThread({ isLoading = false, messages, onCitationSelect, pendingMessage = null }: ChatThreadProps) {
+  if (isLoading) return <ChatThreadSkeleton />
+
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-y-auto py-7">
       <div className="flex w-full max-w-[760px] flex-col gap-6 px-7">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !pendingMessage ? (
           <EmptyState />
         ) : (
-          messages.map((message) =>
-            message.role === 'user' ? (
-              <UserMessage key={message.id} message={message} />
-            ) : (
-              <AssistantMessage key={message.id} message={message} onCitationSelect={onCitationSelect} />
-            ),
-          )
+          <>
+            {messages.map((message) =>
+              message.role === 'user' ? (
+                <UserMessage key={message.id} message={message} />
+              ) : (
+                <AssistantMessage key={message.id} message={message} onCitationSelect={onCitationSelect} />
+              ),
+            )}
+            {pendingMessage && (
+              <>
+                <UserMessage message={createPendingMessage('pending-user-message', 'user', pendingMessage)} />
+                <AssistantMessage
+                  message={createPendingMessage('pending-assistant-message', 'assistant', '')}
+                  onCitationSelect={onCitationSelect}
+                />
+              </>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -38,7 +54,7 @@ function EmptyState() {
           Ask PlaybookAI
         </h1>
       </div>
-      <p className="m-0 text-balance text-[15px] leading-[1.55] text-fg-3">
+      <p className="m-0 text-balance text-sm leading-6 text-fg-3">
         Get answers to your athletics questions,
         <br />
         PlaybookAI is your coach off the field.
@@ -50,7 +66,7 @@ function EmptyState() {
 function UserMessage({ message }: { message: ChatMessage }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[78%] rounded-lg rounded-tr-sm border border-border bg-surface-hover px-4 py-3 text-[14.5px] leading-[1.55] text-fg-1">
+      <div className="max-w-[78%] rounded-lg rounded-tr-sm border border-border bg-surface-hover px-4 py-3 text-sm leading-6 text-fg-1">
         {message.content}
       </div>
     </div>
@@ -70,24 +86,24 @@ function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) 
   return (
     <article className="flex">
       <div className="min-w-0 flex-1">
-        <p className="mb-2 text-[12.5px] text-fg-3">
+        <p className="pb-ui-xs mb-2 text-fg-3">
           <span className="font-semibold text-fg-1">PlaybookAI</span>
         </p>
         {isThinking ? (
-          <div className="flex items-center gap-3 py-1 text-[13.5px] text-fg-3">
+          <div className="pb-ui-sm flex items-center gap-3 py-1 text-fg-3">
             <span className="animate-pb-pulse text-brand">
               <PlaybookMark size={22} />
             </span>
-            <span>Thinking...</span>
+            <span className="pb-think">Thinking...</span>
           </div>
         ) : (
           <>
-            <p className="whitespace-pre-wrap text-[14.5px] leading-[1.62] text-fg-1">{message.content}</p>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-fg-1">{message.content}</p>
             {message.citations.length > 0 && (
               <div className="mt-3.5 flex flex-wrap gap-2">
                 {message.citations.map((citation) => (
                   <button
-                    className="inline-flex items-center gap-2 rounded-sm border border-border-strong bg-surface px-2.5 py-1.5 text-[10.5px] font-medium text-fg-2 transition hover:border-border-brand hover:text-fg-1"
+                    className="pb-ui-xs inline-flex items-center gap-2 rounded-sm border border-border-strong bg-surface px-2.5 py-1.5 font-medium text-fg-2 transition hover:border-border-brand hover:text-fg-1"
                     key={citation.id}
                     onClick={() => onCitationSelect(citation)}
                     type="button"
@@ -99,7 +115,7 @@ function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) 
               </div>
             )}
             {(checkedSources || responseTime) && (
-              <p className="mt-3 text-[11px] text-fg-3">
+              <p className="pb-ui-xs mt-3 text-fg-3">
                 {checkedSources ? `Checked ${checkedSources} sources` : 'Checked sources'}
                 {responseTime ? ` · ${responseTime}` : null}
               </p>
@@ -109,6 +125,22 @@ function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) 
       </div>
     </article>
   )
+}
+
+function createPendingMessage(id: string, role: 'user' | 'assistant', content: string): ChatMessage {
+  return {
+    id,
+    conversation_id: 'pending-conversation',
+    role,
+    content,
+    status: role === 'assistant' ? 'pending' : 'complete',
+    safety_outcome: null,
+    topic_labels: [],
+    risk_labels: [],
+    metadata: {},
+    citations: [],
+    created_at: new Date(0).toISOString(),
+  }
 }
 
 function getNumberMetadata(metadata: Record<string, unknown>, key: string) {

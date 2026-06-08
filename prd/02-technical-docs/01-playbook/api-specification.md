@@ -29,7 +29,7 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | POST | `/conversations` | Create a new conversation from the initial user message | athlete |
 | GET | `/conversations/{conversation_id}` | Get conversation with messages, citations, files | athlete-owner |
 | POST | `/conversations/{conversation_id}/messages` | Submit follow-up user message and start streamed generation | athlete-owner |
-| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks | athlete-owner |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks for the submitted task | athlete-owner |
 | POST | `/conversations/{conversation_id}/files` | Upload conversation-scoped file | athlete-owner |
 
 ### Knowledge Base Admin
@@ -58,7 +58,8 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | GET | `/admin/chat/sessions` | List current admin's chat sessions | admin |
 | POST | `/admin/chat/sessions` | Create an admin chat side-panel session | admin |
 | GET | `/admin/chat/sessions/{session_id}` | Get admin chat session with messages | admin-owner |
-| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question | admin-owner |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question and start streamed answer generation | admin-owner |
+| GET | `/admin/chat/sessions/{session_id}/messages/{message_id}/stream` | Stream admin chat answer chunks for the submitted task | admin-owner |
 
 ### Governance
 
@@ -131,10 +132,18 @@ Response:
 {
   "user_message_id": "uuid",
   "assistant_message_id": "uuid",
-  "stream_url": "/api/v1/conversations/uuid/messages/uuid/stream",
+  "task_id": "celery-task-uuid",
+  "stream_url": "/api/v1/conversations/uuid/messages/uuid/stream?task_id=celery-task-uuid",
   "status": "streaming"
 }
 ```
+
+The message submit route must enqueue a Celery task to execute the athlete chat
+agent. The Celery worker publishes ordered lifecycle and token events to Valkey
+Streams, with pub/sub notification for active HTTP subscribers. The stream URL
+must be scoped to the athlete-owned conversation and assistant message, and the
+backend must verify that the supplied `task_id` belongs to that
+conversation/message before subscribing to the task's Valkey stream/channel.
 
 ### Upload Conversation File
 ```json
@@ -307,6 +316,25 @@ Response:
 ```json
 {
   "session_id": "uuid",
+  "user_message_id": "uuid",
+  "assistant_message_id": "uuid",
+  "task_id": "celery-task-uuid",
+  "stream_url": "/api/v1/admin/chat/sessions/uuid/messages/uuid/stream?task_id=celery-task-uuid",
+  "status": "streaming"
+}
+```
+
+The admin chat question route must enqueue a Celery task to execute the admin
+chat agent. The worker publishes ordered lifecycle and token events to Valkey
+Streams, with pub/sub notification for active HTTP subscribers. The stream URL
+must be scoped to the admin-owned session and assistant message, and the backend
+must verify that the supplied `task_id` belongs to that session/message before
+subscribing to the task's Valkey stream/channel.
+
+Final persisted assistant message shape:
+```json
+{
+  "session_id": "uuid",
   "message_id": "uuid",
   "answer": "NIL disclosure timing is the most common confusion area...",
   "answer_type": "analytics_answer",
@@ -319,7 +347,8 @@ Response:
 
 The API stores both the admin question and assistant answer in
 `admin_chat_messages`. The `session_id` must belong to the current admin and
-organization.
+organization. Dashboard insight runs are separate long-running jobs and remain
+polled by `run_id`; only interactive agent responses use the streaming bridge.
 
 ## Error Response Contract
 

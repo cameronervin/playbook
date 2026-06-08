@@ -18,6 +18,7 @@ import {
 import { AdminKBDocumentRow } from '@/src/components/features/admin/AdminKBDocumentRow'
 import { AdminKBMetadataDrawer } from '@/src/components/features/admin/AdminKBMetadataDrawer'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
+import { AdminKBSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { Button } from '@/src/components/ui'
 import { ADMIN_KB_COLLECTIONS, buildKBCollectionViews, collectionUploadMetadata } from '@/src/lib/fixtures/kbCollections'
 import type { UploadKBDocumentRequest } from '@/src/lib/api/endpoints/kbDocuments'
@@ -26,6 +27,9 @@ import type { KBCollection, KBCollectionIcon, KBCollectionViewModel, KBDocument,
 interface AdminKnowledgeBasePanelProps {
   canManage: boolean
   documents: KBDocument[]
+  isError?: boolean
+  isFetching?: boolean
+  isLoading?: boolean
   onDelete: (id: string) => void
   onRetry: (id: string) => void
   onToggleOfficial: (id: string, isOfficial: boolean) => void
@@ -36,6 +40,9 @@ interface AdminKnowledgeBasePanelProps {
 export function AdminKnowledgeBasePanel({
   canManage,
   documents,
+  isError = false,
+  isFetching = false,
+  isLoading = false,
   onDelete,
   onRetry,
   onToggleOfficial,
@@ -91,6 +98,9 @@ export function AdminKnowledgeBasePanel({
     <CollectionGrid
       canManage={canManage}
       collections={collectionViews}
+      isError={isError}
+      isFetching={isFetching}
+      isLoading={isLoading}
       onCreateCollection={handleCreateCollection}
       onOpen={setOpenId}
     />
@@ -100,11 +110,14 @@ export function AdminKnowledgeBasePanel({
 interface CollectionGridProps {
   canManage: boolean
   collections: KBCollectionViewModel[]
+  isError: boolean
+  isFetching: boolean
+  isLoading: boolean
   onCreateCollection: () => void
   onOpen: (id: string) => void
 }
 
-function CollectionGrid({ canManage, collections, onCreateCollection, onOpen }: CollectionGridProps) {
+function CollectionGrid({ canManage, collections, isError, isFetching, isLoading, onCreateCollection, onOpen }: CollectionGridProps) {
   const totalDocuments = collections.reduce((count, collection) => count + collection.documents.length, 0)
 
   return (
@@ -124,14 +137,31 @@ function CollectionGrid({ canManage, collections, onCreateCollection, onOpen }: 
       }
       contentClassName="py-7"
       contentMaxWidthClassName="pb-admin-kb-grid-width"
-      subtitle={`${totalDocuments} ${totalDocuments === 1 ? 'document' : 'documents'} across ${collections.length} collections`}
+      subtitle={isLoading ? undefined : `${totalDocuments} ${totalDocuments === 1 ? 'document' : 'documents'} across ${collections.length} collections`}
       title="Knowledge base"
     >
-      <div className="pb-admin-kb-grid">
-        {collections.map((collection) => (
-          <CollectionCard collection={collection} key={collection.id} onOpen={() => onOpen(collection.id)} />
-        ))}
-      </div>
+      {isLoading ? (
+        <AdminKBSkeleton />
+      ) : (
+        <>
+          {isFetching && (
+            <p className="pb-refresh-note mb-3">
+              <span className="pb-spin h-2 w-2 rounded-full border border-info border-t-transparent" />
+              Refreshing knowledge base
+            </p>
+          )}
+          {isError && (
+            <p className="mb-3 rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-sm text-danger">
+              Knowledge-base documents could not be refreshed.
+            </p>
+          )}
+          <div className="pb-admin-kb-grid">
+            {collections.map((collection) => (
+              <CollectionCard collection={collection} key={collection.id} onOpen={() => onOpen(collection.id)} />
+            ))}
+          </div>
+        </>
+      )}
     </AdminPageScaffold>
   )
 }
@@ -180,7 +210,7 @@ function CollectionStatus({ collection }: { collection: KBCollectionViewModel })
   if (collection.processingCount > 0) {
     return (
       <span className="pb-admin-kb-info">
-        <LoaderCircle className="animate-spin" size={13} />
+        <LoaderCircle className="pb-spin" size={13} />
         {collection.processingCount} processing
       </span>
     )

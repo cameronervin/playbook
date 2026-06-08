@@ -48,7 +48,7 @@ export function AdminInsightsDashboard({
         <>
           <TimeWindowMenu onChange={onTimeWindowChange} value={timeWindow} />
           <Button className={headerControlClassName} disabled={generating} onClick={onGenerate} size="sm" variant="secondary">
-            {generating ? <LoaderCircle className="h-[15px] w-[15px] animate-spin" /> : <RefreshCw className="h-[15px] w-[15px]" />}
+            {generating ? <LoaderCircle className="h-[15px] w-[15px] pb-spin" /> : <RefreshCw className="h-[15px] w-[15px]" />}
             {generating ? 'Regenerating...' : 'Regenerate'}
           </Button>
           <Button className={headerControlClassName} onClick={onOpenChat} size="sm">
@@ -130,7 +130,7 @@ function AISummaryCard({ generating, insight }: { generating: boolean; insight: 
         <span className="ml-auto inline-flex items-center gap-2 text-[11.5px] text-fg-3">
           {generating ? (
             <>
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin text-info" />
+              <LoaderCircle className="h-3.5 w-3.5 pb-spin text-info" />
               Generating...
             </>
           ) : (

@@ -1,18 +1,29 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthCard } from '@/src/components/features/auth/AuthLayout'
+import { ProfileCardSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { BrandLockup, Button, Input } from '@/src/components/ui'
 import { useCurrentUser } from '@/src/hooks/useAuth'
 import { useUpdateProfile } from '@/src/hooks/useProfile'
 
 export function ProfileScreen() {
   const router = useRouter()
-  const { data: user } = useCurrentUser()
+  const { data: user, isLoading } = useCurrentUser()
   const updateProfile = useUpdateProfile()
   const [name, setName] = useState(user?.name ?? '')
   const [sportTeam, setSportTeam] = useState('')
+  const initializedNameRef = useRef(Boolean(user?.name))
+
+  useEffect(() => {
+    if (!initializedNameRef.current && user?.name) {
+      setName(user.name)
+      initializedNameRef.current = true
+    }
+  }, [user?.name])
+
+  if (isLoading) return <ProfileCardSkeleton />
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

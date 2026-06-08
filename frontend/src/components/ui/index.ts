@@ -7,6 +7,7 @@ export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 export { IconButton } from '@/src/components/ui/icon-button'
 export { Input, Textarea } from '@/src/components/ui/field'
 export { SegmentedControl } from '@/src/components/ui/segmented-control'
+export { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonText } from '@/src/components/ui/skeleton'
 export { Surface } from '@/src/components/ui/surface'
 export { Switch } from '@/src/components/ui/switch'
 export { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'

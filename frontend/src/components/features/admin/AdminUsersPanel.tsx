@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronDown, Lock, Search, Shield, ShieldCheck, User } from 'lucide-react'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
+import { AdminUsersSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { Badge } from '@/src/components/ui'
 import { cn } from '@/src/lib/utils/cn'
 import type { AdminUser } from '@/src/types/admin'
@@ -11,6 +12,9 @@ import type { UserRole } from '@/src/types/auth'
 
 interface AdminUsersPanelProps {
   currentUserId?: string
+  isError?: boolean
+  isFetching?: boolean
+  isLoading?: boolean
   onRoleChange: (id: string, role: UserRole) => void
   users: AdminUser[]
 }
@@ -33,7 +37,14 @@ const roleOptions: Array<{ label: string; role: UserRole }> = [
   { role: 'super_admin', label: 'Promote to super admin' },
 ]
 
-export function AdminUsersPanel({ currentUserId, onRoleChange, users }: AdminUsersPanelProps) {
+export function AdminUsersPanel({
+  currentUserId,
+  isError = false,
+  isFetching = false,
+  isLoading = false,
+  onRoleChange,
+  users,
+}: AdminUsersPanelProps) {
   const [query, setQuery] = useState('')
   const adminCount = users.filter((user) => user.role === 'admin' || user.role === 'super_admin').length
   const filteredUsers = useMemo(() => {
@@ -50,9 +61,24 @@ export function AdminUsersPanel({ currentUserId, onRoleChange, users }: AdminUse
     <AdminPageScaffold
       contentClassName="py-[18px]"
       contentMaxWidthClassName="max-w-[880px]"
-      subtitle={`${users.length} ${users.length === 1 ? 'user' : 'users'} · ${adminCount} with admin access`}
+      subtitle={isLoading ? undefined : `${users.length} ${users.length === 1 ? 'user' : 'users'} · ${adminCount} with admin access`}
       title="Users & roles"
     >
+      {isLoading ? (
+        <AdminUsersSkeleton />
+      ) : (
+        <>
+          {isFetching && (
+            <p className="pb-refresh-note mb-3">
+              <span className="pb-spin h-2 w-2 rounded-full border border-info border-t-transparent" />
+              Refreshing users
+            </p>
+          )}
+          {isError && (
+            <p className="mb-3 rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-sm text-danger">
+              Users could not be refreshed.
+            </p>
+          )}
       <section
         aria-label="Users and roles table"
         className="overflow-hidden rounded-lg border border-border-strong bg-surface"
@@ -93,6 +119,8 @@ export function AdminUsersPanel({ currentUserId, onRoleChange, users }: AdminUse
           />
         ))}
       </section>
+        </>
+      )}
     </AdminPageScaffold>
   )
 }
