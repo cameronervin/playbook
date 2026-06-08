@@ -39,8 +39,10 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 
 - Fonts are loaded locally in `src/app/layout.tsx`: Archivo, Sora, and Inter.
 - Tailwind v4 tokens live in `src/app/globals.css` using `@theme`.
+- Compact product typography utilities live in `src/app/globals.css`: `pb-page-title`, `pb-page-subtitle`, `pb-card-title`, `pb-ui-sm`, and `pb-ui-xs`.
 - The palette is Playbook orange on warm charcoal. Avoid blue/purple AI gradients.
 - Use local Playbook primitives in `src/components/ui/`.
+- Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions.
 - `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
 - `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`.
 - Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.

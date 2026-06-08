@@ -42,10 +42,10 @@ describe('ProfileScreen', () => {
     const authCard = screen.getByTestId('auth-card')
     const brandLockup = screen.getByText('Playbook').closest('div')
     const heading = screen.getByRole('heading', { name: /complete your profile/i })
-    const description = screen.getByText(/add the basics playbook needs/i)
+    const description = screen.getByText(/we just need a few more details/i)
     const nameField = screen.getByLabelText(/name/i)
     const sportField = screen.getByLabelText(/sport or team/i)
-    const continueButton = screen.getByRole('button', { name: /let's get started/i })
+    const continueButton = screen.getByRole('button', { name: /i'm ready/i })
 
     expect(authCard).toBeInTheDocument()
     expect(authCard).not.toHaveClass('pb-auth-card-wide')
@@ -69,7 +69,7 @@ describe('ProfileScreen', () => {
     await userEvent.clear(screen.getByLabelText(/name/i))
     await userEvent.type(screen.getByLabelText(/name/i), 'Jordan Athlete')
     await userEvent.type(screen.getByLabelText(/sport/i), 'Basketball')
-    await userEvent.click(screen.getByRole('button', { name: /let's get started/i }))
+    await userEvent.click(screen.getByRole('button', { name: /i'm ready/i }))
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith({

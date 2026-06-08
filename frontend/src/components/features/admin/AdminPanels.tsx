@@ -12,7 +12,7 @@ interface KBPanelProps {
 export function KBPanel({ canManage, documents, onDelete, onRetry, onToggleOfficial }: KBPanelProps) {
   return (
     <div className="mx-auto w-full max-w-[1000px] px-7 py-7">
-      <h1 className="font-display text-3xl font-black text-fg-1">Knowledge base</h1>
+      <h1 className="pb-page-title">Knowledge base</h1>
       <div className="mt-6 grid gap-3">
         {documents.length === 0 && <Surface className="p-5 text-sm text-fg-3">No documents yet.</Surface>}
         {documents.map((doc) => (
@@ -53,7 +53,7 @@ interface UsersPanelProps {
 export function UsersPanel({ auditCount, onRoleChange, users }: UsersPanelProps) {
   return (
     <div className="mx-auto w-full max-w-[1000px] px-7 py-7">
-      <h1 className="font-display text-3xl font-black text-fg-1">Users & roles</h1>
+      <h1 className="pb-page-title">Users & roles</h1>
       <p className="mt-2 text-sm text-fg-3">{auditCount} audit events available.</p>
       <div className="mt-6 grid gap-3">
         {users.length === 0 && <Surface className="p-5 text-sm text-fg-3">No users returned yet.</Surface>}

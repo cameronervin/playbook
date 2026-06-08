@@ -28,6 +28,8 @@ const timeWindowLabels: Record<AdminTimeWindow, string> = {
   custom: 'Custom range',
 }
 
+const headerControlClassName = 'h-9 w-[156px] justify-center pb-ui-sm'
+
 export function AdminInsightsDashboard({
   insight,
   insightStatus,
@@ -45,17 +47,17 @@ export function AdminInsightsDashboard({
         <div className="admin-grid" aria-hidden="true" />
         <div className="relative z-10 flex min-h-[68px] items-center gap-5">
           <div className="min-w-0">
-            <h1 className="font-display text-[32px] font-extrabold leading-none tracking-normal text-fg-1">Insights</h1>
-            <p className="mt-2 text-[12.5px] text-fg-3">AI generated insights from user queries</p>
+            <h1 className="pb-page-title">Insights</h1>
+            <p className="pb-page-subtitle mt-0.5">AI generated insights from user queries</p>
           </div>
           <div className="ml-auto flex items-center gap-2.5">
             <TimeWindowMenu onChange={onTimeWindowChange} value={timeWindow} />
-            <Button disabled={generating} onClick={onGenerate} size="sm" variant="secondary">
-              {generating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <Button className={headerControlClassName} disabled={generating} onClick={onGenerate} size="sm" variant="secondary">
+              {generating ? <LoaderCircle className="h-[15px] w-[15px] animate-spin" /> : <RefreshCw className="h-[15px] w-[15px]" />}
               {generating ? 'Regenerating...' : 'Regenerate'}
             </Button>
-            <Button onClick={onOpenChat} size="sm">
-              <Zap className="h-4 w-4" />
+            <Button className={headerControlClassName} onClick={onOpenChat} size="sm">
+              <Zap className="h-[15px] w-[15px]" />
               Explore with AI
             </Button>
           </div>
@@ -92,17 +94,20 @@ function TimeWindowMenu({ onChange, value }: TimeWindowMenuProps) {
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
         <button
-          className="inline-flex h-9 items-center gap-3 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-fg-1 transition hover:bg-surface-hover"
+          className={cn(
+            headerControlClassName,
+            'inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-3 font-semibold text-fg-1 transition hover:bg-surface-hover',
+          )}
           type="button"
         >
           {timeWindowLabels[value]}
-          <ChevronDown className="h-4 w-4 text-fg-3" />
+          <ChevronDown className="h-[15px] w-[15px] text-fg-3" />
         </button>
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
         <DropdownMenuPrimitive.Content
           align="end"
-          className="z-50 min-w-[172px] rounded-md border border-border-strong bg-surface-raised p-1.5 text-sm text-fg-2 shadow-lg"
+          className="pb-ui-sm z-50 min-w-[172px] rounded-md border border-border-strong bg-surface-raised p-1.5 text-fg-2 shadow-lg"
           sideOffset={8}
         >
           {(Object.keys(timeWindowLabels) as AdminTimeWindow[]).map((window) => (
@@ -218,8 +223,8 @@ function DashboardCard({ children, className, title, titleAside }: DashboardCard
   return (
     <section className={cn('rounded-lg border border-border-strong bg-surface p-[18px]', className)}>
       <div className="mb-3 flex items-baseline">
-        <h2 className="font-display text-[15px] font-bold text-fg-1">{title}</h2>
-        {titleAside && <span className="ml-auto text-xs text-fg-3">{titleAside}</span>}
+        <h2 className="pb-card-title">{title}</h2>
+        {titleAside && <span className="pb-ui-xs ml-auto text-fg-3">{titleAside}</span>}
       </div>
       {children}
     </section>
