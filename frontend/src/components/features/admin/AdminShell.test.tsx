@@ -79,6 +79,69 @@ const adminUsers = vi.hoisted(() => [
 ] as const)
 
 const updateRoleMutate = vi.hoisted(() => vi.fn())
+const retryDocumentMutate = vi.hoisted(() => vi.fn())
+const deleteDocumentMutate = vi.hoisted(() => vi.fn())
+const updateDocumentMutate = vi.hoisted(() => vi.fn())
+const uploadDocumentMutate = vi.hoisted(() => vi.fn())
+const kbDocuments = vi.hoisted(() => [
+  {
+    id: 'doc-nil-policy',
+    organization_id: 'org-1',
+    uploaded_by: 'u1',
+    title: 'NIL_POLICY_2025.PDF',
+    filename: 'NIL_POLICY_2025.PDF',
+    content_type: 'application/pdf',
+    size_bytes: 1_800_000,
+    processing_status: 'ready',
+    failure_reason: null,
+    visibility_policy: { scope: 'all_athletes' },
+    metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
+    source_date: '2026-03-01',
+    is_official: true,
+    priority: 3,
+    kb_service_document_id: 'kb-doc-1',
+    created_at: '2026-03-14T12:00:00Z',
+    updated_at: '2026-03-14T12:00:00Z',
+  },
+  {
+    id: 'doc-recruiting',
+    organization_id: 'org-1',
+    uploaded_by: 'u1',
+    title: 'RECRUITING_DEAD_PERIODS.PDF',
+    filename: 'RECRUITING_DEAD_PERIODS.PDF',
+    content_type: 'application/pdf',
+    size_bytes: 1_100_000,
+    processing_status: 'failed',
+    failure_reason: 'Scanned PDF - no extractable text layer.',
+    visibility_policy: { scope: 'all_athletes' },
+    metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
+    source_date: null,
+    is_official: false,
+    priority: 3,
+    kb_service_document_id: null,
+    created_at: '2026-06-03T12:00:00Z',
+    updated_at: '2026-06-03T12:00:00Z',
+  },
+  {
+    id: 'doc-travel',
+    organization_id: 'org-1',
+    uploaded_by: 'u2',
+    title: 'PER_DIEM_RATES.XLSX',
+    filename: 'PER_DIEM_RATES.XLSX',
+    content_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    size_bytes: 88_000,
+    processing_status: 'ready',
+    failure_reason: null,
+    visibility_policy: { scope: 'all_athletes' },
+    metadata_tags: { collection: 'travel', topics: ['Travel'] },
+    source_date: '2026-06-01',
+    is_official: true,
+    priority: 1,
+    kb_service_document_id: 'kb-doc-3',
+    created_at: '2026-06-01T12:00:00Z',
+    updated_at: '2026-06-01T12:00:00Z',
+  },
+] as Array<Record<string, unknown>>)
 
 vi.mock('@/src/hooks/useAuth', () => ({
   useCurrentUser: () => ({
@@ -104,21 +167,13 @@ vi.mock('@/src/hooks/useAdmin', () => ({
 
 vi.mock('@/src/hooks/useKBDocuments', () => ({
   useKBDocuments: () => ({
-    data: [
-      {
-        id: 'doc-failed',
-        title: 'RECRUITING_DEAD_PERIODS.PDF',
-        processing_status: 'failed',
-        is_official: false,
-        failure_reason: 'Scanned PDF',
-      },
-    ],
+    data: kbDocuments,
     isLoading: false,
   }),
-  useUploadKBDocument: () => ({ mutate: vi.fn(), isPending: false }),
-  useRetryKBDocument: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteKBDocument: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateKBDocumentMetadata: () => ({ mutate: vi.fn(), isPending: false }),
+  useUploadKBDocument: () => ({ mutate: uploadDocumentMutate, isPending: false }),
+  useRetryKBDocument: () => ({ mutate: retryDocumentMutate, isPending: false }),
+  useDeleteKBDocument: () => ({ mutate: deleteDocumentMutate, isPending: false }),
+  useUpdateKBDocumentMetadata: () => ({ mutate: updateDocumentMutate, isPending: false }),
 }))
 
 function renderAdmin() {
@@ -138,6 +193,69 @@ describe('AdminShell', () => {
     adminRouterMocks.push.mockClear()
     adminRouterMocks.replace.mockClear()
     updateRoleMutate.mockClear()
+    retryDocumentMutate.mockClear()
+    deleteDocumentMutate.mockClear()
+    updateDocumentMutate.mockClear()
+    uploadDocumentMutate.mockClear()
+    kbDocuments.splice(0, kbDocuments.length, ...[
+      {
+        id: 'doc-nil-policy',
+        organization_id: 'org-1',
+        uploaded_by: 'u1',
+        title: 'NIL_POLICY_2025.PDF',
+        filename: 'NIL_POLICY_2025.PDF',
+        content_type: 'application/pdf',
+        size_bytes: 1_800_000,
+        processing_status: 'ready',
+        failure_reason: null,
+        visibility_policy: { scope: 'all_athletes' },
+        metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
+        source_date: '2026-03-01',
+        is_official: true,
+        priority: 3,
+        kb_service_document_id: 'kb-doc-1',
+        created_at: '2026-03-14T12:00:00Z',
+        updated_at: '2026-03-14T12:00:00Z',
+      },
+      {
+        id: 'doc-recruiting',
+        organization_id: 'org-1',
+        uploaded_by: 'u1',
+        title: 'RECRUITING_DEAD_PERIODS.PDF',
+        filename: 'RECRUITING_DEAD_PERIODS.PDF',
+        content_type: 'application/pdf',
+        size_bytes: 1_100_000,
+        processing_status: 'failed',
+        failure_reason: 'Scanned PDF - no extractable text layer.',
+        visibility_policy: { scope: 'all_athletes' },
+        metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
+        source_date: null,
+        is_official: false,
+        priority: 3,
+        kb_service_document_id: null,
+        created_at: '2026-06-03T12:00:00Z',
+        updated_at: '2026-06-03T12:00:00Z',
+      },
+      {
+        id: 'doc-travel',
+        organization_id: 'org-1',
+        uploaded_by: 'u2',
+        title: 'PER_DIEM_RATES.XLSX',
+        filename: 'PER_DIEM_RATES.XLSX',
+        content_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size_bytes: 88_000,
+        processing_status: 'ready',
+        failure_reason: null,
+        visibility_policy: { scope: 'all_athletes' },
+        metadata_tags: { collection: 'travel', topics: ['Travel'] },
+        source_date: '2026-06-01',
+        is_official: true,
+        priority: 1,
+        kb_service_document_id: 'kb-doc-3',
+        created_at: '2026-06-01T12:00:00Z',
+        updated_at: '2026-06-01T12:00:00Z',
+      },
+    ])
     useUIStore.setState({
       adminTab: 'insights',
       adminChatOpen: false,
@@ -220,13 +338,77 @@ describe('AdminShell', () => {
     await userEvent.click(screen.getByRole('button', { name: /knowledge base 1 failed document/i }))
 
     expect(screen.getByRole('heading', { name: 'Knowledge base' })).toHaveClass('pb-page-title')
-    expect(screen.getByText(/1 document in knowledge base/i)).toHaveClass('pb-page-subtitle')
+    expect(screen.getByText(/3 documents across 4 collections/i)).toHaveClass('pb-page-subtitle')
 
     await userEvent.click(screen.getByRole('button', { name: /users & roles/i }))
 
     expect(screen.getByRole('heading', { name: 'Users & roles' })).toHaveClass('pb-page-title')
     expect(screen.getByText(/6 users · 4 with admin access/i)).toHaveClass('pb-page-subtitle')
     expect(screen.queryByText(/audit events available/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the collection-first knowledge base grid with design counts', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    expect(screen.getByRole('heading', { name: 'Knowledge base' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /New collection/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toHaveTextContent('2 documents')
+    expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toHaveTextContent('1 needs attention')
+    expect(screen.getByRole('button', { name: /Team Travel collection/i })).toHaveTextContent('1 document')
+    expect(screen.getByRole('button', { name: /Team Travel collection/i })).toHaveTextContent('All ready')
+    expect(screen.getByRole('button', { name: /Academic Services collection/i })).toHaveTextContent('No documents yet')
+    expect(screen.getByRole('button', { name: /Donor Relations collection/i })).toHaveTextContent('No documents yet')
+  })
+
+  it('keeps collections visible when there are no documents', () => {
+    currentUser.role = 'super_admin'
+    kbDocuments.splice(0, kbDocuments.length)
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    expect(screen.getByText(/0 documents across 4 collections/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toHaveTextContent('No documents yet')
+    expect(screen.getByRole('button', { name: /Team Travel collection/i })).toHaveTextContent('No documents yet')
+    expect(screen.queryByText(/^No documents yet\.$/i)).not.toBeInTheDocument()
+  })
+
+  it('shows read-only collection management for department admins', () => {
+    currentUser.role = 'admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    expect(screen.getByText(/Managed by super admins/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /New collection/i })).not.toBeInTheDocument()
+  })
+
+  it('opens collection detail and routes document actions through KB mutations', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+
+    expect(screen.getByRole('heading', { name: 'Compliance & NIL' })).toBeInTheDocument()
+    expect(screen.getByText(/2 documents · grounds athlete answers/i)).toBeInTheDocument()
+    expect(screen.getByText('NIL_POLICY_2025.PDF')).toBeInTheDocument()
+    expect(screen.getByText('RECRUITING_DEAD_PERIODS.PDF')).toBeInTheDocument()
+    expect(screen.getByText(/Scanned PDF - no extractable text layer/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Retry RECRUITING_DEAD_PERIODS.PDF/i }))
+    expect(retryDocumentMutate).toHaveBeenCalledWith('doc-recruiting')
+
+    await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Mark official/i }))
+    expect(updateDocumentMutate).toHaveBeenCalledWith({ documentId: 'doc-recruiting', isOfficial: true })
+
+    await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Delete \/ archive/i }))
+    expect(deleteDocumentMutate).toHaveBeenCalledWith('doc-recruiting')
+
+    await userEvent.click(screen.getByRole('button', { name: /All collections/i }))
+    expect(screen.getByRole('heading', { name: 'Knowledge base' })).toBeInTheDocument()
   })
 
   it('renders the Claude design Users & roles table and locked current user', async () => {

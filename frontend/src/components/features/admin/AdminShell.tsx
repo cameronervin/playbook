@@ -18,6 +18,7 @@ import {
   useKBDocuments,
   useRetryKBDocument,
   useUpdateKBDocumentMetadata,
+  useUploadKBDocument,
 } from '@/src/hooks/useKBDocuments'
 import { adminChatReply, ANALYTICS_SUMMARY, DASHBOARD_INSIGHT } from '@/src/lib/fixtures/admin'
 import { ROUTES } from '@/src/lib/constants/config'
@@ -46,6 +47,7 @@ export function AdminShell() {
   const retryDocument = useRetryKBDocument()
   const deleteDocument = useDeleteKBDocument()
   const updateDocument = useUpdateKBDocumentMetadata()
+  const uploadDocument = useUploadKBDocument()
   const updateRole = useUpdateUserRole()
   const failedDocsCount = documents.filter((document) => document.processing_status === 'failed').length
 
@@ -136,6 +138,8 @@ export function AdminShell() {
             onDelete={(id) => deleteDocument.mutate(id)}
             onRetry={(id) => retryDocument.mutate(id)}
             onToggleOfficial={(id, isOfficial) => updateDocument.mutate({ documentId: id, isOfficial })}
+            onUpdateMetadata={(documentId, metadata) => updateDocument.mutate({ documentId, metadata })}
+            onUpload={(request) => uploadDocument.mutate(request)}
           />
         )}
         {adminTab === 'users' && isSuperAdmin && (

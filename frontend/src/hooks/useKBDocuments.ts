@@ -7,6 +7,7 @@ import {
   uploadKBDocument,
 } from '@/src/lib/api/endpoints/kbDocuments'
 import { QUERY_KEYS } from '@/src/lib/constants/config'
+import type { KBDocumentMetadataUpdateRequest } from '@/src/types/kb'
 
 export const useKBDocuments = () =>
   useQuery({
@@ -41,8 +42,19 @@ export const useDeleteKBDocument = () => {
 export const useUpdateKBDocumentMetadata = () => {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ documentId, isOfficial }: { documentId: string; isOfficial: boolean }) =>
-      updateKBDocumentMetadata(documentId, { is_official: isOfficial }),
+    mutationFn: ({
+      documentId,
+      isOfficial,
+      metadata,
+    }: {
+      documentId: string
+      isOfficial?: boolean
+      metadata?: KBDocumentMetadataUpdateRequest
+    }) =>
+      updateKBDocumentMetadata(documentId, {
+        ...metadata,
+        ...(typeof isOfficial === 'boolean' ? { is_official: isOfficial } : {}),
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbDocuments] }),
   })
 }
