@@ -56,16 +56,18 @@ describe('LoginScreen', () => {
     const microsoftLabel = screen.getByText('Continue with Microsoft')
     const googleLabel = screen.getByText('Continue with Google')
 
+    expect(screen.getByTestId('auth-card')).toBeInTheDocument()
     expect(buttons[0]).toHaveAccessibleName(/continue with microsoft/i)
     expect(buttons[1]).toHaveAccessibleName(/continue with google/i)
-    expect(microsoftLabel).toHaveClass('justify-start', 'pl-8')
-    expect(googleLabel).toHaveClass('justify-start', 'pl-8')
+    expect(microsoftLabel).toHaveClass('text-center')
+    expect(googleLabel).toHaveClass('text-center')
+    expect(microsoftLabel).not.toHaveClass('pl-8')
+    expect(googleLabel).not.toHaveClass('pl-8')
     expect(screen.getByRole('heading', { name: 'Log in to continue' })).toHaveTextContent('LOG IN TO CONTINUE')
     expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/can't log in/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument()
-    expect(screen.getByTestId('login-stage')).not.toHaveClass('pb-ambient-grid')
   })
 
   it('navigates to the provider authorization URL', async () => {

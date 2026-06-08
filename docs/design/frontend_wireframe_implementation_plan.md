@@ -24,7 +24,19 @@ Target route model:
 - `/admin` for admin-only operations.
 - `/` as an auth-aware redirect to the appropriate route.
 
+Current route organization keeps `/login` and `/profile` under `src/app/(auth)/`
+for the shared auth stage, and `/chat` and `/admin` under
+`src/app/(workspace)/` for the shared left/main/right workspace geometry. Route
+groups must not change the public URL paths above.
+
 Implementation should wire currently implemented backend APIs immediately and isolate planned-but-missing APIs behind typed fixture adapters so each phase can land cleanly.
+
+## Loader Policy
+- Route segments that can suspend must define `loading.tsx` fallbacks that preserve the target screen geometry: auth card, chat rail/thread/composer, or admin rail/header/cards. Do not use plain `Loading [page]...` copy as a page fallback.
+- Treat TanStack Query first-load states and background refetch states differently. Use shaped skeletons only when no useful cached data exists; keep existing content visible during `isFetching` and add a quiet token-backed refresh indicator.
+- Loader visuals must use Playbook tokens and motion classes from `globals.css` (`pb-skeleton`, `pb-spin`, `pb-think`, `pb-streaming`) and honor `prefers-reduced-motion`.
+- Skeletons should be structural-only: render stable chrome, headings, fixed controls, and persistent layout chrome directly; skeletonize only unknown data-backed regions; omit nonessential helper copy, subtitles, footer shimmer bars, and fake input-content placeholders. Stable copy that materially defines a control's footprint, such as the chat composer AI disclaimer, should remain visible.
+- Interaction loaders should appear in the workflow surface itself: chat submit shows the user bubble plus PlaybookAI thinking row, admin insight generation skeletonizes the AI summary, and KB document processing uses info-tone spinner status.
 
 ## Phase 1: Design System Foundation
 - Move the Playbook design assets from `docs/design/source/` into the frontend asset structure: fonts, favicon, logo mark reference, and approved provider-logo references.
@@ -48,6 +60,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 
 ## Phase 2: Routing, Auth, and API Interfaces
 - Add frontend routes for `/login`, `/profile`, `/chat`, and `/admin`; replace the scaffold home page with a redirecting root route.
+- Organize the routes with non-URL-changing App Router groups: `(auth)` for login/profile and `(workspace)` for chat/admin.
 - Update `frontend/src/app/layout.tsx` metadata from scaffold copy to Playbook-specific title, description, favicon, font variables, and body class.
 - Update `frontend/src/lib/api/client.ts` to:
   - Send `credentials: "include"` for cookie-backed backend sessions.
@@ -90,7 +103,8 @@ Implementation should wire currently implemented backend APIs immediately and is
   - Knowledge browser visuals only where role policy allows; admin-only creation/deletion controls must be hidden or disabled for athletes.
 - Wire conversation list, create, and detail to the implemented backend APIs.
 - Use typed fixture adapters for message submit, response streaming, citations, and conversation-scoped file upload until Phase 2 backend endpoints are implemented.
-- Preserve key design defaults: horizon background, sources panel open by default, comfortable density, "Ask PlaybookAI" empty state, and grounded citations at the bottom of answers.
+- Preserve key design defaults: horizon background, comfortable density, "Ask PlaybookAI" empty state, grounded citations at the bottom of answers, and sources hidden on an empty new chat but opened after citation click or explicit toggle on grounded conversations.
+- Reuse existing app typography utilities such as `pb-ui-sm`, `pb-ui-xs`, and token-backed Tailwind type-scale classes for chat controls, history, menus, composer text, metadata, and source labels; do not carry over prototype-only arbitrary text sizes like `text-[13.5px]`.
 - Implement composer behavior with Enter-to-send, Shift+Enter newline, disabled/loading states, and recoverable error display.
 - Add settings modal support for MVP sections only: Profile and Security & SSO. Omit prototype-only Appearance/Tweaks controls unless a real settings store is introduced.
 - Add tests for empty state, conversation selection, new chat, composer submit, streaming placeholder, citation click opening sources, source-panel toggle, settings modal, and role-gated KB controls.
@@ -99,13 +113,14 @@ Implementation should wire currently implemented backend APIs immediately and is
 - Recreate the Admin wireframe at `/admin` with an admin-only shell and the access-denied state for athletes.
 - Build admin feature components under `frontend/src/components/features/admin/` for:
   - Admin navigation and account/settings menu.
-  - Insights dashboard with KPI cards, AI summary panel, time-window selector, and generate action.
+  - Insights dashboard with the AI summary as the hero hierarchy, embedded insight KPIs, topic/risk modules, query-volume chart, time-window selector, and generate action.
   - Knowledge-base management with collections, document rows, status pills, upload, retry, delete, official toggle, and metadata edit drawer.
   - Users & roles for super admins.
   - Admin analytics chat side panel.
 - Wire KB document management to implemented admin KB APIs.
 - Wire Users & roles to implemented super-admin user APIs.
 - Keep Insights, dashboard insight generation, analytics query review, and admin chat on typed fixture adapters until Phase 4 backend APIs exist.
+- Keep the admin analytics chat side panel on the shared `WorkspaceShell` side-panel geometry so it stays consistent with the chat sources panel.
 - Enforce role behavior:
   - `admin` can access Insights and Knowledge base management where backend permits.
   - `super_admin` additionally sees Users & roles and can update roles.

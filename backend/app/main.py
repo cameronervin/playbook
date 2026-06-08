@@ -23,6 +23,7 @@ from app.api.v1 import (
     audit,
     auth,
     conversations,
+    dev_auth,
     health,
     kb_documents,
     kb_webhook,
@@ -187,6 +188,8 @@ def create_app() -> FastAPI:
     app.include_router(kb_documents.router, prefix=API_V1_PREFIX)
     app.include_router(kb_webhook.router, prefix=API_V1_PREFIX)
     app.include_router(conversations.router, prefix=API_V1_PREFIX)
+    if settings.dev_auth_available():
+        app.include_router(dev_auth.router, prefix=API_V1_PREFIX)
     app.include_router(health.router, prefix=API_V1_PREFIX)
 
     @app.get("/")

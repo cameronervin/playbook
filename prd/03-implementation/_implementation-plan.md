@@ -28,9 +28,9 @@ As of 2026-06-05:
 | Phase | Focus | Goal |
 |-------|-------|------|
 | Phase 1 | Playbook Foundations | Replace scaffold placeholders with product foundations: auth, roles, data model, route shell, KB document model, audit/observability baseline |
-| Phase 2 | Athlete AI Experience | Build streamed chat, citations, conversation history, conversation file upload, safety/refusal behavior |
+| Phase 2 | Athlete AI Experience | Build Celery-executed streamed chat over Valkey Streams/pub-sub, citations, conversation history, conversation file upload, safety/refusal behavior |
 | Phase 3 | Knowledge Base Admin | Build document upload/status/retry/metadata flows and connect them to the KB service |
-| Phase 4 | Admin Analytics and Insights | Build dashboard metrics, nightly/manual dashboard insight runs, and admin chat side panel |
+| Phase 4 | Admin Analytics and Insights | Build dashboard metrics, polled nightly/manual dashboard insight runs, and streamed admin chat side panel |
 | Phase 5 | Evaluation and Release Readiness | Add eval suites, security checks, observability validation, and prototype release gates |
 
 ## Developer Phase Matrix
@@ -38,9 +38,9 @@ As of 2026-06-05:
 | Status | Phase | Primary Build Areas | Completion Signal | Phase File |
 |--------|-------|---------------------|-------------------|------------|
 | ◐ | Phase 1 Playbook Foundations | Backend schema, auth/session/profile, RBAC, audit, KB document control plane, conversation history, frontend scaffold cleanup, route tests, env/docs | Playbook routes replace scaffold UI; auth/profile/RBAC/admin APIs work; live migrations pass; role/KB/audit route tests pass; docs match implemented endpoints | [phase-1-foundations.md](phase-1-foundations.md) |
-| ◐ | Phase 2 Athlete AI Experience | Message APIs, stream endpoint, LangGraph chat graph, KB retrieval, citation persistence, safety policy, conversation file upload, athlete chat UI | Athlete can submit a message, receive streamed grounded response with citations/refusals, upload conversation files, and reload conversation history | [phase-2-athlete-ai-experience.md](phase-2-athlete-ai-experience.md) |
+| ◐ | Phase 2 Athlete AI Experience | Message APIs, Celery agent execution, Valkey Streams/pub-sub stream endpoint keyed by `task_id`, LangGraph chat graph, KB retrieval, citation persistence, safety policy, conversation file upload, athlete chat UI | Athlete can submit a message, receive streamed grounded response with citations/refusals from a worker task, upload conversation files, and reload conversation history | [phase-2-athlete-ai-experience.md](phase-2-athlete-ai-experience.md) |
 | ◐ | Phase 3 Knowledge Base Admin | Admin document UI, metadata upload contract, status/retry UX, KB-service contract reconciliation, ingestion/search e2e verification | Admin can upload, tag, view status, retry, and delete docs; ready docs are searchable; failed docs are excluded; admin actions are audited | [phase-3-knowledge-base-admin.md](phase-3-knowledge-base-admin.md) |
-| ◐ | Phase 4 Admin Analytics and Insights | Analytics repositories/services, anonymized APIs, dashboard UI, insight jobs, admin chat services/APIs/UI | Admin dashboard returns anonymized metrics/query review; manual/nightly insight runs persist outputs; admin chat answers from authorized analytics data | [phase-4-admin-analytics-and-insights.md](phase-4-admin-analytics-and-insights.md) |
+| ◐ | Phase 4 Admin Analytics and Insights | Analytics repositories/services, anonymized APIs, dashboard UI, polled insight jobs, Celery/Valkey-streamed admin chat services/APIs/UI | Admin dashboard returns anonymized metrics/query review; manual/nightly insight runs persist outputs and are polled by `run_id`; admin chat streams answers from authorized analytics data by `task_id` | [phase-4-admin-analytics-and-insights.md](phase-4-admin-analytics-and-insights.md) |
 | ◐ | Phase 5 Evaluation and Release Readiness | Golden datasets, retrieval/citation/refusal/security evals, observability checks, affiliation-copy scan, release command | Release validation command runs golden evals and security/observability/copy checks with documented pass criteria | [phase-5-evaluation-and-release-readiness.md](phase-5-evaluation-and-release-readiness.md) |
 
 ## Implemented Backend API Surface
@@ -56,9 +56,11 @@ with [docs/api/endpoints.md](../../docs/api/endpoints.md):
 | KB documents | `GET /admin/kb/documents`, `POST /admin/kb/documents`, `GET /admin/kb/documents/{document_id}`, `PATCH /admin/kb/documents/{document_id}/metadata`, `POST /admin/kb/documents/{document_id}/retry`, `DELETE /admin/kb/documents/{document_id}`, `POST /kb/webhook` |
 | Health | `GET /health` |
 
-Remaining planned API surface: chat message submit, response stream,
-conversation file upload, analytics summary/query review, dashboard insights,
-and admin chat.
+Remaining planned API surface: athlete chat message submit that enqueues a
+Celery agent task and returns `task_id`, athlete response stream bridged from
+Valkey Streams/pub-sub for that `task_id`, conversation file upload, analytics
+summary/query review, dashboard insight runs polled by `run_id`, and admin chat
+message submit/response stream bridged from Valkey Streams/pub-sub by `task_id`.
 
 ## How Phase Files Work
 

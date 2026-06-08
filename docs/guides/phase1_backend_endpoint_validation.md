@@ -43,6 +43,31 @@ The command creates or reuses:
 The role target is reset to `athlete` each time the seed command runs so the
 role-management smoke test is repeatable.
 
+## Browser Cookie Pass
+
+For local frontend/UI validation without configured Google or Microsoft OAuth,
+enable the dev-only browser bootstrap route:
+
+```env
+DEV_AUTH_ENABLED=true
+ENVIRONMENT=local
+DEBUG=true
+```
+
+Then open one of these URLs in the browser:
+
+```text
+http://localhost:8000/api/v1/dev/session/athlete
+http://localhost:8000/api/v1/dev/session/new_athlete
+http://localhost:8000/api/v1/dev/session/admin
+http://localhost:8000/api/v1/dev/session/super_admin
+```
+
+The route seeds the same throwaway users, sets the normal HttpOnly
+`access_token` cookie, and redirects to the configured frontend URL. The route
+is not registered unless `DEV_AUTH_ENABLED=true` and the backend is running in
+local/development debug mode.
+
 ## Swagger Pass
 
 1. Open `http://localhost:8000/docs`.

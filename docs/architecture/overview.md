@@ -33,7 +33,7 @@
        │
        ▼
 ┌──────────────┐   (optional async)
-│ Valkey + Celery │  background jobs / long-running agent runs
+│ Valkey + Celery │  background jobs / polled tasks / agent stream events
 └──────────────┘
 ```
 
@@ -83,7 +83,7 @@ src/
 | LLM | LiteLLM by default in deployed environments; direct Anthropic/OpenAI only for local or break-glass use |
 | Database | PostgreSQL |
 | Storage | AWS S3, MinIO (local dev) |
-| Async (optional) | Valkey (broker/backend) + Celery |
+| Async (optional) | Valkey (broker/backend, Streams/pub-sub for agent responses) + Celery |
 | Observability | structlog |
 | Deploy | Docker Compose, nginx |
 
@@ -120,5 +120,9 @@ infrastructure.
 6. **Agent executor** (when involved) runs/resumes a LangGraph graph, persisting
    checkpoints to Postgres so long runs can resume by `thread_id`.
 7. **Service** returns a DTO; the **route** serializes it via `response_model`.
-8. Long-running work can be offloaded to a **Celery** worker (Valkey broker) and
-   polled by the frontend.
+8. Long-running work is offloaded to **Celery** workers and is usually polled by
+   task/run status, such as KB ingestion and dashboard insight runs. Interactive
+   agent responses are the exception: athlete chat and admin chat workers publish
+   ordered stream events to **Valkey Streams** and pub/sub, and HTTP stream
+   endpoints subscribe by validated `task_id` to forward chunks, completion, or
+   error events to the frontend.

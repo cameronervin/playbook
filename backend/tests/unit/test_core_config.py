@@ -21,6 +21,7 @@ def test_settings_use_playbook_local_defaults() -> None:
     settings = _base_settings()
 
     assert settings.PROJECT_NAME == "Playbook"
+    assert settings.DEV_AUTH_ENABLED is False
     assert settings.FRONTEND_URL == "http://localhost:3000"
     assert settings.CORS_ORIGINS == ["http://localhost:3000"]
     assert settings.LLM_PROVIDER_MODE == "direct"
@@ -119,3 +120,35 @@ def test_production_rejects_short_security_secrets() -> None:
     assert "OAUTH_STATE_SECRET must be at least 32 characters" in message
     assert "KB_API_SECRET must be at least 32 characters" in message
     assert "KB_WEBHOOK_SECRET must be at least 32 characters" in message
+
+
+def test_dev_auth_can_only_be_enabled_for_local_debug() -> None:
+    local_settings = _base_settings(ENVIRONMENT="local", DEBUG=True, DEV_AUTH_ENABLED=True)
+    development_settings = _base_settings(
+        ENVIRONMENT="development",
+        DEBUG=True,
+        DEV_AUTH_ENABLED=True,
+    )
+
+    assert local_settings.DEV_AUTH_ENABLED is True
+    assert development_settings.DEV_AUTH_ENABLED is True
+
+    for environment, debug in (("local", False), ("dev", True), ("production", True)):
+        try:
+            _base_settings(
+                ENVIRONMENT=environment,
+                DEBUG=debug,
+                DEV_AUTH_ENABLED=True,
+                FRONTEND_URL="https://app.example.com",
+                API_PUBLIC_URL="https://api.example.com",
+                CORS_ORIGINS='["https://app.example.com"]',
+                OAUTH_STATE_SECRET="not-the-default-oauth-secret-value",
+                KB_API_SECRET="not-the-default-kb-api-secret-value",
+                KB_WEBHOOK_SECRET="not-the-default-kb-webhook-secret-value",
+            )
+        except ValidationError as exc:
+            message = str(exc)
+        else:
+            raise AssertionError("Settings should reject unsafe dev auth enablement")
+
+        assert "DEV_AUTH_ENABLED can only be true in local/development debug mode" in message

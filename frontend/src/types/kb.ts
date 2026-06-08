@@ -26,3 +26,19 @@ export interface KBDocumentMetadataUpdateRequest {
   is_official?: boolean
   priority?: number
 }
+
+export type KBCollectionIcon = 'shield' | 'plane' | 'book-open' | 'users' | 'database'
+
+export interface KBCollection {
+  id: string
+  name: string
+  icon: KBCollectionIcon
+  blurb: string
+  keywords: string[]
+}
+
+export interface KBCollectionViewModel extends KBCollection {
+  documents: KBDocument[]
+  failedCount: number
+  processingCount: number
+}

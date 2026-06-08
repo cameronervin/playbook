@@ -28,8 +28,8 @@ export const QUERY_KEYS = {
 
 export const UI_DIMENSIONS = {
   loginCardWidth: 380,
-  chatNavWidth: 300,
-  sourcesPanelWidth: 340,
+  chatNavWidth: 264,
+  sourcesPanelWidth: 320,
   adminNavWidth: 272,
   composerMaxWidth: 760,
 } as const

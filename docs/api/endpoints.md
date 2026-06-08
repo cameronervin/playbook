@@ -57,6 +57,17 @@ Example error response:
 | POST | `/kb/webhook` | Receive signed KB-service status callbacks |
 | GET | `/admin/audit-logs` | Query org-scoped audit log records |
 
+## Local Development Only
+
+These routes are absent unless the backend is running with
+`DEV_AUTH_ENABLED=true`, `ENVIRONMENT=local` or `development`, and `DEBUG=true`.
+They are for local browser validation only and must not be enabled in deployed
+environments.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/dev/session/{persona}` | Seed a deterministic local user, set the app session cookie, and redirect to the matching frontend route. Valid personas: `athlete`, `new_athlete`, `admin`, `super_admin` |
+
 ```bash
 curl http://localhost:8000/api/v1/health
 # {"status": "healthy"}
@@ -71,8 +82,8 @@ For a repeatable local Swagger and curl validation pass, see
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message |
-| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks |
+| POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message, enqueue the Celery agent task, and return `task_id` stream metadata |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks from the Valkey stream/channel for the returned `task_id` |
 | POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 
 ### Admin Analytics and Governance
@@ -84,8 +95,9 @@ For a repeatable local Swagger and curl validation pass, see
 | GET | `/admin/dashboard-insights/current` | Get latest completed insight output |
 | GET | `/admin/dashboard-insights/outputs` | List generated insight outputs |
 | GET | `/admin/dashboard-insights/runs` | List dashboard insight runs |
-| POST | `/admin/dashboard-insights/runs` | Start manual insight generation |
+| POST | `/admin/dashboard-insights/runs` | Start manual insight generation; status is polled by `run_id` |
 | GET | `/admin/chat/sessions` | List current admin chat sessions |
 | POST | `/admin/chat/sessions` | Create an admin chat session |
 | GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
-| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question, enqueue the Celery agent task, and return `task_id` stream metadata |
+| GET | `/admin/chat/sessions/{session_id}/messages/{message_id}/stream` | Stream admin chat answer chunks from the Valkey stream/channel for the returned `task_id` |
