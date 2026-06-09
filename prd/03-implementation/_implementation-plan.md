@@ -13,13 +13,13 @@ infrastructure, tests, and docs.
 
 ## Current Implementation Snapshot
 
-As of 2026-06-05:
+As of 2026-06-09:
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Backend Phase 1 foundations | ◐ | Product schema/models/migrations, OAuth/session/profile services, role guards, admin user routes, audit service, conversation history CRUD, KB document control-plane routes, signed KB webhook, request context/CORS/error handling, and provider wiring exist. |
-| Backend verification | ☑ | `backend/.venv/bin/pytest -q` passed with `22 passed, 13 skipped`; `backend/.venv/bin/ruff check app tests` passed. |
-| Frontend | ☐ | Still scaffold UI (`ExampleList`, scaffold metadata/test). Frontend tests were not rerun because `node_modules` is missing. |
+| Backend Phase 1 foundations | ☑ | Product schema/models/migrations, OAuth/session/profile services, role guards, admin user routes, audit service, conversation history CRUD, KB document control-plane routes, signed KB webhook, request context/CORS/error handling, and provider wiring are implemented and verified. |
+| Backend verification | ☑ | Backend tests passed with `76 passed`; `backend/.venv/bin/ruff check app tests` passed; live Alembic upgrade/downgrade/re-upgrade passed on `playbook_test`. |
+| Frontend | ☑ | Scaffold UI has been replaced by Playbook `/`, `/login`, `/profile`, `/chat`, and `/admin` route shells with neutral department copy. Frontend Vitest passed with `68 passed`; typecheck and ESLint passed. |
 | KB service | ◐ | Ingestion/retrieval implementation exists, including configuration, ingest, status, search, document routes, parser/chunker/embed/vectorstore infrastructure, and workers. It was not locally verified in this shell because no runnable local venv/`uv` path was available. |
 | Eval harness | ◐ | Backend eval package, sample dataset, and rubrics exist; MVP golden sets and release gates remain. |
 
@@ -37,7 +37,7 @@ As of 2026-06-05:
 
 | Status | Phase | Primary Build Areas | Completion Signal | Phase File |
 |--------|-------|---------------------|-------------------|------------|
-| ◐ | Phase 1 Playbook Foundations | Backend schema, auth/session/profile, RBAC, audit, KB document control plane, conversation history, frontend scaffold cleanup, route tests, env/docs | Playbook routes replace scaffold UI; auth/profile/RBAC/admin APIs work; live migrations pass; role/KB/audit route tests pass; docs match implemented endpoints | [phase-1-foundations.md](phase-1-foundations.md) |
+| ☑ | Phase 1 Playbook Foundations | Backend schema, auth/session/profile, RBAC, audit, KB document control plane, conversation history, frontend scaffold cleanup, route tests, env/docs | Playbook routes replace scaffold UI; auth/profile/RBAC/admin APIs work; live migrations pass; role/KB/audit route tests pass; docs match implemented endpoints | [phase-1-foundations.md](phase-1-foundations.md) |
 | ◐ | Phase 2 Athlete AI Experience | Message APIs, Celery agent execution, Valkey Streams/pub-sub stream endpoint keyed by `task_id`, LangGraph chat graph, KB retrieval, citation persistence, safety policy, conversation file upload, athlete chat UI | Athlete can submit a message, receive streamed grounded response with citations/refusals from a worker task, upload conversation files, and reload conversation history | [phase-2-athlete-ai-experience.md](phase-2-athlete-ai-experience.md) |
 | ◐ | Phase 3 Knowledge Base Admin | Admin document UI, metadata upload contract, status/retry UX, KB-service contract reconciliation, ingestion/search e2e verification | Admin can upload, tag, view status, retry, and delete docs; ready docs are searchable; failed docs are excluded; admin actions are audited | [phase-3-knowledge-base-admin.md](phase-3-knowledge-base-admin.md) |
 | ◐ | Phase 4 Admin Analytics and Insights | Analytics repositories/services, anonymized APIs, dashboard UI, polled insight jobs, Celery/Valkey-streamed admin chat services/APIs/UI | Admin dashboard returns anonymized metrics/query review; manual/nightly insight runs persist outputs and are polled by `run_id`; admin chat streams answers from authorized analytics data by `task_id` | [phase-4-admin-analytics-and-insights.md](phase-4-admin-analytics-and-insights.md) |

@@ -1,106 +1,91 @@
-# Phase 1 Next Steps
+# Phase 1 Completion Validation
 
 ## Current Status
 
-Phase 1 backend service scaffolding is implemented for OAuth/OIDC login,
-profile completion, role management, audit logging, KB document control-plane
-operations, signed KB webhooks, and the minimal athlete conversation shell.
+Phase 1 Playbook foundations are complete as of 2026-06-09. The backend
+service/API foundation, frontend route shells, live migration path, neutral
+product copy, tests, and implementation-plan status are aligned.
 
-The current API routes are registered under `/api/v1`, with service dependency
-wiring centralized in `backend/app/api/v1/dependencies.py`.
+Phase 1 intentionally stops before full streamed AI chat, conversation file
+upload, complete KB admin ingestion UX, dashboard insight generation, admin
+analytics APIs, and admin chat. Those remain in Phases 2 through 5.
 
-## Service Build Status
+## Completed Foundation
 
-| Service | Phase 1 implemented | Still left |
-|---------|---------------------|------------|
-| `AuthService` | OAuth provider listing, login URL creation, fake Google/Microsoft callback route coverage, callback user/account upsert, provider-token storage assertions, configured app JWT/cookie creation, authenticated logout, provider-token log redaction coverage, and next-route selection | Future provider-specific edge cases after real Google/Microsoft sandbox testing |
-| `UserProfileService` | Current-user response, route coverage, and athlete profile completion/update with `profile_complete` and `next_route="/chat"` | Any future richer profile/admin-edit fields |
-| `UserAdminService` | Super-admin user listing route coverage, org-scoped role update, `is_superuser` compatibility sync, and atomic audit logging | Future invite/activation/deactivation flows |
-| `AuditLogService` | Single audit write path and super-admin org-scoped audit log query | Future dashboard/reporting behavior |
-| `KBDocumentService` | Admin list/get/upload/metadata update/retry/delete route coverage, multipart `metadata_tags`, storage keying, lifecycle events, KB-service ingest/delete adapter calls, and audit logging | Real kb-service + MinIO/S3-compatible E2E test and stronger failure cleanup around partial upload/ingest failures |
-| `KBDocumentWebhookService` | HMAC route coverage, signature verification, stale webhook rejection, status mapping, document status update, and event append | E2E validation against real kb-service payloads and broader status-mapping tests |
-| `ConversationService` | Minimal athlete-owned shell route coverage: list/create/get conversations, bounded message loading, citation mapping, and athlete/org scoping | Phase 2 chat behavior: user message submission, assistant generation, streaming, LangGraph orchestration, KB retrieval, safety/refusal handling, file upload/extraction, `last_message_at` updates, and generated assistant message/citation persistence |
+| Area | Validated Completion |
+|------|----------------------|
+| Auth/session | Google and Microsoft OAuth provider listing/login/callback coverage, OAuth state cookies, app JWT/cookie session creation, browser redirects, logout, dev-session route gating, and token redaction checks. |
+| Profile | Current-user route and athlete profile completion route return `profile_complete` and `next_route="/chat"` with structured validation errors. |
+| RBAC/admin users | Athlete/admin/super-admin dependencies enforce backend routes; `/admin` denies athletes; super-admin user listing and role updates write audit logs and sync `is_superuser`. |
+| Audit | Append-only audit model/repository/service and super-admin query route exist; role and KB document actions create audit records. |
+| KB document control plane | Admin list/get/upload/metadata/retry/delete routes exist; multipart upload supports `metadata_tags`; signed webhook updates status and appends lifecycle events. |
+| Conversations | Athlete-owned list/create/detail routes exist with initial-message creation, bounded history, citations, and ownership scoping. |
+| Frontend shells | `/`, `/login`, `/profile`, `/chat`, and `/admin` exist with Playbook design tokens, route guards, neutral department copy, chat/admin shells, and fixture-backed later-phase surfaces. |
+| Infrastructure | DB/session, storage, KB provider, LLM provider, checkpointer, CORS, request IDs, structured errors, and structured logging baseline are wired. |
 
-`ConversationService` is complete for the Phase 1 shell, but it is not the full
-product chat experience. Phase 2 builds the actual AI conversation loop on top
-of these persisted conversation records.
+## Verification Commands
 
-## Verified So Far
-
-These checks passed after the Phase 1 service implementation:
-
-```bash
-cd backend && uv run pytest -q
-cd backend && uv run ruff check app tests
-cd backend && uv run python -c "from app.main import app; print(len(app.routes))"
-```
-
-These checks passed after the Phase 1 route-level test implementation:
+The Phase 1 completion pass used explicit environment overrides because this
+shell exports `DEBUG=release`, which conflicts with local dev-auth settings.
 
 ```bash
 cd backend
-TEST_DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook_test \
+ENVIRONMENT=local DEBUG=true DEV_AUTH_ENABLED=false \
+  DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook \
+  TEST_DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook_test \
+  ANTHROPIC_API_KEY=test \
   ./.venv/bin/pytest -q
+
 ./.venv/bin/ruff check app tests
 ```
 
-The focused OAuth callback hardening check passed with local Postgres on port
-`5433`:
-
 ```bash
 cd backend
-TEST_DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook_test \
-  ./.venv/bin/pytest tests/integration/test_auth_routes.py -q -rs
-```
+ENVIRONMENT=local DEBUG=true DEV_AUTH_ENABLED=false \
+  DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook_test \
+  ANTHROPIC_API_KEY=test \
+  ./.venv/bin/alembic upgrade head
 
-The Alembic upgrade SQL rendered successfully offline:
+ENVIRONMENT=local DEBUG=true DEV_AUTH_ENABLED=false \
+  DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook_test \
+  ANTHROPIC_API_KEY=test \
+  ./.venv/bin/alembic downgrade -1
+
+ENVIRONMENT=local DEBUG=true DEV_AUTH_ENABLED=false \
+  DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook_test \
+  ANTHROPIC_API_KEY=test \
+  ./.venv/bin/alembic upgrade head
+```
 
 ```bash
-cd backend
-DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook \
-  uv run alembic upgrade head --sql
+cd frontend
+PATH=/opt/homebrew/bin:/usr/local/bin:$PATH ./node_modules/.bin/vitest --run
+PATH=/opt/homebrew/bin:/usr/local/bin:$PATH ./node_modules/.bin/tsc --noEmit
+PATH=/opt/homebrew/bin:/usr/local/bin:$PATH ./node_modules/.bin/eslint .
 ```
 
-## Ordered Remaining Work
-
-1. Run the live DB migration check with local Postgres running on port `5433`:
-
-   ```bash
-   cd backend
-   DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook \
-     uv run alembic upgrade head
-   DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook \
-     uv run alembic downgrade -1
-   ```
-
-2. Update environment examples:
-   - Add Google and Microsoft OAuth settings.
-   - Add `API_PUBLIC_URL`, `OAUTH_STATE_SECRET`, default organization settings,
-     and `KB_WEBHOOK_SECRET`.
-   - Ensure deploy/local example values use the async Postgres driver:
-     `postgresql+asyncpg://...`.
-
-3. Verify KB service integration end to end:
-   - Start backend, MinIO/S3-compatible storage, and kb-service locally.
-   - Upload a sample PDF/DOCX/PPTX/XLSX through `/api/v1/admin/kb/documents`.
-   - Confirm backend calls current kb-service ingest/delete/status route shapes.
-   - Confirm signed webhook updates `kb_documents.processing_status` and appends
-     `kb_document_events`.
-
-4. Run the Phase 1 hardening pass:
-   - Confirm 401/403 errors use the standard nested error response.
-   - Confirm role guards match `athlete`, `admin`, and `super_admin` behavior.
-   - Confirm all privileged role and KB actions write audit logs.
-   - Confirm request IDs and actor context are present in structured logs.
-
-## Known Blocker
-
-The live Alembic upgrade/downgrade check requires local Postgres to be running
-on `localhost:5433`. The backend should use an async SQLAlchemy URL such as:
-
-```env
-DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook
+```bash
+rg -n "OSU|Cowboy|okstate|Oklahoma State" frontend/src \
+  --glob '!**/*.test.tsx' --glob '!**/*.test.ts'
 ```
 
-Using a sync `postgresql://...` URL causes Alembic to look for `psycopg2`, which
-is not installed in the backend environment.
+## Latest Results
+
+- Backend tests: `76 passed`.
+- Backend Ruff: passed.
+- Frontend Vitest: `68 passed`.
+- Frontend typecheck: passed.
+- Frontend ESLint: passed.
+- Live Alembic upgrade/downgrade/re-upgrade on `playbook_test`: passed.
+- Visible frontend source affiliation scan: no hits after neutral copy update.
+
+## Later-Phase Follow-Up
+
+- Phase 2 owns message submit, streamed assistant responses, LangGraph chat
+  execution, KB retrieval grounding, safety/refusal behavior, and conversation
+  file upload/extraction.
+- Phase 3 owns full KB admin UX and real KB-service/MinIO/S3 end-to-end
+  ingestion validation.
+- Phase 4 owns analytics APIs, dashboard insight jobs, anonymization behavior,
+  and admin chat.
+- Phase 5 owns release-level security, observability, eval, and copy-scan gates.

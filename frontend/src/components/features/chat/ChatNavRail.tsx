@@ -54,7 +54,7 @@ export function ChatNavRail({
   )
   const showActiveNewChat = !activeConversationId && (!normalizedQuery || 'new chat'.includes(normalizedQuery))
   const initials = getInitials(user?.name)
-  const teamLabel = user?.sport_team ?? 'OSU Athletics'
+  const teamLabel = user?.sport_team ?? 'Athletics Department'
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
   return (

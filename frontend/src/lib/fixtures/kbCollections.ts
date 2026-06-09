@@ -5,7 +5,7 @@ export const ADMIN_KB_COLLECTIONS: KBCollection[] = [
     id: 'compliance',
     name: 'Compliance & NIL',
     icon: 'shield',
-    blurb: 'NIL, eligibility, and recruiting rules - kept current with OSU and NCAA policy.',
+    blurb: 'NIL, eligibility, and recruiting rules - kept current with department and NCAA policy.',
     keywords: ['nil', 'compliance', 'eligibility', 'recruiting', 'ncaa', 'transfer', 'bylaw'],
   },
   {
@@ -26,7 +26,7 @@ export const ADMIN_KB_COLLECTIONS: KBCollection[] = [
     id: 'donor',
     name: 'Donor Relations',
     icon: 'users',
-    blurb: 'Giving levels, suite benefits, and Cowboy Club answers for boosters.',
+    blurb: 'Giving levels, suite benefits, and booster club answers for boosters.',
     keywords: ['donor', 'booster', 'cowboy club', 'suite', 'giving'],
   },
 ]

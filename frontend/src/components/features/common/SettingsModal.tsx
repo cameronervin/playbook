@@ -328,7 +328,7 @@ function getProfileDraft(user?: Pick<CurrentUser, 'name' | 'email' | 'role' | 's
   const role = user?.role ?? 'athlete'
   const adminProfile = role === 'admin' || role === 'super_admin'
   return {
-    department: adminProfile ? 'Athletics Administration' : user?.sport_team ?? 'OSU Athletics',
+    department: adminProfile ? 'Athletics Administration' : user?.sport_team ?? 'Athletics Department',
     email: user?.email ?? 'Signed in with SSO',
     jobTitle: adminProfile ? 'Director of Operations' : 'Student-athlete',
     name: user?.name ?? 'Playbook user',
