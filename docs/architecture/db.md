@@ -65,14 +65,16 @@ Phase 1 repository coverage:
 | `ConversationRepository` | `conversations` | Athlete-owned conversation create/list/get and status/timestamp updates |
 | `ConversationMessageRepository` | `conversation_messages` | Message append, ordered history, bounded recent history, and assistant status/content updates |
 | `MessageCitationRepository` | `message_citations` | Assistant citation append and rank-ordered listing |
+| `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list and extraction-status updates |
+| `ConversationFileChunkRepository` | `conversation_file_chunks` | File chunk creation and ordered listing for private conversation context |
 
 Repositories flush and refresh written models so generated IDs and server
 defaults are visible to callers, but they do not commit transactions. Services
 own commit/rollback boundaries so multi-row operations such as role change plus
 audit log creation remain atomic.
 
-Later phases will add conversation file/chunk repositories, analytics queries,
-dashboard insight run/output repositories, and admin chat repositories.
+Later phases will add analytics queries, dashboard insight run/output
+repositories, and admin chat repositories.
 
 ## Infrastructure Tables
 

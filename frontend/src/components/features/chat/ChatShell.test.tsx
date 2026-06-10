@@ -65,9 +65,16 @@ vi.mock('@/src/hooks/useConversations', () => ({
   }),
 }))
 
-const today = new Date('2026-06-08T15:30:00.000Z')
-const yesterday = new Date('2026-06-07T15:30:00.000Z')
-const previous = new Date('2026-06-03T15:30:00.000Z')
+const today = conversationDateDaysAgo(0)
+const yesterday = conversationDateDaysAgo(1)
+const previous = conversationDateDaysAgo(4)
+
+function conversationDateDaysAgo(daysAgo: number) {
+  const date = new Date()
+  date.setHours(15, 30, 0, 0)
+  date.setDate(date.getDate() - daysAgo)
+  return date
+}
 
 function summary(id: string, title: string | null, createdAt: Date): ConversationSummary {
   return {
@@ -83,7 +90,7 @@ function summary(id: string, title: string | null, createdAt: Date): Conversatio
 }
 
 function detail(summaryRecord: ConversationSummary): ConversationDetail {
-  return { ...summaryRecord, messages: [] }
+  return { ...summaryRecord, messages: [], files: [] }
 }
 
 function renderChat() {
@@ -315,6 +322,7 @@ describe('ChatShell', () => {
               created_at: today.toISOString(),
             },
           ],
+          files: [],
         },
       ],
     ])

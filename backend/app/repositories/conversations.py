@@ -7,11 +7,17 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
-from app.models.conversations import Conversation, ConversationMessage, MessageCitation
+from app.models.conversations import (
+    Conversation,
+    ConversationFile,
+    ConversationFileChunk,
+    ConversationMessage,
+    MessageCitation,
+)
 
 
 class _UnsetType:
@@ -279,6 +285,187 @@ class MessageCitationRepository:
                 MessageCitation.rank.asc(),
                 MessageCitation.created_at.asc(),
                 MessageCitation.id.asc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.all())
+
+    async def list_by_messages(
+        self,
+        message_ids: list[UUID],
+    ) -> dict[UUID, list[MessageCitation]]:
+        """Return citations for messages keyed by message ID."""
+        if not message_ids:
+            return {}
+
+        citations_by_message = {message_id: [] for message_id in message_ids}
+        result = await self.session.scalars(
+            select(MessageCitation)
+            .where(MessageCitation.message_id.in_(message_ids))
+            .order_by(
+                MessageCitation.message_id.asc(),
+                MessageCitation.rank.asc(),
+                MessageCitation.created_at.asc(),
+                MessageCitation.id.asc(),
+            )
+        )
+        for citation in result.all():
+            citations_by_message[citation.message_id].append(citation)
+        return citations_by_message
+
+
+class ConversationFileRepository:
+    """Data access for athlete-uploaded conversation files."""
+
+    def __init__(self, session: AsyncSession = Depends(get_db)) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        conversation_id: UUID,
+        uploaded_by: UUID,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        storage_key: str,
+        message_id: UUID | None = None,
+        extraction_status: str = "uploaded",
+        extracted_text_ref: str | None = None,
+        extracted_text_sha256: str | None = None,
+        extracted_char_count: int | None = None,
+        extraction_metadata: dict[str, Any] | None = None,
+        error_message: str | None = None,
+    ) -> ConversationFile:
+        """Create conversation file metadata without committing."""
+        file = ConversationFile(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            uploaded_by=uploaded_by,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            storage_key=storage_key,
+            extraction_status=extraction_status,
+            extracted_text_ref=extracted_text_ref,
+            extracted_text_sha256=extracted_text_sha256,
+            extracted_char_count=extracted_char_count,
+            error_message=error_message,
+        )
+        if extraction_metadata is not None:
+            file.extraction_metadata = extraction_metadata
+
+        self.session.add(file)
+        await self.session.flush()
+        await self.session.refresh(file)
+        return file
+
+    async def list_by_conversation_with_chunk_counts(
+        self,
+        conversation_id: UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[tuple[ConversationFile, int]]:
+        """Return conversation files with bounded chunk counts."""
+        chunk_counts = (
+            select(
+                ConversationFileChunk.file_id,
+                func.count(ConversationFileChunk.id).label("chunk_count"),
+            )
+            .group_by(ConversationFileChunk.file_id)
+            .subquery()
+        )
+        result = await self.session.execute(
+            select(
+                ConversationFile,
+                func.coalesce(chunk_counts.c.chunk_count, 0),
+            )
+            .outerjoin(chunk_counts, chunk_counts.c.file_id == ConversationFile.id)
+            .where(ConversationFile.conversation_id == conversation_id)
+            .order_by(ConversationFile.created_at.asc(), ConversationFile.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [(file, int(chunk_count)) for file, chunk_count in result.all()]
+
+    async def update_extraction_status(
+        self,
+        file: ConversationFile,
+        *,
+        extraction_status: str,
+        extracted_text_ref: str | None | _UnsetType = _UNSET,
+        extracted_text_sha256: str | None | _UnsetType = _UNSET,
+        extracted_char_count: int | None | _UnsetType = _UNSET,
+        extraction_metadata: dict[str, Any] | _UnsetType = _UNSET,
+        error_message: str | None | _UnsetType = _UNSET,
+    ) -> ConversationFile:
+        """Update extraction lifecycle metadata without committing."""
+        file.extraction_status = extraction_status
+        if not isinstance(extracted_text_ref, _UnsetType):
+            file.extracted_text_ref = extracted_text_ref
+        if not isinstance(extracted_text_sha256, _UnsetType):
+            file.extracted_text_sha256 = extracted_text_sha256
+        if not isinstance(extracted_char_count, _UnsetType):
+            file.extracted_char_count = extracted_char_count
+        if not isinstance(extraction_metadata, _UnsetType):
+            file.extraction_metadata = extraction_metadata
+        if not isinstance(error_message, _UnsetType):
+            file.error_message = error_message
+
+        await self.session.flush()
+        await self.session.refresh(file)
+        return file
+
+
+class ConversationFileChunkRepository:
+    """Data access for bounded conversation file text chunks."""
+
+    def __init__(self, session: AsyncSession = Depends(get_db)) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        file_id: UUID,
+        chunk_index: int,
+        text: str,
+        token_count: int | None = None,
+        source_locator: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ConversationFileChunk:
+        """Create a conversation file chunk without committing."""
+        chunk = ConversationFileChunk(
+            file_id=file_id,
+            chunk_index=chunk_index,
+            text=text,
+            token_count=token_count,
+        )
+        if source_locator is not None:
+            chunk.source_locator = source_locator
+        if metadata is not None:
+            chunk.chunk_metadata = metadata
+
+        self.session.add(chunk)
+        await self.session.flush()
+        await self.session.refresh(chunk)
+        return chunk
+
+    async def list_by_file(
+        self,
+        file_id: UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ConversationFileChunk]:
+        """Return chunks for a conversation file in source order."""
+        result = await self.session.scalars(
+            select(ConversationFileChunk)
+            .where(ConversationFileChunk.file_id == file_id)
+            .order_by(
+                ConversationFileChunk.chunk_index.asc(),
+                ConversationFileChunk.id.asc(),
             )
             .limit(limit)
             .offset(offset)

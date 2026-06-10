@@ -2,6 +2,8 @@
 
 from app.repositories.audit import AuditLogRepository
 from app.repositories.conversations import (
+    ConversationFileChunkRepository,
+    ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
     MessageCitationRepository,
@@ -14,6 +16,8 @@ from app.repositories.knowledge_base import (
 
 __all__ = [
     "AuditLogRepository",
+    "ConversationFileChunkRepository",
+    "ConversationFileRepository",
     "ConversationMessageRepository",
     "ConversationRepository",
     "KBDocumentEventRepository",

@@ -7,6 +7,8 @@ from uuid import UUID
 import pytest
 
 from app.repositories.conversations import (
+    ConversationFileChunkRepository,
+    ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
     MessageCitationRepository,
@@ -48,6 +50,7 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
     assert create_response.json()["messages"][0]["content"] == (
         "Can I accept this NIL deal?"
     )
+    assert create_response.json()["files"] == []
 
     message = await ConversationMessageRepository(db_session).create(
         conversation_id=conversation_uuid,
@@ -59,6 +62,21 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
         message_id=message.id,
         source_title="NIL Handbook",
         rank=1,
+    )
+    file = await ConversationFileRepository(db_session).create(
+        conversation_id=conversation_uuid,
+        uploaded_by=athlete.id,
+        filename="nil-contract.pdf",
+        content_type="application/pdf",
+        size_bytes=123456,
+        storage_key="conversations/org/conversation/file/nil-contract.pdf",
+        message_id=message.id,
+    )
+    await ConversationFileChunkRepository(db_session).create(
+        file_id=file.id,
+        chunk_index=1,
+        text="Contract excerpt",
+        token_count=2,
     )
 
     list_response = await route_client.client.get("/api/v1/conversations")
@@ -76,6 +94,22 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
     assert detail_response.json()["messages"][1]["citations"][0]["id"] == str(
         citation.id
     )
+    assert detail_response.json()["files"] == [
+        {
+            "id": str(file.id),
+            "conversation_id": conversation_id,
+            "message_id": str(message.id),
+            "filename": "nil-contract.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 123456,
+            "extraction_status": "uploaded",
+            "chunk_count": 1,
+            "created_at": file.created_at.isoformat().replace("+00:00", "Z"),
+            "updated_at": file.updated_at.isoformat().replace("+00:00", "Z"),
+        }
+    ]
+    assert "storage_key" not in detail_response.json()["files"][0]
+    assert "extracted_text_ref" not in detail_response.json()["files"][0]
 
 
 @pytest.mark.asyncio
@@ -115,9 +149,13 @@ async def test_conversation_create_openapi_uses_initial_message(route_client) ->
 
     assert response.status_code == 200
     schema = response.json()["components"]["schemas"]["ConversationCreateRequest"]
+    detail_schema = response.json()["components"]["schemas"][
+        "ConversationDetailResponse"
+    ]
     assert "initial_message" in schema["properties"]
     assert "title" not in schema["properties"]
     assert "initial_message" in schema["required"]
+    assert "files" in detail_schema["properties"]
 
 
 @pytest.mark.asyncio

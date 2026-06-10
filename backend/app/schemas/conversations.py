@@ -72,7 +72,25 @@ class ConversationMessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ConversationFileSummaryResponse(BaseModel):
+    """Safe public summary of a conversation-scoped file attachment."""
+
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID | None
+    filename: str
+    content_type: str
+    size_bytes: int
+    extraction_status: str
+    chunk_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ConversationDetailResponse(ConversationSummaryResponse):
     """Conversation detail response."""
 
     messages: list[ConversationMessageResponse] = Field(default_factory=list)
+    files: list[ConversationFileSummaryResponse] = Field(default_factory=list)

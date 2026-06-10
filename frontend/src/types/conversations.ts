@@ -34,8 +34,22 @@ export interface ConversationSummary {
   updated_at: string
 }
 
+export interface ConversationFileSummary {
+  id: string
+  conversation_id: string
+  message_id: string | null
+  filename: string
+  content_type: string
+  size_bytes: number
+  extraction_status: string
+  chunk_count: number
+  created_at: string
+  updated_at: string
+}
+
 export interface ConversationDetail extends ConversationSummary {
   messages: ChatMessage[]
+  files: ConversationFileSummary[]
 }
 
 export interface ConversationCreateRequest {

@@ -7,9 +7,14 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models.conversations import ConversationMessage, MessageCitation
+from app.models.conversations import (
+    ConversationFile,
+    ConversationMessage,
+    MessageCitation,
+)
 from app.models.identity import User
 from app.repositories.conversations import (
+    ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
     MessageCitationRepository,
@@ -17,6 +22,7 @@ from app.repositories.conversations import (
 from app.schemas.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
+    ConversationFileSummaryResponse,
     ConversationMessageResponse,
     ConversationSummaryResponse,
     MessageCitationResponse,
@@ -33,11 +39,13 @@ class ConversationService:
         conversation_repo: ConversationRepository | None = None,
         message_repo: ConversationMessageRepository | None = None,
         citation_repo: MessageCitationRepository | None = None,
+        file_repo: ConversationFileRepository | None = None,
     ) -> None:
         self.session = session
         self.conversation_repo = conversation_repo or ConversationRepository(session)
         self.message_repo = message_repo or ConversationMessageRepository(session)
         self.citation_repo = citation_repo or MessageCitationRepository(session)
+        self.file_repo = file_repo or ConversationFileRepository(session)
 
     async def list_for_athlete(
         self,
@@ -102,16 +110,35 @@ class ConversationService:
             conversation.id,
             limit=message_limit,
         )
+        citations_by_message = await self.citation_repo.list_by_messages(
+            [message.id for message in messages],
+        )
+        files_with_counts = await self.file_repo.list_by_conversation_with_chunk_counts(
+            conversation.id,
+        )
         return ConversationDetailResponse(
             **ConversationSummaryResponse.model_validate(conversation).model_dump(),
-            messages=[await self._message_response(message) for message in messages],
+            messages=[
+                await self._message_response(
+                    message,
+                    citations=citations_by_message.get(message.id, []),
+                )
+                for message in messages
+            ],
+            files=[
+                self._file_response(file, chunk_count)
+                for file, chunk_count in files_with_counts
+            ],
         )
 
     async def _message_response(
         self,
         message: ConversationMessage,
+        *,
+        citations: list[MessageCitation] | None = None,
     ) -> ConversationMessageResponse:
-        citations = await self.citation_repo.list_by_message(message.id)
+        if citations is None:
+            citations = await self.citation_repo.list_by_message(message.id)
         return ConversationMessageResponse(
             id=message.id,
             conversation_id=message.conversation_id,
@@ -137,4 +164,22 @@ class ConversationService:
             source_metadata=citation.source_metadata,
             rank=citation.rank,
             created_at=citation.created_at,
+        )
+
+    @staticmethod
+    def _file_response(
+        file: ConversationFile,
+        chunk_count: int,
+    ) -> ConversationFileSummaryResponse:
+        return ConversationFileSummaryResponse(
+            id=file.id,
+            conversation_id=file.conversation_id,
+            message_id=file.message_id,
+            filename=file.filename,
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+            extraction_status=file.extraction_status,
+            chunk_count=chunk_count,
+            created_at=file.created_at,
+            updated_at=file.updated_at,
         )

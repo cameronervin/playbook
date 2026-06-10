@@ -115,7 +115,8 @@ POST /api/v1/conversations
 ```
 
 Response includes the created conversation and the initial user message. The
-conversation title is `null` until agent-generated title logic updates it.
+conversation title is `null` until agent-generated title logic updates it, and
+`files` is an empty list until conversation-scoped uploads are added.
 
 Submit a follow-up message to an existing conversation:
 
@@ -171,6 +172,11 @@ After extraction completes, the file detail in conversation history includes
 `extraction_status: "ready"` and `chunk_count`. Full extracted text references
 and storage keys are internal and must not be returned to athletes unless a later
 download/export feature explicitly requires them.
+
+Conversation detail returns file attachments as a top-level `files` list. Each
+file summary includes `id`, `conversation_id`, optional `message_id`, `filename`,
+`content_type`, `size_bytes`, `extraction_status`, `chunk_count`, `created_at`,
+and `updated_at`.
 
 ### Assistant Message Shape
 ```json

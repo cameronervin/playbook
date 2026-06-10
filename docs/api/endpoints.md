@@ -47,7 +47,7 @@ Example error response:
 | PATCH | `/admin/users/{user_id}/role` | Update a user's Playbook role |
 | GET | `/conversations` | List current athlete conversations |
 | POST | `/conversations` | Create a current-athlete conversation from the initial message |
-| GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations |
+| GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations/files |
 | GET | `/admin/kb/documents` | List KB documents and status |
 | POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
 | GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
