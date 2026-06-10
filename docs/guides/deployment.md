@@ -66,6 +66,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 | Volumes | bind mounts (hot reload) | none | none |
 | DB ports | exposed | exposed | internal only |
 | Secrets | `.env` file | `.env` file | secrets manager |
+| Agent stream Valkey URL | `redis://valkey:6379/2` | `redis://valkey:6379/2` | internal Valkey DB 2 |
 
 ## Production Notes
 

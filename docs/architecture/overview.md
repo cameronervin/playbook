@@ -59,6 +59,7 @@ app/
     ├── db/            # SQLAlchemy engine/session helpers
     ├── storage/       # S3 client (boto3)
     ├── llm/           # LLM providers (direct + LiteLLM)
+    ├── streaming/     # Valkey Streams/pub-sub agent event adapter
     └── workers/       # Celery app + worker tasks (optional)
 ```
 
@@ -105,7 +106,8 @@ imports a vendor SDK directly:
   [ADR 0002](decisions/0002-llm-provider-modes.md).
 
 The same pattern applies to storage (an S3-compatible client that points at
-MinIO in local development and real S3 in production) and any other swappable
+MinIO in local development and real S3 in production), agent streaming (Valkey
+Streams for ordered task events plus pub/sub wake-ups), and any other swappable
 infrastructure.
 
 ## Request Lifecycle

@@ -12,6 +12,8 @@ from app.schemas.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationSummaryResponse,
+    MessageSubmitRequest,
+    MessageSubmitResponse,
 )
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
@@ -58,4 +60,23 @@ async def get_conversation(
         athlete=athlete,
         conversation_id=conversation_id,
         message_limit=message_limit,
+    )
+
+
+@router.post(
+    "/{conversation_id}/messages",
+    response_model=MessageSubmitResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_message(
+    conversation_id: UUID,
+    request: MessageSubmitRequest,
+    athlete: AthleteUserDep,
+    service: ConversationServiceDep,
+) -> MessageSubmitResponse:
+    """Submit a follow-up message and enqueue assistant generation."""
+    return await service.submit_message(
+        athlete=athlete,
+        conversation_id=conversation_id,
+        request=request,
     )

@@ -82,6 +82,18 @@ Optional backend worker for Phase 2+ async jobs:
 uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
 ```
 
+The backend worker and future interactive agent stream endpoints use the app
+Valkey service. For Docker Compose this is:
+
+```env
+CELERY_BROKER_URL=redis://valkey:6379/0
+CELERY_RESULT_BACKEND=redis://valkey:6379/1
+AGENT_STREAM_VALKEY_URL=redis://valkey:6379/2
+```
+
+When running the backend directly on the host, use
+`AGENT_STREAM_VALKEY_URL=redis://localhost:6379/2`.
+
 Phase 1 auth and KB document control-plane settings:
 
 ```env

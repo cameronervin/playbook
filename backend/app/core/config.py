@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     CELERY_TASK_HARD_TIME_LIMIT: int = 660
     CELERY_TASK_MAX_RETRIES: int = 3
     CELERY_TASK_RETRY_COUNTDOWN: int = 60  # seconds before retry
+    AGENT_STREAM_VALKEY_URL: str = "redis://localhost:6379/2"
 
     # --- LLM --------------------------------------------------------------------
     # "litellm" = route every request through a LiteLLM OpenAI-compatible proxy

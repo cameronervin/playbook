@@ -390,6 +390,25 @@ class ConversationFileRepository:
         )
         return [(file, int(chunk_count)) for file, chunk_count in result.all()]
 
+    async def list_by_conversation_and_ids(
+        self,
+        conversation_id: UUID,
+        file_ids: list[UUID],
+    ) -> list[ConversationFile]:
+        """Return files matching IDs only when scoped to the conversation."""
+        if not file_ids:
+            return []
+
+        result = await self.session.scalars(
+            select(ConversationFile)
+            .where(
+                ConversationFile.conversation_id == conversation_id,
+                ConversationFile.id.in_(file_ids),
+            )
+            .order_by(ConversationFile.created_at.asc(), ConversationFile.id.asc())
+        )
+        return list(result.all())
+
     async def update_extraction_status(
         self,
         file: ConversationFile,

@@ -46,6 +46,7 @@ from app.infrastructure.db.session import cleanup_db_engine
 from app.infrastructure.knowledgebase import get_kb_provider, is_kb_feature_enabled
 from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import cleanup_storage_provider, get_storage_provider
+from app.infrastructure.streaming import cleanup_agent_stream_provider
 from app.middleware import setup_cors, setup_request_context
 from app.observability.agent_trace import verify_tracing_configuration
 
@@ -126,6 +127,12 @@ async def _shutdown_infrastructure(checkpointer_pool: object, kb_provider: objec
             logger.info("Knowledgebase provider closed")
         except Exception as e:  # noqa: BLE001
             logger.warning("Error closing knowledgebase provider", error=str(e))
+
+    try:
+        await cleanup_agent_stream_provider()
+        logger.info("Agent stream provider cleaned up")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Error cleaning up agent stream provider", error=str(e))
 
     try:
         cleanup_storage_provider()

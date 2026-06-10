@@ -19,7 +19,12 @@ from app.infrastructure.knowledgebase import (
     get_kb_provider_dependency,
 )
 from app.infrastructure.storage import StorageProvider, get_storage_provider_dependency
+from app.infrastructure.streaming import (
+    BaseAgentStreamProvider,
+    get_agent_stream_provider,
+)
 from app.models.identity import User
+from app.services.agent_stream_service import AgentStreamService
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
 from app.services.conversation_service import ConversationService
@@ -42,6 +47,10 @@ StorageProviderDep = Annotated[
 KBProviderDep = Annotated[
     BaseKnowledgebaseProvider,
     Depends(get_kb_provider_dependency),
+]
+AgentStreamProviderDep = Annotated[
+    BaseAgentStreamProvider,
+    Depends(get_agent_stream_provider),
 ]
 
 
@@ -68,6 +77,13 @@ def get_audit_service(session: SessionDep) -> AuditLogService:
 def get_conversation_service(session: SessionDep) -> ConversationService:
     """Return conversation service dependency."""
     return ConversationService(session)
+
+
+def get_agent_stream_service(
+    provider: AgentStreamProviderDep,
+) -> AgentStreamService:
+    """Return agent stream service dependency."""
+    return AgentStreamService(provider)
 
 
 def get_dev_auth_service(session: SessionDep) -> DevAuthService:
@@ -99,6 +115,10 @@ AuditLogServiceDep = Annotated[AuditLogService, Depends(get_audit_service)]
 ConversationServiceDep = Annotated[
     ConversationService,
     Depends(get_conversation_service),
+]
+AgentStreamServiceDep = Annotated[
+    AgentStreamService,
+    Depends(get_agent_stream_service),
 ]
 DevAuthServiceDep = Annotated[DevAuthService, Depends(get_dev_auth_service)]
 KBDocumentServiceDep = Annotated[

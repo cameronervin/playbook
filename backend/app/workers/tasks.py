@@ -41,18 +41,26 @@ def run_athlete_chat_task(
     assistant_message_id: str,
     organization_id: str,
     attached_file_ids: list[str] | None = None,
-) -> None:
-    """Future athlete chat agent entrypoint."""
-    _raise_scaffold_not_implemented(
-        WorkerTaskName.RUN_ATHLETE_CHAT,
+) -> dict[str, Any]:
+    """Phase 2 submit-only athlete chat entrypoint scaffold."""
+    logger.info(
+        "backend_worker_athlete_chat_scaffold_invoked",
         task_id=self.request.id,
         conversation_id=conversation_id,
-        athlete_user_id=athlete_user_id,
         user_message_id=user_message_id,
         assistant_message_id=assistant_message_id,
         organization_id=organization_id,
         attached_file_count=len(attached_file_ids or []),
     )
+    return {
+        "status": "scaffolded",
+        "task_id": self.request.id,
+        "conversation_id": conversation_id,
+        "user_message_id": user_message_id,
+        "assistant_message_id": assistant_message_id,
+        "organization_id": organization_id,
+        "attached_file_count": len(attached_file_ids or []),
+    }
 
 
 @backend_worker.task(

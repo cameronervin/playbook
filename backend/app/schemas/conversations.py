@@ -24,6 +24,32 @@ class ConversationCreateRequest(BaseModel):
         return trimmed
 
 
+class MessageSubmitRequest(BaseModel):
+    """Submit a follow-up message to an existing athlete conversation."""
+
+    content: str = Field(min_length=1)
+    file_ids: list[UUID] = Field(default_factory=list)
+
+    @field_validator("content")
+    @classmethod
+    def trim_content(cls, value: str) -> str:
+        """Normalize accidental edge whitespace and reject empty content."""
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("content must contain message content")
+        return trimmed
+
+
+class MessageSubmitResponse(BaseModel):
+    """Stream metadata returned after enqueuing assistant generation."""
+
+    user_message_id: UUID
+    assistant_message_id: UUID
+    task_id: str
+    stream_url: str
+    status: str
+
+
 class ConversationSummaryResponse(BaseModel):
     """Conversation list item."""
 

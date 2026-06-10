@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -14,6 +15,7 @@ from app.repositories.conversations import (
     MessageCitationRepository,
 )
 from app.repositories.identity import OrganizationRepository, UserRepository
+from app.workers import tasks as worker_tasks
 
 
 @pytest.mark.asyncio
@@ -144,17 +146,258 @@ async def test_create_conversation_validates_initial_message(
 
 
 @pytest.mark.asyncio
+async def test_submit_message_persists_placeholder_and_dispatches_task(
+    route_client,
+    db_session,
+    monkeypatch,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-submit-subject",
+        sport_team="Basketball",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+        title="NIL question",
+    )
+    file = await ConversationFileRepository(db_session).create(
+        conversation_id=conversation.id,
+        uploaded_by=athlete.id,
+        filename="nil-contract.pdf",
+        content_type="application/pdf",
+        size_bytes=123456,
+        storage_key="conversations/org/conversation/file/nil-contract.pdf",
+    )
+    route_client.authenticate_as(athlete)
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(*, kwargs: dict[str, object], task_id: str) -> SimpleNamespace:
+        dispatched["kwargs"] = kwargs
+        dispatched["task_id"] = task_id
+        return SimpleNamespace(id=task_id)
+
+    monkeypatch.setattr(
+        worker_tasks.run_athlete_chat_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={
+            "content": " Can I still accept this NIL deal? ",
+            "file_ids": [str(file.id)],
+        },
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "streaming"
+    assert body["stream_url"] == (
+        f"/api/v1/conversations/{conversation.id}/messages/"
+        f"{body['assistant_message_id']}/stream?task_id={body['task_id']}"
+    )
+    assert dispatched["task_id"] == body["task_id"]
+    assert dispatched["kwargs"] == {
+        "conversation_id": str(conversation.id),
+        "athlete_user_id": str(athlete.id),
+        "user_message_id": body["user_message_id"],
+        "assistant_message_id": body["assistant_message_id"],
+        "organization_id": str(organization.id),
+        "attached_file_ids": [str(file.id)],
+    }
+
+    messages = await ConversationMessageRepository(db_session).list_by_conversation(
+        conversation.id
+    )
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert messages[0].id == UUID(body["user_message_id"])
+    assert messages[0].content == "Can I still accept this NIL deal?"
+    assert messages[0].status == "complete"
+    assert messages[0].message_metadata == {"attached_file_ids": [str(file.id)]}
+    assert messages[1].id == UUID(body["assistant_message_id"])
+    assert messages[1].content == ""
+    assert messages[1].status == "streaming"
+    assert messages[1].message_metadata["task_id"] == body["task_id"]
+    assert messages[1].message_metadata["user_message_id"] == body["user_message_id"]
+    assert conversation.last_message_at == messages[0].created_at
+
+
+@pytest.mark.asyncio
+async def test_submit_message_validates_content(route_client, db_session) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-blank-submit",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    route_client.authenticate_as(athlete)
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={"content": "   "},
+        headers={"X-Request-ID": "req-submit-blank"},
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert error["details"]["request_id"] == "req-submit-blank"
+
+
+@pytest.mark.asyncio
+async def test_submit_message_is_scoped_to_current_athlete(
+    route_client,
+    db_session,
+    monkeypatch,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    user_repo = UserRepository(db_session)
+    owner = await user_repo.create(
+        organization_id=organization.id,
+        email="owner@example.com",
+        name="Owner Athlete",
+        auth_provider="google",
+        provider_subject="owner-submit-subject",
+    )
+    other = await user_repo.create(
+        organization_id=organization.id,
+        email="other@example.com",
+        name="Other Athlete",
+        auth_provider="google",
+        provider_subject="other-submit-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=owner.id,
+        title="Private NIL question",
+    )
+    route_client.authenticate_as(other)
+
+    def fail_apply_async(**_: object) -> None:
+        pytest.fail("submit must not dispatch for another athlete's conversation")
+
+    monkeypatch.setattr(
+        worker_tasks.run_athlete_chat_task,
+        "apply_async",
+        fail_apply_async,
+    )
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={"content": "Can I follow up?"},
+        headers={"X-Request-ID": "req-submit-owner"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"] == {
+        "code": "NOT_FOUND",
+        "message": f"Conversation not found: {conversation.id}",
+        "retryable": False,
+        "details": {"request_id": "req-submit-owner"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_submit_message_rejects_files_outside_conversation(
+    route_client,
+    db_session,
+    monkeypatch,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-file-submit-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    other_conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    other_file = await ConversationFileRepository(db_session).create(
+        conversation_id=other_conversation.id,
+        uploaded_by=athlete.id,
+        filename="other.pdf",
+        content_type="application/pdf",
+        size_bytes=1,
+        storage_key="conversations/org/other/file/other.pdf",
+    )
+    route_client.authenticate_as(athlete)
+
+    def fail_apply_async(**_: object) -> None:
+        pytest.fail("submit must not dispatch when file_ids are invalid")
+
+    monkeypatch.setattr(
+        worker_tasks.run_athlete_chat_task,
+        "apply_async",
+        fail_apply_async,
+    )
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/messages",
+        json={"content": "Use this file", "file_ids": [str(other_file.id)]},
+        headers={"X-Request-ID": "req-submit-file"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == {
+        "code": "VALIDATION_ERROR",
+        "message": "One or more file_ids are not available for this conversation",
+        "retryable": False,
+        "details": {"request_id": "req-submit-file"},
+    }
+
+
+@pytest.mark.asyncio
 async def test_conversation_create_openapi_uses_initial_message(route_client) -> None:
     response = await route_client.client.get("/openapi.json")
 
     assert response.status_code == 200
     schema = response.json()["components"]["schemas"]["ConversationCreateRequest"]
+    submit_schema = response.json()["components"]["schemas"]["MessageSubmitRequest"]
+    submit_response_schema = response.json()["components"]["schemas"][
+        "MessageSubmitResponse"
+    ]
     detail_schema = response.json()["components"]["schemas"][
         "ConversationDetailResponse"
     ]
     assert "initial_message" in schema["properties"]
     assert "title" not in schema["properties"]
     assert "initial_message" in schema["required"]
+    assert "content" in submit_schema["properties"]
+    assert "file_ids" in submit_schema["properties"]
+    assert "content" in submit_schema["required"]
+    assert "task_id" in submit_response_schema["properties"]
+    assert "stream_url" in submit_response_schema["properties"]
     assert "files" in detail_schema["properties"]
 
 
