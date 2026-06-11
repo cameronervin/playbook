@@ -13,23 +13,28 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 
 
 def build_cache_config(
-    *, mode: str, phase: str, example_id: UUID | str | None = None
+    *,
+    mode: str,
+    phase: str,
+    example_id: UUID | str | None = None,
+    settings: Settings | None = None,
 ) -> dict[str, str]:
     """Return LangGraph configurable cache-routing fields (or empty if disabled)."""
-    if not getattr(settings, "PROMPT_CACHE_ENABLED", False):
+    app_settings = settings or get_settings()
+    if not getattr(app_settings, "PROMPT_CACHE_ENABLED", False):
         return {}
 
-    namespace_root = getattr(settings, "AGENT_CACHE_NAMESPACE", "agent")
+    namespace_root = getattr(app_settings, "AGENT_CACHE_NAMESPACE", "agent")
     namespace = f"{namespace_root}:{mode}:{phase}"
     if example_id is not None:
         namespace = f"{namespace}:{example_id}"
 
     return {
         "cache_namespace": namespace,
-        "prompt_version": getattr(settings, "AGENT_PROMPT_VERSION", "v1"),
-        "policy_version": getattr(settings, "AGENT_POLICY_VERSION", "v1"),
+        "prompt_version": getattr(app_settings, "AGENT_PROMPT_VERSION", "v1"),
+        "policy_version": getattr(app_settings, "AGENT_POLICY_VERSION", "v1"),
     }

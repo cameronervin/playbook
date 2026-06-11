@@ -231,8 +231,8 @@ else
 
   if [ -z "${KB_WEBHOOK_SECRET:-}" ]; then
     KB_WEBHOOK_SECRET="$(cd "$BACKEND_DIR" && "${PYTHON_CMD[@]}" - <<'PY'
-from app.core.config import settings
-print(settings.KB_WEBHOOK_SECRET)
+from app.core.config import get_settings
+print(get_settings().KB_WEBHOOK_SECRET)
 PY
 )"
   fi

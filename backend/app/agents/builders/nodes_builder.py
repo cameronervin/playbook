@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.agents.nodes.example.chains import create_example_nodes
+from app.core.config import Settings
 from app.infrastructure.storage import StorageProvider
 
 
@@ -19,6 +20,7 @@ def create_example_node_set(
     *,
     chains: dict[str, Any],
     get_session: Callable,
+    settings: Settings,
     storage: StorageProvider | None = None,
 ) -> dict[str, Any]:
     """Create the node set for the example workflow.
@@ -30,6 +32,7 @@ def create_example_node_set(
         "example": create_example_nodes(
             chains=chains,
             get_session=get_session,
+            settings=settings,
         )
     }
 
@@ -38,6 +41,7 @@ def create_all_nodes(
     *,
     chains: dict[str, Any],
     get_session: Callable,
+    settings: Settings,
     storage: StorageProvider | None = None,
 ) -> dict[str, Any]:
     """Create all node sets for the agent subsystem (currently just example)."""
@@ -45,6 +49,7 @@ def create_all_nodes(
         **create_example_node_set(
             chains=chains,
             get_session=get_session,
+            settings=settings,
             storage=storage,
         )
     }

@@ -21,11 +21,15 @@ from app.agents.tools.tool_assignment import (
     build_workflow_chain_tool_map,
     resolve_active_tools,
 )
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 
 
-def create_example_chain_set(chat_model: BaseChatModel) -> dict[str, Any]:
+def create_example_chain_set(
+    chat_model: BaseChatModel,
+    app_settings: Settings | None = None,
+) -> dict[str, Any]:
     """Create the chains required by the example workflow."""
+    settings = app_settings or get_settings()
     tools = resolve_active_tools(settings)
     prompts = build_example_prompts([tool.name for tool in tools])
     example_chain_tools = build_workflow_chain_tool_map(tools).get("example", {})
@@ -39,6 +43,9 @@ def create_example_chain_set(chat_model: BaseChatModel) -> dict[str, Any]:
     }
 
 
-def create_all_chains(chat_model: BaseChatModel) -> dict[str, Any]:
+def create_all_chains(
+    chat_model: BaseChatModel,
+    app_settings: Settings | None = None,
+) -> dict[str, Any]:
     """Create all chain sets for the agent subsystem (currently just example)."""
-    return {**create_example_chain_set(chat_model)}
+    return {**create_example_chain_set(chat_model, app_settings=app_settings)}

@@ -43,7 +43,7 @@ class ToolSpec:
     """Tool declaration with workflow->chain targets."""
 
     tool_name: str
-    factory: Callable[[], BaseTool]
+    factory: Callable[[object], BaseTool]
     enabled_predicate: Callable[[object], bool]
     workflow_chain_targets: Mapping[ToolWorkflow, Sequence[str]]
     prompt_keys: Sequence[ToolPromptKey] = ()
@@ -59,8 +59,8 @@ def _kb_tools_enabled(config: object) -> bool:
     return enabled
 
 
-def _create_example_kb_tool() -> BaseTool:
-    return create_example_kb_tool()
+def _create_example_kb_tool(config: object) -> BaseTool:
+    return create_example_kb_tool(app_settings=config)  # type: ignore[arg-type]
 
 
 TOOL_REGISTRY: tuple[ToolSpec, ...] = (

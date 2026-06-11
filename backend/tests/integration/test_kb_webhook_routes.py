@@ -9,7 +9,6 @@ import time
 
 import pytest
 
-from app.core.config import settings
 from app.repositories.identity import OrganizationRepository, UserRepository
 from app.repositories.knowledge_base import KBDocumentEventRepository, KBDocumentRepository
 
@@ -49,8 +48,9 @@ async def test_kb_webhook_updates_document_status_and_appends_event(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
     document = await _document(db_session)
     payload = {
         "document_id": str(document.id),
@@ -83,8 +83,9 @@ async def test_kb_webhook_rejects_missing_signature(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
     document = await _document(db_session)
 
     response = await route_client.client.post(
@@ -107,8 +108,9 @@ async def test_kb_webhook_rejects_invalid_signature(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
     document = await _document(db_session)
 
     response = await route_client.client.post(
@@ -126,8 +128,9 @@ async def test_kb_webhook_rejects_stale_timestamp(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
     document = await _document(db_session)
     payload = {
         "document_id": str(document.id),

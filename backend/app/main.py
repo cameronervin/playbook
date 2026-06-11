@@ -29,7 +29,7 @@ from app.api.v1 import (
     kb_webhook,
     users,
 )
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 from app.core.exception_handlers import (
     app_error_handler,
     generic_exception_handler,
@@ -60,7 +60,7 @@ OPENAPI_TAGS = [
 ]
 
 
-async def _init_infrastructure(app: FastAPI) -> tuple:
+async def _init_infrastructure(app: FastAPI, settings: Settings) -> tuple:
     """Initialize all infrastructure components in startup order.
 
     Returns:
@@ -70,17 +70,17 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
     kb_provider = None
 
     # 1. Observability
-    tracing_status = verify_tracing_configuration()
+    tracing_status = verify_tracing_configuration(settings)
     logger.info("tracing_startup_check", **tracing_status)
 
     # 2. LLM provider
-    llm_provider = get_llm_provider()
+    llm_provider = get_llm_provider(app_settings=settings)
     llm_provider.get_chat_model()
     logger.info("Initialized LLM provider", provider=llm_provider.provider_name, mode=settings.LLM_PROVIDER_MODE)
 
     # 3. Knowledgebase provider
-    if is_kb_feature_enabled():
-        kb_provider = get_kb_provider()
+    if is_kb_feature_enabled(settings):
+        kb_provider = get_kb_provider(app_settings=settings)
         logger.info(
             "Initialized knowledgebase provider",
             provider=kb_provider.provider_name,
@@ -99,11 +99,11 @@ async def _init_infrastructure(app: FastAPI) -> tuple:
         logger.info("Knowledgebase disabled (KB_ENABLED=false)")
 
     # 4. Storage
-    get_storage_provider()
+    get_storage_provider(settings)
     logger.info("Initialized storage provider")
 
     # 5. Checkpointer
-    checkpointer_pool = await create_checkpointer_pool()
+    checkpointer_pool = await create_checkpointer_pool(settings)
     await create_checkpointer(checkpointer_pool)
     logger.info("Created checkpointer connection pool")
 
@@ -150,13 +150,14 @@ async def _shutdown_infrastructure(checkpointer_pool: object, kb_provider: objec
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan handler owning all infrastructure lifecycle."""
+    settings: Settings = app.state.settings
     logger.info("Starting %s API...", settings.PROJECT_NAME)
 
     checkpointer_pool = None
     kb_provider = None
 
     try:
-        checkpointer_pool, kb_provider = await _init_infrastructure(app)
+        checkpointer_pool, kb_provider = await _init_infrastructure(app, settings)
         logger.info("%s API startup complete", settings.PROJECT_NAME)
     except Exception as e:
         logger.error("Failed to start application: %s", str(e), exc_info=True)
@@ -170,14 +171,16 @@ async def lifespan(app: FastAPI):
     logger.info("%s API shutdown complete", settings.PROJECT_NAME)
 
 
-def create_app() -> FastAPI:
+def create_app(app_settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI app."""
+    settings = app_settings or get_settings()
     app = FastAPI(
         title=settings.PROJECT_NAME,
         debug=settings.DEBUG,
         lifespan=lifespan,
         openapi_tags=OPENAPI_TAGS,
     )
+    app.state.settings = settings
 
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
@@ -185,7 +188,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, generic_exception_handler)
     logger.info("Registered global exception handlers")
 
-    setup_cors(app)
+    setup_cors(app, settings)
     setup_request_context(app)
 
     app.include_router(auth.router, prefix=API_V1_PREFIX)

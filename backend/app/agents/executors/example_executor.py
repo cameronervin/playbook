@@ -18,6 +18,7 @@ from fastapi import Request
 from langchain_core.messages import BaseMessage
 
 from app.agents.retry import RetryHandler
+from app.core.config import Settings
 from app.observability.agent_trace import build_graph_invoke_config
 
 logger = structlog.get_logger(__name__)
@@ -36,6 +37,7 @@ class ExampleExecutor:
     def __init__(
         self,
         compiled_graph: Any,
+        settings: Settings,
         retry_handler: RetryHandler | None = None,
         tracing_enabled: bool = False,
     ):
@@ -47,7 +49,8 @@ class ExampleExecutor:
             tracing_enabled: Whether to attach tracing callbacks at invoke time.
         """
         self.graph = compiled_graph
-        self.retry = retry_handler or RetryHandler()
+        self.settings = settings
+        self.retry = retry_handler or RetryHandler(settings=settings)
         self.tracing_enabled = tracing_enabled
 
     async def execute(
@@ -82,6 +85,7 @@ class ExampleExecutor:
             thread_id=example_id,
             phase=phase,
             mode=EXAMPLE_MODE,
+            settings=self.settings,
             extra_configurable=extra_configurable,
         )
 

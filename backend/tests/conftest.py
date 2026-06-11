@@ -8,14 +8,6 @@ from unittest.mock import AsyncMock
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Load environment variables before any app imports
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    pass
-
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
@@ -23,8 +15,27 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.config import Settings, set_settings_override
+
+TEST_SETTINGS = Settings(
+    _env_file=None,
+    ENVIRONMENT="test",
+    DEBUG=False,
+    LOG_LEVEL="WARNING",
+    DEV_AUTH_ENABLED=False,
+    DATABASE_URL=os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://app:localpass@localhost:5433/playbook",
+    ),
+    SECRET_KEY="test-secret-value-that-is-long-enough",
+    OAUTH_STATE_SECRET="test-oauth-secret-value-that-is-long-enough",
+    LLM_PROVIDER_MODE="direct",
+    LLM_DIRECT_PROVIDER="anthropic",
+    ANTHROPIC_API_KEY="test-anthropic-key",
+)
+set_settings_override(TEST_SETTINGS)
+
 from app.auth.dependencies import current_active_user
-from app.core.config import settings
 from app.infrastructure.db.session import get_db
 from app.main import create_app
 from app.models.base import Base
@@ -38,6 +49,12 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "db: marks tests that require the test database")
 
 
+@pytest.fixture
+def test_settings() -> Settings:
+    """Return the deterministic settings object installed for tests."""
+    return TEST_SETTINGS
+
+
 def _get_test_database_url() -> str:
     """Resolve the test database URL, refusing to use the production database.
 
@@ -48,7 +65,7 @@ def _get_test_database_url() -> str:
     if explicit_url:
         return explicit_url
 
-    prod_url = settings.DATABASE_URL
+    prod_url = TEST_SETTINGS.DATABASE_URL
     if prod_url.startswith("postgresql://"):
         prod_url = prod_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     db_name = prod_url.rsplit("/", 1)[-1] if "/" in prod_url else ""
@@ -129,7 +146,7 @@ class RouteTestHarness:
 @pytest_asyncio.fixture(scope="function")
 async def route_client(db_session: AsyncSession) -> AsyncGenerator[RouteTestHarness, None]:
     """Create an ASGI test client wired to the function-scoped DB session."""
-    app = create_app()
+    app = create_app(app_settings=TEST_SETTINGS)
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session

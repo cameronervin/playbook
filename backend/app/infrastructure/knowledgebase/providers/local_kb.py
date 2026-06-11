@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import structlog
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.core.exceptions import (
     KBAuthError,
     KBConfigError,
@@ -42,11 +42,12 @@ logger = structlog.get_logger(__name__)
 class LocalKBProvider(BaseKnowledgebaseProvider):
     """KB provider backed by a local KB service container."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
         self._client = httpx.AsyncClient(
-            base_url=settings.KB_LOCAL_BASE_URL,
-            timeout=httpx.Timeout(settings.KB_TIMEOUT),
-            headers={"Authorization": f"Bearer {settings.KB_API_SECRET}"},
+            base_url=self.settings.KB_LOCAL_BASE_URL,
+            timeout=httpx.Timeout(self.settings.KB_TIMEOUT),
+            headers={"Authorization": f"Bearer {self.settings.KB_API_SECRET}"},
         )
         self._config_id: str | None = None
 
@@ -57,18 +58,24 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
     async def search(
         self,
         query: str,
-        max_docs: int = settings.KB_MAX_DOCS,
-        score_threshold: float = settings.KB_SCORE_THRESHOLD,
+        max_docs: int | None = None,
+        score_threshold: float | None = None,
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
         start = time.monotonic()
         config_id = configuration_id or await self.resolve_configuration()
+        resolved_max_docs = max_docs if max_docs is not None else self.settings.KB_MAX_DOCS
+        resolved_score_threshold = (
+            score_threshold
+            if score_threshold is not None
+            else self.settings.KB_SCORE_THRESHOLD
+        )
 
         payload: dict[str, Any] = {
             "query": query,
-            "max_docs": max_docs,
-            "score_threshold": score_threshold,
+            "max_docs": resolved_max_docs,
+            "score_threshold": resolved_score_threshold,
             "configuration_id": config_id,
         }
         if metadata_filter:
@@ -88,7 +95,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
             for item in raw_items
         ]
         chunks = deduplicate_chunks(chunks)
-        context = assemble_context(chunks, settings.KB_CONTEXT_MAX_TOKENS)
+        context = assemble_context(chunks, self.settings.KB_CONTEXT_MAX_TOKENS)
         latency_ms = int((time.monotonic() - start) * 1000)
 
         return KnowledgebaseResult(
@@ -116,13 +123,13 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         # The kb-service has no dedicated resolve endpoint; configurations are
         # looked up by name via the list route (GET /api/kb/configuration/?name=).
         data = await self._get(
-            "/api/kb/configuration/", params={"name": settings.KB_CONFIG_NAME}
+            "/api/kb/configuration/", params={"name": self.settings.KB_CONFIG_NAME}
         )
         rows = data if isinstance(data, list) else []
         config_id = rows[0].get("id") if rows else None
         if not config_id:
             raise KBConfigError(
-                f"KB configuration '{settings.KB_CONFIG_NAME}' could not be resolved"
+                f"KB configuration '{self.settings.KB_CONFIG_NAME}' could not be resolved"
             )
         self._config_id = config_id
         return config_id

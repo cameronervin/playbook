@@ -10,6 +10,7 @@ from app.infrastructure.streaming.factory import (
     cleanup_agent_stream_provider,
     clear_agent_stream_provider_cache,
     get_agent_stream_provider,
+    get_agent_stream_provider_dependency,
 )
 from app.infrastructure.streaming.providers import (
     BaseAgentStreamProvider,
@@ -28,4 +29,5 @@ __all__ = [
     "cleanup_agent_stream_provider",
     "clear_agent_stream_provider_cache",
     "get_agent_stream_provider",
+    "get_agent_stream_provider_dependency",
 ]

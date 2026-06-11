@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.infrastructure.knowledgebase.context import assemble_context
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
@@ -48,6 +48,9 @@ def _load_default_items() -> list[dict]:
 class MockProvider(BaseKnowledgebaseProvider):
     """Fixture-based provider for offline development and unit tests."""
 
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
     @property
     def provider_name(self) -> str:
         return "mock"
@@ -55,12 +58,18 @@ class MockProvider(BaseKnowledgebaseProvider):
     async def search(
         self,
         query: str,
-        max_docs: int = settings.KB_MAX_DOCS,
-        score_threshold: float = settings.KB_SCORE_THRESHOLD,
+        max_docs: int | None = None,
+        score_threshold: float | None = None,
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
         start = time.monotonic()
+        resolved_max_docs = max_docs if max_docs is not None else self.settings.KB_MAX_DOCS
+        resolved_score_threshold = (
+            score_threshold
+            if score_threshold is not None
+            else self.settings.KB_SCORE_THRESHOLD
+        )
 
         raw_items = _load_default_items()
         chunks = [
@@ -69,11 +78,11 @@ class MockProvider(BaseKnowledgebaseProvider):
                 metadata=item.get("metadata", {}),
                 similarity_score=item.get("similarity_score"),
             )
-            for item in raw_items[:max_docs]
-            if (item.get("similarity_score") or 0) >= score_threshold
+            for item in raw_items[:resolved_max_docs]
+            if (item.get("similarity_score") or 0) >= resolved_score_threshold
         ]
 
-        context = assemble_context(chunks, settings.KB_CONTEXT_MAX_TOKENS)
+        context = assemble_context(chunks, self.settings.KB_CONTEXT_MAX_TOKENS)
         latency_ms = int((time.monotonic() - start) * 1000)
 
         return KnowledgebaseResult(

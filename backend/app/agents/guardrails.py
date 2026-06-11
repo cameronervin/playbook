@@ -18,7 +18,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 from app.core.exceptions import ValidationError
 
 logger = structlog.get_logger(__name__)
@@ -30,8 +30,9 @@ RESULT_MAX_REPAIR_RETRIES = 2
 _DEFAULT_MAX_MESSAGES = 60
 
 
-def _max_messages_per_call() -> int:
-    return getattr(settings, "AGENT_MAX_MESSAGES_PER_LLM_CALL", _DEFAULT_MAX_MESSAGES)
+def _max_messages_per_call(settings: Settings | None = None) -> int:
+    app_settings = settings or get_settings()
+    return getattr(app_settings, "AGENT_MAX_MESSAGES_PER_LLM_CALL", _DEFAULT_MAX_MESSAGES)
 
 
 def scope_messages_to_current_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -82,9 +83,10 @@ def assert_message_loop_bounded(
     *,
     phase: str,
     example_id: str,
+    settings: Settings | None = None,
 ) -> None:
     """Fail fast when message fan-out suggests an unbounded loop."""
-    max_messages = _max_messages_per_call()
+    max_messages = _max_messages_per_call(settings)
     if len(messages) <= max_messages:
         return
 

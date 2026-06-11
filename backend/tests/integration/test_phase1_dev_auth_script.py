@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import jwt
 
-from app.core.config import settings
 from app.auth.dependencies import is_profile_complete
 from app.repositories.identity import UserRepository
 from scripts.phase1_dev_auth import ROLE_TARGET_KEY, seed_phase1_users
 
 
-async def test_seed_phase1_users_creates_reusable_principals(db_session) -> None:
+async def test_seed_phase1_users_creates_reusable_principals(
+    db_session,
+    test_settings,
+) -> None:
     """Seed helper creates local users and returns valid app JWTs."""
-    seeded = await seed_phase1_users(db_session)
+    seeded = await seed_phase1_users(db_session, test_settings)
 
     assert {"athlete", "new_athlete", "admin", "super_admin", ROLE_TARGET_KEY} == set(
         seeded
@@ -26,7 +28,7 @@ async def test_seed_phase1_users_creates_reusable_principals(db_session) -> None
 
     payload = jwt.decode(
         seeded["athlete"].token,
-        settings.SECRET_KEY,
+        test_settings.SECRET_KEY,
         algorithms=["HS256"],
     )
     assert payload["sub"] == str(seeded["athlete"].user_id)
@@ -40,7 +42,7 @@ async def test_seed_phase1_users_creates_reusable_principals(db_session) -> None
     await UserRepository(db_session).update_role(role_target, role="admin")
     await db_session.commit()
 
-    reseeded = await seed_phase1_users(db_session)
+    reseeded = await seed_phase1_users(db_session, test_settings)
 
     assert reseeded[ROLE_TARGET_KEY].user_id == seeded[ROLE_TARGET_KEY].user_id
     assert reseeded[ROLE_TARGET_KEY].role == "athlete"

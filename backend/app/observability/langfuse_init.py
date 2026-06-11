@@ -18,7 +18,7 @@ import os
 
 import structlog
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -30,7 +30,7 @@ def is_langfuse_ready() -> bool:
     return _initialized
 
 
-def init_langfuse() -> None:
+def init_langfuse(settings: Settings | None = None) -> None:
     """Initialize Langfuse by setting environment variables for the SDK.
 
     The Langfuse Python SDK (v3+) uses a singleton pattern and reads
@@ -42,25 +42,26 @@ def init_langfuse() -> None:
     is created.
     """
     global _initialized
+    app_settings = settings or get_settings()
 
-    if not settings.LANGFUSE_ENABLED:
+    if not app_settings.LANGFUSE_ENABLED:
         logger.info("Langfuse tracing is disabled", langfuse_enabled=False)
         return
 
-    if not settings.LANGFUSE_SECRET_KEY or not settings.LANGFUSE_PUBLIC_KEY:
+    if not app_settings.LANGFUSE_SECRET_KEY or not app_settings.LANGFUSE_PUBLIC_KEY:
         logger.warning(
             "Langfuse enabled but credentials missing",
-            has_secret_key=bool(settings.LANGFUSE_SECRET_KEY),
-            has_public_key=bool(settings.LANGFUSE_PUBLIC_KEY),
+            has_secret_key=bool(app_settings.LANGFUSE_SECRET_KEY),
+            has_public_key=bool(app_settings.LANGFUSE_PUBLIC_KEY),
         )
         return
 
-    os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
-    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
-    os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
+    os.environ["LANGFUSE_SECRET_KEY"] = app_settings.LANGFUSE_SECRET_KEY
+    os.environ["LANGFUSE_PUBLIC_KEY"] = app_settings.LANGFUSE_PUBLIC_KEY
+    os.environ["LANGFUSE_HOST"] = app_settings.LANGFUSE_HOST
 
     _initialized = True
-    logger.info("Langfuse tracing initialized", host=settings.LANGFUSE_HOST)
+    logger.info("Langfuse tracing initialized", host=app_settings.LANGFUSE_HOST)
 
 
 def create_langfuse_handler():

@@ -18,7 +18,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 from app.core.exceptions import KnowledgebaseError
 from app.infrastructure.knowledgebase import (
     BaseKnowledgebaseProvider,
@@ -29,6 +29,8 @@ logger = structlog.get_logger(__name__)
 
 _NO_RESULTS_MSG = "No relevant knowledge base context found for this query."
 _UNAVAILABLE_MSG = "Knowledge base temporarily unavailable."
+DEFAULT_MAX_DOCS = 10
+DEFAULT_SCORE_THRESHOLD = 0.7
 
 
 class QueryKnowledgebaseInput(BaseModel):
@@ -39,13 +41,13 @@ class QueryKnowledgebaseInput(BaseModel):
         description="Natural language query describing the context needed",
     )
     max_docs: int = Field(
-        default=settings.KB_MAX_DOCS,
+        default=DEFAULT_MAX_DOCS,
         ge=1,
         le=50,
         description="Maximum number of chunks to retrieve",
     )
     score_threshold: float = Field(
-        default=settings.KB_SCORE_THRESHOLD,
+        default=DEFAULT_SCORE_THRESHOLD,
         ge=0.0,
         le=1.0,
         description="Minimum similarity score for results (0.0-1.0)",
@@ -55,6 +57,7 @@ class QueryKnowledgebaseInput(BaseModel):
 def create_example_kb_tool(
     provider: BaseKnowledgebaseProvider | None = None,
     fallback_configuration_id: str | None = None,
+    app_settings: Settings | None = None,
 ):
     """Factory for the generic KB retrieval tool.
 
@@ -66,15 +69,21 @@ def create_example_kb_tool(
         fallback_configuration_id: Default pipeline id used when configurable is absent.
     """
 
+    settings = app_settings or get_settings()
+
     @tool("query_example_knowledgebase", args_schema=QueryKnowledgebaseInput)
     async def _kb_tool(
         query: str,
-        max_docs: int = settings.KB_MAX_DOCS,
-        score_threshold: float = settings.KB_SCORE_THRESHOLD,
+        max_docs: int = DEFAULT_MAX_DOCS,
+        score_threshold: float = DEFAULT_SCORE_THRESHOLD,
         config: Annotated[RunnableConfig, InjectedToolArg] = None,
     ) -> str:
         """Query the knowledge base for supporting context."""
-        kb_provider = provider if provider is not None else get_kb_provider()
+        kb_provider = (
+            provider
+            if provider is not None
+            else get_kb_provider(app_settings=settings)
+        )
 
         runtime_config_id: str | None = None
         if config and isinstance(config.get("configurable"), dict):

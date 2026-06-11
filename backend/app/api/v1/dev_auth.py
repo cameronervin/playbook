@@ -6,8 +6,7 @@ import structlog
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
-from app.api.v1.dependencies import DevAuthServiceDep
-from app.core.config import settings
+from app.api.v1.dependencies import DevAuthServiceDep, SettingsDep
 from app.services.auth_service import set_access_token_cookie
 from app.services.dev_auth_service import DevAuthPersona
 
@@ -20,6 +19,7 @@ router = APIRouter(prefix="/dev", tags=["Development"])
 async def bootstrap_session(
     persona: DevAuthPersona,
     service: DevAuthServiceDep,
+    settings: SettingsDep,
 ) -> RedirectResponse:
     """Create a local-development session and redirect to the frontend."""
     principal = await service.create_session(persona)
@@ -27,7 +27,7 @@ async def bootstrap_session(
         url=f"{settings.FRONTEND_URL.rstrip('/')}{principal.next_route}",
         status_code=303,
     )
-    set_access_token_cookie(redirect, principal.token)
+    set_access_token_cookie(redirect, principal.token, settings)
     logger.info(
         "dev_auth_session_bootstrapped",
         persona=persona,

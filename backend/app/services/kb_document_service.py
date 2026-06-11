@@ -13,7 +13,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.core.exceptions import (
     ForbiddenError,
     NotFoundError,
@@ -381,10 +381,12 @@ class KBDocumentWebhookService:
         self,
         session: AsyncSession,
         *,
+        settings: Settings,
         document_repo: KBDocumentRepository | None = None,
         event_repo: KBDocumentEventRepository | None = None,
     ) -> None:
         self.session = session
+        self.settings = settings
         self.document_repo = document_repo or KBDocumentRepository(session)
         self.event_repo = event_repo or KBDocumentEventRepository(session)
 
@@ -434,14 +436,13 @@ class KBDocumentWebhookService:
         )
         return KBWebhookResponse(document_status=status)  # type: ignore[arg-type]
 
-    @staticmethod
-    def _verify_signature(*, raw_body: bytes, signature: str | None) -> None:
-        if not settings.KB_WEBHOOK_SECRET:
+    def _verify_signature(self, *, raw_body: bytes, signature: str | None) -> None:
+        if not self.settings.KB_WEBHOOK_SECRET:
             raise ForbiddenError("KB webhook secret is not configured")
         if not signature:
             raise ForbiddenError("Missing KB webhook signature")
         expected = hmac.new(
-            settings.KB_WEBHOOK_SECRET.encode(),
+            self.settings.KB_WEBHOOK_SECRET.encode(),
             raw_body,
             hashlib.sha256,
         ).hexdigest()

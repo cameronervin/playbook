@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.testing import capture_logs
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.infrastructure.db.session import get_db
 from app.main import create_app
 
@@ -26,8 +26,9 @@ async def _client_for_app(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 
 async def _dev_auth_client(
     db_session: AsyncSession,
+    settings: Settings,
 ) -> AsyncGenerator[AsyncClient, None]:
-    app = create_app()
+    app = create_app(app_settings=settings)
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
@@ -42,10 +43,11 @@ async def _dev_auth_client(
 async def test_dev_session_route_is_absent_when_disabled(
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "DEV_AUTH_ENABLED", False)
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", False)
 
-    async for client in _dev_auth_client(db_session):
+    async for client in _dev_auth_client(db_session, test_settings):
         response = await client.get(
             "/api/v1/dev/session/athlete",
             follow_redirects=False,
@@ -67,17 +69,18 @@ async def test_dev_session_route_is_absent_when_disabled(
 async def test_dev_session_redirects_and_sets_cookie_for_persona(
     db_session,
     monkeypatch,
+    test_settings,
     persona,
     next_route,
 ) -> None:
-    monkeypatch.setattr(settings, "DEV_AUTH_ENABLED", True)
-    monkeypatch.setattr(settings, "ENVIRONMENT", "local")
-    monkeypatch.setattr(settings, "DEBUG", True)
-    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:3000")
-    monkeypatch.setattr(settings, "COOKIE_DOMAIN", "")
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", True)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+    monkeypatch.setattr(test_settings, "FRONTEND_URL", "http://localhost:3000")
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
 
-    async for client in _dev_auth_client(db_session):
+    async for client in _dev_auth_client(db_session, test_settings):
         response = await client.get(
             f"/api/v1/dev/session/{persona}",
             follow_redirects=False,
@@ -94,18 +97,22 @@ async def test_dev_session_redirects_and_sets_cookie_for_persona(
 
     token = response.cookies.get(CUSTOM_ACCESS_COOKIE_NAME)
     assert token is not None
-    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    payload = jwt.decode(token, test_settings.SECRET_KEY, algorithms=["HS256"])
     assert payload["sub"] == me_response.json()["id"]
 
 
 @pytest.mark.asyncio
-async def test_dev_session_rejects_invalid_persona(db_session, monkeypatch) -> None:
-    monkeypatch.setattr(settings, "DEV_AUTH_ENABLED", True)
-    monkeypatch.setattr(settings, "ENVIRONMENT", "local")
-    monkeypatch.setattr(settings, "DEBUG", True)
-    monkeypatch.setattr(settings, "COOKIE_DOMAIN", "")
+async def test_dev_session_rejects_invalid_persona(
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", True)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
 
-    async for client in _dev_auth_client(db_session):
+    async for client in _dev_auth_client(db_session, test_settings):
         response = await client.get(
             "/api/v1/dev/session/operator",
             follow_redirects=False,
@@ -116,15 +123,19 @@ async def test_dev_session_rejects_invalid_persona(db_session, monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_dev_session_logs_no_tokens_or_seed_emails(db_session, monkeypatch) -> None:
-    monkeypatch.setattr(settings, "DEV_AUTH_ENABLED", True)
-    monkeypatch.setattr(settings, "ENVIRONMENT", "local")
-    monkeypatch.setattr(settings, "DEBUG", True)
-    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:3000")
-    monkeypatch.setattr(settings, "COOKIE_DOMAIN", "")
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+async def test_dev_session_logs_no_tokens_or_seed_emails(
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", True)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+    monkeypatch.setattr(test_settings, "FRONTEND_URL", "http://localhost:3000")
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
 
-    async for client in _dev_auth_client(db_session):
+    async for client in _dev_auth_client(db_session, test_settings):
         with capture_logs() as captured_logs:
             response = await client.get(
                 "/api/v1/dev/session/admin",

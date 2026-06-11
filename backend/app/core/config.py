@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from typing import Annotated, Any, Literal
 
+from fastapi import Request
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -264,4 +266,37 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
-settings = Settings()
+_settings_override: Settings | None = None
+
+
+@lru_cache(maxsize=1)
+def _load_settings() -> Settings:
+    """Load runtime settings from the configured Pydantic sources."""
+    return Settings()
+
+
+def get_settings() -> Settings:
+    """Return application settings, honoring a test-installed override."""
+    if _settings_override is not None:
+        return _settings_override
+    return _load_settings()
+
+
+def set_settings_override(app_settings: Settings | None) -> None:
+    """Install or clear an explicit settings object for tests and app factories."""
+    global _settings_override
+    _settings_override = app_settings
+    clear_settings_cache()
+
+
+def clear_settings_cache() -> None:
+    """Clear cached runtime settings."""
+    _load_settings.cache_clear()
+
+
+def get_request_settings(request: Request) -> Settings:
+    """Return settings attached to the FastAPI app, falling back to runtime config."""
+    app_settings = getattr(request.app.state, "settings", None)
+    if isinstance(app_settings, Settings):
+        return app_settings
+    return get_settings()

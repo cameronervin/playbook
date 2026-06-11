@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.config import settings
-from app.workers.app import backend_worker
+from app.core.config import Settings, get_settings
+from app.workers.app import backend_worker, create_worker_app
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import (
     BACKEND_AGENT_QUEUE,
@@ -24,8 +24,21 @@ from app.workers.tasks import (
 )
 
 
+def _settings(**overrides: object) -> Settings:
+    values: dict[str, object] = {
+        "DATABASE_URL": "postgresql+asyncpg://app:pass@localhost:5432/playbook",
+        "SECRET_KEY": "test-secret-value-that-is-long-enough",
+        "LLM_PROVIDER_MODE": "direct",
+        "LLM_DIRECT_PROVIDER": "anthropic",
+        "ANTHROPIC_API_KEY": "anthropic-key",
+    }
+    values.update(overrides)
+    return Settings(_env_file=None, **values)
+
+
 def test_backend_worker_config_declares_expected_queues() -> None:
     declared_queues = {queue.name for queue in backend_worker.conf.task_queues}
+    settings = get_settings()
 
     assert backend_worker.conf.broker_url == settings.CELERY_BROKER_URL
     assert backend_worker.conf.result_backend == settings.CELERY_RESULT_BACKEND
@@ -43,6 +56,24 @@ def test_backend_worker_config_declares_expected_queues() -> None:
     assert backend_worker.conf.task_acks_late is True
     assert backend_worker.conf.task_reject_on_worker_lost is True
     assert backend_worker.conf.worker_prefetch_multiplier == 1
+
+
+def test_create_worker_app_uses_supplied_settings() -> None:
+    app = create_worker_app(
+        _settings(
+            CELERY_BROKER_URL="redis://broker.example/9",
+            CELERY_RESULT_BACKEND="redis://backend.example/8",
+            CELERY_TASK_SOFT_TIME_LIMIT=12,
+            CELERY_TASK_HARD_TIME_LIMIT=34,
+            CELERY_TASK_RETRY_COUNTDOWN=5,
+        )
+    )
+
+    assert app.conf.broker_url == "redis://broker.example/9"
+    assert app.conf.result_backend == "redis://backend.example/8"
+    assert app.conf.task_soft_time_limit == 12
+    assert app.conf.task_time_limit == 34
+    assert app.conf.task_default_retry_delay == 5
 
 
 def test_backend_worker_registers_and_routes_named_tasks() -> None:

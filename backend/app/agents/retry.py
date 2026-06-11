@@ -14,7 +14,7 @@ from typing import TypeVar
 
 import structlog
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 from app.core.exceptions import AppError
 
 logger = structlog.get_logger(__name__)
@@ -37,10 +37,12 @@ class RetryHandler:
         self,
         max_attempts: int | None = None,
         backoff_seconds: float | None = None,
+        settings: Settings | None = None,
     ):
         """Initialize the retry handler (defaults sourced from settings)."""
-        self.max_attempts = max_attempts or settings.AGENT_MAX_RETRIES
-        self.backoff_seconds = backoff_seconds or settings.AGENT_RETRY_BACKOFF
+        app_settings = settings or get_settings()
+        self.max_attempts = max_attempts or app_settings.AGENT_MAX_RETRIES
+        self.backoff_seconds = backoff_seconds or app_settings.AGENT_RETRY_BACKOFF
 
     def is_retryable(self, error: Exception) -> bool:
         """Decide whether an error should trigger a retry."""

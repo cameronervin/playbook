@@ -11,11 +11,11 @@ from typing import Any
 
 import structlog
 
-from app.core.config import settings
 from app.workers.app import backend_worker
 from app.workers.queues import WorkerTaskName
 
 logger = structlog.get_logger(__name__)
+TASK_MAX_RETRIES = backend_worker.conf.playbook_task_max_retries
 
 
 def _raise_scaffold_not_implemented(task_name: WorkerTaskName, **context: Any) -> None:
@@ -30,7 +30,7 @@ def _raise_scaffold_not_implemented(task_name: WorkerTaskName, **context: Any) -
 @backend_worker.task(
     bind=True,
     name=WorkerTaskName.RUN_ATHLETE_CHAT.value,
-    max_retries=settings.CELERY_TASK_MAX_RETRIES,
+    max_retries=TASK_MAX_RETRIES,
 )
 def run_athlete_chat_task(
     self: Any,
@@ -66,7 +66,7 @@ def run_athlete_chat_task(
 @backend_worker.task(
     bind=True,
     name=WorkerTaskName.RUN_ADMIN_CHAT.value,
-    max_retries=settings.CELERY_TASK_MAX_RETRIES,
+    max_retries=TASK_MAX_RETRIES,
 )
 def run_admin_chat_task(
     self: Any,
@@ -95,7 +95,7 @@ def run_admin_chat_task(
 @backend_worker.task(
     bind=True,
     name=WorkerTaskName.EXTRACT_CONVERSATION_FILE.value,
-    max_retries=settings.CELERY_TASK_MAX_RETRIES,
+    max_retries=TASK_MAX_RETRIES,
 )
 def extract_conversation_file_task(
     self: Any,
@@ -119,7 +119,7 @@ def extract_conversation_file_task(
 @backend_worker.task(
     bind=True,
     name=WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS.value,
-    max_retries=settings.CELERY_TASK_MAX_RETRIES,
+    max_retries=TASK_MAX_RETRIES,
 )
 def generate_dashboard_insights_task(
     self: Any,
@@ -145,7 +145,7 @@ def generate_dashboard_insights_task(
 @backend_worker.task(
     bind=True,
     name=WorkerTaskName.PRUNE_CHECKPOINTS.value,
-    max_retries=settings.CELERY_TASK_MAX_RETRIES,
+    max_retries=TASK_MAX_RETRIES,
 )
 def prune_checkpoints_task(self: Any, *, retention_days: int | None = None) -> None:
     """Future LangGraph checkpoint pruning entrypoint."""

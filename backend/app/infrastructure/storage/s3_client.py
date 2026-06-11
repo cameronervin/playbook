@@ -14,7 +14,7 @@ import structlog
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.core.exceptions import StorageError
 
 from .provider import StorageProvider
@@ -35,36 +35,37 @@ class S3StorageProvider(StorageProvider):
     - AWS S3: S3_ENDPOINT_URL=None + profile or explicit keys.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
         boto_config = BotoConfig(
             signature_version="s3v4",
-            region_name=settings.S3_REGION,
+            region_name=self.settings.S3_REGION,
             s3={"addressing_style": "path"},
             retries={"max_attempts": 3, "mode": "adaptive"},
-            connect_timeout=settings.S3_TIMEOUT,
-            read_timeout=settings.S3_TIMEOUT,
+            connect_timeout=self.settings.S3_TIMEOUT,
+            read_timeout=self.settings.S3_TIMEOUT,
         )
 
         client_kwargs: dict[str, Any] = {
             "service_name": "s3",
-            "endpoint_url": settings.S3_ENDPOINT_URL or None,
+            "endpoint_url": self.settings.S3_ENDPOINT_URL or None,
             "config": boto_config,
         }
 
-        if settings.S3_ACCESS_KEY_ID and settings.S3_SECRET_ACCESS_KEY:
-            client_kwargs["aws_access_key_id"] = settings.S3_ACCESS_KEY_ID
-            client_kwargs["aws_secret_access_key"] = settings.S3_SECRET_ACCESS_KEY
+        if self.settings.S3_ACCESS_KEY_ID and self.settings.S3_SECRET_ACCESS_KEY:
+            client_kwargs["aws_access_key_id"] = self.settings.S3_ACCESS_KEY_ID
+            client_kwargs["aws_secret_access_key"] = self.settings.S3_SECRET_ACCESS_KEY
             self._client = boto3.client(**client_kwargs)
             logger.info("S3 client initialized with explicit credentials")
-        elif settings.AWS_PROFILE:
-            session = boto3.Session(profile_name=settings.AWS_PROFILE)
+        elif self.settings.AWS_PROFILE:
+            session = boto3.Session(profile_name=self.settings.AWS_PROFILE)
             self._client = session.client(**client_kwargs)
-            logger.info("S3 client initialized with AWS profile", profile=settings.AWS_PROFILE)
+            logger.info("S3 client initialized with AWS profile", profile=self.settings.AWS_PROFILE)
         else:
             self._client = boto3.client(**client_kwargs)
             logger.info("S3 client initialized with default AWS credentials chain")
 
-        self._bucket = settings.S3_BUCKET_NAME
+        self._bucket = self.settings.S3_BUCKET_NAME
         self._ensure_bucket()
 
     # ------------------------------------------------------------------
@@ -105,14 +106,14 @@ class S3StorageProvider(StorageProvider):
         op_name = getattr(func, "__name__", repr(func))
         loop = asyncio.get_running_loop()
         try:
-            async with asyncio.timeout(settings.S3_TIMEOUT):
+            async with asyncio.timeout(self.settings.S3_TIMEOUT):
                 return await loop.run_in_executor(None, partial(func, *args, **kwargs))
         except TimeoutError as te:
-            logger.exception("S3 operation timeout", operation=op_name, timeout_seconds=settings.S3_TIMEOUT)
+            logger.exception("S3 operation timeout", operation=op_name, timeout_seconds=self.settings.S3_TIMEOUT)
             raise StorageError(
-                f"S3 operation '{op_name}' timed out after {settings.S3_TIMEOUT} seconds",
+                f"S3 operation '{op_name}' timed out after {self.settings.S3_TIMEOUT} seconds",
                 retryable=True,
-                details={"operation": op_name, "timeout_seconds": settings.S3_TIMEOUT},
+                details={"operation": op_name, "timeout_seconds": self.settings.S3_TIMEOUT},
             ) from te
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
@@ -173,7 +174,7 @@ class S3StorageProvider(StorageProvider):
         loop = asyncio.get_running_loop()
         try:
             while True:
-                async with asyncio.timeout(settings.S3_TIMEOUT):
+                async with asyncio.timeout(self.settings.S3_TIMEOUT):
                     chunk = await loop.run_in_executor(None, body.read, chunk_size)
                 if not chunk:
                     break
@@ -188,7 +189,7 @@ class S3StorageProvider(StorageProvider):
     async def get_presigned_url(
         self, key: str, expires_in: int | None = None, download_filename: str | None = None
     ) -> str:
-        expiry = expires_in or settings.S3_PRESIGNED_URL_EXPIRY
+        expiry = expires_in or self.settings.S3_PRESIGNED_URL_EXPIRY
         params: dict = {"Bucket": self._bucket, "Key": key}
         if download_filename:
             params["ResponseContentDisposition"] = f'attachment; filename="{download_filename}"'

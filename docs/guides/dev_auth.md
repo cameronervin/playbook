@@ -12,6 +12,10 @@ DEBUG=true
 
 Restart the backend after changing `.env`.
 
+Pytest does not read `backend/.env`; tests inject their own settings with dev
+auth disabled. This keeps local no-SSO browser testing from changing pytest
+collection or route behavior.
+
 Open one of these backend URLs in your browser:
 
 ```text

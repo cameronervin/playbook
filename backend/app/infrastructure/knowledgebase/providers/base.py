@@ -14,7 +14,6 @@ from abc import ABC, abstractmethod
 
 import structlog
 
-from app.core.config import settings
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
@@ -23,6 +22,8 @@ from app.schemas.knowledgebase import (
 )
 
 logger = structlog.get_logger(__name__)
+DEFAULT_KB_MAX_DOCS = 10
+DEFAULT_KB_SCORE_THRESHOLD = 0.7
 
 
 class BaseKnowledgebaseProvider(ABC):
@@ -43,8 +44,8 @@ class BaseKnowledgebaseProvider(ABC):
     async def search(
         self,
         query: str,
-        max_docs: int = settings.KB_MAX_DOCS,
-        score_threshold: float = settings.KB_SCORE_THRESHOLD,
+        max_docs: int = DEFAULT_KB_MAX_DOCS,
+        score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:

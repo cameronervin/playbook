@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import structlog
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -39,9 +39,10 @@ def truncate_to_token_budget(text: str, max_tokens: int) -> str:
     return truncated.rstrip(" ,.;:-") + _TRUNCATION_NOTICE
 
 
-def _budget_for(phase: str) -> int | None:
+def _budget_for(phase: str, settings: Settings | None = None) -> int | None:
     """Look up the per-chain token budget, if the app configures one."""
-    budget_map = getattr(settings, "context_token_budget_map", None) or {}
+    app_settings = settings or get_settings()
+    budget_map = getattr(app_settings, "context_token_budget_map", None) or {}
     return budget_map.get(phase)
 
 
@@ -50,13 +51,14 @@ def enforce_context_token_budget(
     *,
     phase: str,
     example_id: str,
+    settings: Settings | None = None,
 ) -> str:
     """Enforce a per-chain token budget on injected context.
 
     No-op when no budget is configured for ``phase``. When the context exceeds
     the budget it is truncated (and a warning is logged).
     """
-    budget = _budget_for(phase)
+    budget = _budget_for(phase, settings)
     if budget is None:
         return context
 

@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessage
 from app.agents.nodes.example.load_state import create_load_state_node
 from app.agents.nodes.example.save_state import create_save_state_node
 from app.agents.states.example_state import ExampleState
-from app.core.config import settings
+from app.core.config import Settings
 from app.core.exceptions import LLMError, LLMTimeoutError
 
 logger = structlog.get_logger(__name__)
@@ -31,6 +31,7 @@ def create_example_nodes(
     *,
     chains: dict[str, Any],
     get_session: Callable,
+    settings: Settings,
 ) -> dict[str, Callable]:
     """Create example-workflow nodes with chain + infrastructure wiring.
 

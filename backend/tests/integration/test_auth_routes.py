@@ -12,7 +12,7 @@ from structlog.processors import format_exc_info
 from structlog.testing import capture_logs
 
 from app.api.v1.dependencies import get_auth_service
-from app.core.config import settings
+from app.core.config import Settings
 from app.models.identity import OAuthAccount, User
 from app.repositories.identity import OrganizationRepository, UserRepository
 from app.services.auth_service import AuthService
@@ -79,11 +79,14 @@ class FakeOAuthClientFactory:
             "microsoft": FakeOAuthClient("microsoft"),
         }
 
-    def get_client(self, provider: str) -> FakeOAuthClient:
+    def get_client(self, provider: str, _settings: Settings) -> FakeOAuthClient:
         return self.clients[provider]
 
 
-def _configure_oauth_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def _configure_oauth_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: Settings,
+) -> None:
     monkeypatch.setattr(settings, "COOKIE_DOMAIN", "")
     monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "google-client")
     monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_SECRET", "google-secret")
@@ -91,9 +94,13 @@ def _configure_oauth_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "MICROSOFT_OAUTH_CLIENT_SECRET", "microsoft-secret")
 
 
-def _override_auth_service(route_client, db_session, fake_factory) -> None:
+def _override_auth_service(route_client, db_session, fake_factory, settings: Settings) -> None:
     def override_auth_service() -> AuthService:
-        return AuthService(db_session, client_factory=fake_factory)
+        return AuthService(
+            db_session,
+            settings=settings,
+            client_factory=fake_factory,
+        )
 
     route_client.app.dependency_overrides[get_auth_service] = override_auth_service
 
@@ -106,11 +113,12 @@ def _log_blob(captured_logs: list[dict[str, object]]) -> str:
 async def test_auth_provider_listing_uses_configured_providers(
     route_client,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "google-client")
-    monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_SECRET", "google-secret")
-    monkeypatch.setattr(settings, "MICROSOFT_OAUTH_CLIENT_ID", "microsoft-client")
-    monkeypatch.setattr(settings, "MICROSOFT_OAUTH_CLIENT_SECRET", "microsoft-secret")
+    monkeypatch.setattr(test_settings, "GOOGLE_OAUTH_CLIENT_ID", "google-client")
+    monkeypatch.setattr(test_settings, "GOOGLE_OAUTH_CLIENT_SECRET", "google-secret")
+    monkeypatch.setattr(test_settings, "MICROSOFT_OAUTH_CLIENT_ID", "microsoft-client")
+    monkeypatch.setattr(test_settings, "MICROSOFT_OAUTH_CLIENT_SECRET", "microsoft-secret")
 
     response = await route_client.client.get("/api/v1/auth/providers")
 
@@ -139,12 +147,13 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
     provider,
 ) -> None:
-    _configure_oauth_settings(monkeypatch)
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    _configure_oauth_settings(monkeypatch, test_settings)
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
     fake_factory = FakeOAuthClientFactory()
-    _override_auth_service(route_client, db_session, fake_factory)
+    _override_auth_service(route_client, db_session, fake_factory, test_settings)
 
     login_response = await route_client.client.get(f"/api/v1/auth/{provider}/login")
     oauth_client = fake_factory.clients[provider]
@@ -166,7 +175,7 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert body["user"]["email"] == oauth_client.email
     assert body["next_route"] == "/profile"
     assert body["access_token"] != oauth_client.access_token
-    assert jwt.decode(body["access_token"], settings.SECRET_KEY, algorithms=["HS256"])[
+    assert jwt.decode(body["access_token"], test_settings.SECRET_KEY, algorithms=["HS256"])[
         "sub"
     ]
     assert oauth_client.access_token not in callback_response.text
@@ -207,12 +216,13 @@ async def test_oauth_callback_redirects_browser_callers_after_setting_cookie(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    _configure_oauth_settings(monkeypatch)
-    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:3000")
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    _configure_oauth_settings(monkeypatch, test_settings)
+    monkeypatch.setattr(test_settings, "FRONTEND_URL", "http://localhost:3000")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
     fake_factory = FakeOAuthClientFactory()
-    _override_auth_service(route_client, db_session, fake_factory)
+    _override_auth_service(route_client, db_session, fake_factory, test_settings)
 
     login_response = await route_client.client.get("/api/v1/auth/google/login")
     google_client = fake_factory.clients["google"]
@@ -230,7 +240,7 @@ async def test_oauth_callback_redirects_browser_callers_after_setting_cookie(
     assert callback_response.headers["location"] == "http://localhost:3000/profile"
     set_cookie = callback_response.headers["set-cookie"]
     assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in set_cookie
-    assert f"{settings.OAUTH_STATE_COOKIE_NAME}=" in set_cookie
+    assert f"{test_settings.OAUTH_STATE_COOKIE_NAME}=" in set_cookie
     assert "Max-Age=0" in set_cookie
 
 
@@ -239,12 +249,13 @@ async def test_oauth_callback_failure_does_not_persist_or_log_provider_tokens(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    _configure_oauth_settings(monkeypatch)
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    _configure_oauth_settings(monkeypatch, test_settings)
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
     fake_factory = FakeOAuthClientFactory()
     fake_factory.clients["google"].fail_identity_lookup = True
-    _override_auth_service(route_client, db_session, fake_factory)
+    _override_auth_service(route_client, db_session, fake_factory, test_settings)
 
     login_response = await route_client.client.get("/api/v1/auth/google/login")
     google_client = fake_factory.clients["google"]
@@ -284,11 +295,12 @@ async def test_oauth_login_supports_google_and_microsoft(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
     provider,
 ) -> None:
-    _configure_oauth_settings(monkeypatch)
+    _configure_oauth_settings(monkeypatch, test_settings)
     fake_factory = FakeOAuthClientFactory()
-    _override_auth_service(route_client, db_session, fake_factory)
+    _override_auth_service(route_client, db_session, fake_factory, test_settings)
 
     response = await route_client.client.get(f"/api/v1/auth/{provider}/login")
 
@@ -303,9 +315,10 @@ async def test_logout_requires_authentication_and_clears_configured_cookie(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "COOKIE_DOMAIN", "")
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
     organization = await OrganizationRepository(db_session).create(
         name="Playbook Athletics",
         slug="playbook",
@@ -336,8 +349,9 @@ async def test_current_user_dependency_accepts_configured_cookie_name(
     route_client,
     db_session,
     monkeypatch,
+    test_settings,
 ) -> None:
-    monkeypatch.setattr(settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
     organization = await OrganizationRepository(db_session).create(
         name="Playbook Athletics",
         slug="playbook",
@@ -350,7 +364,7 @@ async def test_current_user_dependency_accepts_configured_cookie_name(
         provider_subject="google-subject",
         sport_team="Basketball",
     )
-    token = jwt.encode({"sub": str(user.id)}, settings.SECRET_KEY, algorithm="HS256")
+    token = jwt.encode({"sub": str(user.id)}, test_settings.SECRET_KEY, algorithm="HS256")
 
     response = await route_client.client.get(
         "/api/v1/users/me",

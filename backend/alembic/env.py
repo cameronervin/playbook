@@ -5,7 +5,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.models.base import Base
 
 # Import all models for Alembic autodiscovery. Add new models to app.models
@@ -13,6 +13,7 @@ from app.models.base import Base
 import app.models  # noqa: F401
 
 config = context.config
+settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 target_metadata = Base.metadata
 

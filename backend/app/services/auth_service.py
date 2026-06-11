@@ -14,7 +14,7 @@ from httpx_oauth.oauth2 import HTTPXOAuthError, OAuth2Error
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import is_profile_complete
-from app.core.config import settings
+from app.core.config import Settings
 from app.core.exceptions import OAuthError, ValidationError
 from app.models.identity import User
 from app.repositories.identity import (
@@ -36,7 +36,7 @@ ProviderName = Literal["google", "microsoft"]
 _STATE_COOKIE_MAX_AGE = 600
 
 
-def create_access_token(user: User) -> str:
+def create_access_token(user: User, settings: Settings) -> str:
     """Create the app JWT used by Playbook API dependencies."""
     now = datetime.now(UTC)
     payload = {
@@ -63,11 +63,15 @@ def user_to_response(user: User) -> UserResponse:
     )
 
 
-def _cookie_domain() -> str | None:
+def _cookie_domain(settings: Settings) -> str | None:
     return settings.COOKIE_DOMAIN or None
 
 
-def set_access_token_cookie(response: Response, token: str) -> None:
+def set_access_token_cookie(
+    response: Response,
+    token: str,
+    settings: Settings,
+) -> None:
     """Attach the app access token as an HttpOnly cookie."""
     response.set_cookie(
         settings.ACCESS_TOKEN_COOKIE_NAME,
@@ -76,22 +80,22 @@ def set_access_token_cookie(response: Response, token: str) -> None:
         httponly=True,
         secure=settings.ENVIRONMENT.lower() in {"prod", "production"},
         samesite="lax",
-        domain=_cookie_domain(),
+        domain=_cookie_domain(settings),
     )
 
 
-def clear_oauth_state_cookie(response: Response) -> None:
+def clear_oauth_state_cookie(response: Response, settings: Settings) -> None:
     """Clear the OAuth CSRF state cookie."""
     response.delete_cookie(
         settings.OAUTH_STATE_COOKIE_NAME,
-        domain=_cookie_domain(),
+        domain=_cookie_domain(settings),
     )
 
 
 class OAuthClientFactory:
     """Create OAuth clients lazily so optional provider setup stays cheap."""
 
-    def get_client(self, provider: ProviderName):
+    def get_client(self, provider: ProviderName, settings: Settings):
         if provider == "google":
             from httpx_oauth.clients.google import GoogleOAuth2
 
@@ -117,12 +121,14 @@ class AuthService:
         self,
         session: AsyncSession,
         *,
+        settings: Settings,
         org_repo: OrganizationRepository | None = None,
         user_repo: UserRepository | None = None,
         oauth_repo: OAuthAccountRepository | None = None,
         client_factory: OAuthClientFactory | None = None,
     ) -> None:
         self.session = session
+        self.settings = settings
         self.org_repo = org_repo or OrganizationRepository(session)
         self.user_repo = user_repo or UserRepository(session)
         self.oauth_repo = oauth_repo or OAuthAccountRepository(session)
@@ -135,8 +141,8 @@ class AuthService:
                 provider="google",
                 label="Google",
                 enabled=bool(
-                    settings.GOOGLE_OAUTH_CLIENT_ID
-                    and settings.GOOGLE_OAUTH_CLIENT_SECRET
+                    self.settings.GOOGLE_OAUTH_CLIENT_ID
+                    and self.settings.GOOGLE_OAUTH_CLIENT_SECRET
                 ),
                 login_url="/api/v1/auth/google/login",
             ),
@@ -144,8 +150,8 @@ class AuthService:
                 provider="microsoft",
                 label="Microsoft",
                 enabled=bool(
-                    settings.MICROSOFT_OAUTH_CLIENT_ID
-                    and settings.MICROSOFT_OAUTH_CLIENT_SECRET
+                    self.settings.MICROSOFT_OAUTH_CLIENT_ID
+                    and self.settings.MICROSOFT_OAUTH_CLIENT_SECRET
                 ),
                 login_url="/api/v1/auth/microsoft/login",
             ),
@@ -170,19 +176,19 @@ class AuthService:
                 "iat": int(now.timestamp()),
                 "exp": int((now + timedelta(seconds=_STATE_COOKIE_MAX_AGE)).timestamp()),
             },
-            settings.OAUTH_STATE_SECRET,
+            self.settings.OAUTH_STATE_SECRET,
             algorithm="HS256",
         )
         response.set_cookie(
-            settings.OAUTH_STATE_COOKIE_NAME,
+            self.settings.OAUTH_STATE_COOKIE_NAME,
             csrf,
             max_age=_STATE_COOKIE_MAX_AGE,
             httponly=True,
-            secure=settings.ENVIRONMENT.lower() in {"prod", "production"},
+            secure=self.settings.ENVIRONMENT.lower() in {"prod", "production"},
             samesite="lax",
-            domain=_cookie_domain(),
+            domain=_cookie_domain(self.settings),
         )
-        client = self.client_factory.get_client(provider)
+        client = self.client_factory.get_client(provider, self.settings)
         authorization_url = await client.get_authorization_url(
             self._redirect_uri(provider, request),
             state=state,
@@ -201,7 +207,7 @@ class AuthService:
         """Handle OAuth callback, upsert user/account, and create a session."""
         self._assert_provider_enabled(provider)
         self._validate_state(provider=provider, state=state, request=request)
-        client = self.client_factory.get_client(provider)
+        client = self.client_factory.get_client(provider, self.settings)
         try:
             token = await client.get_access_token(
                 code,
@@ -227,9 +233,9 @@ class AuthService:
             token=token,
         )
         await self.session.commit()
-        access_token = create_access_token(user)
-        set_access_token_cookie(response, access_token)
-        clear_oauth_state_cookie(response)
+        access_token = create_access_token(user, self.settings)
+        set_access_token_cookie(response, access_token, self.settings)
+        clear_oauth_state_cookie(response, self.settings)
         logger.info(
             "auth_oauth_login_succeeded",
             provider=provider,
@@ -245,25 +251,29 @@ class AuthService:
     def browser_redirect_response(self, session: SessionResponse) -> RedirectResponse:
         """Build a browser redirect response with session cookies attached."""
         redirect = RedirectResponse(
-            url=f"{settings.FRONTEND_URL.rstrip('/')}{session.next_route}",
+            url=f"{self.settings.FRONTEND_URL.rstrip('/')}{session.next_route}",
             status_code=303,
         )
-        set_access_token_cookie(redirect, session.access_token)
-        clear_oauth_state_cookie(redirect)
+        set_access_token_cookie(redirect, session.access_token, self.settings)
+        clear_oauth_state_cookie(redirect, self.settings)
         return redirect
 
     def logout(self, response: Response) -> None:
         """Clear the app access token cookie."""
-        response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, domain=_cookie_domain())
+        response.delete_cookie(
+            self.settings.ACCESS_TOKEN_COOKIE_NAME,
+            domain=_cookie_domain(self.settings),
+        )
 
     def _assert_provider_enabled(self, provider: ProviderName) -> None:
         enabled = {
             "google": bool(
-                settings.GOOGLE_OAUTH_CLIENT_ID and settings.GOOGLE_OAUTH_CLIENT_SECRET
+                self.settings.GOOGLE_OAUTH_CLIENT_ID
+                and self.settings.GOOGLE_OAUTH_CLIENT_SECRET
             ),
             "microsoft": bool(
-                settings.MICROSOFT_OAUTH_CLIENT_ID
-                and settings.MICROSOFT_OAUTH_CLIENT_SECRET
+                self.settings.MICROSOFT_OAUTH_CLIENT_ID
+                and self.settings.MICROSOFT_OAUTH_CLIENT_SECRET
             ),
         }[provider]
         if not enabled:
@@ -272,9 +282,8 @@ class AuthService:
                 details={"provider": provider},
             )
 
-    @staticmethod
-    def _redirect_uri(provider: ProviderName, request: Request) -> str:
-        base_url = settings.API_PUBLIC_URL.rstrip("/")
+    def _redirect_uri(self, provider: ProviderName, request: Request) -> str:
+        base_url = self.settings.API_PUBLIC_URL.rstrip("/")
         if base_url:
             return f"{base_url}/api/v1/auth/{provider}/callback"
         return str(request.base_url).rstrip("/") + f"/api/v1/auth/{provider}/callback"
@@ -289,13 +298,13 @@ class AuthService:
         try:
             payload = jwt.decode(
                 state,
-                settings.OAUTH_STATE_SECRET,
+                self.settings.OAUTH_STATE_SECRET,
                 algorithms=["HS256"],
             )
         except jwt.PyJWTError as exc:
             raise ValidationError("Invalid OAuth state") from exc
 
-        cookie_csrf = request.cookies.get(settings.OAUTH_STATE_COOKIE_NAME)
+        cookie_csrf = request.cookies.get(self.settings.OAUTH_STATE_COOKIE_NAME)
         if (
             payload.get("provider") != provider
             or not cookie_csrf
@@ -311,11 +320,13 @@ class AuthService:
         account_email: str,
         token: dict[str, Any],
     ) -> User:
-        organization = await self.org_repo.get_by_slug(settings.DEFAULT_ORGANIZATION_SLUG)
+        organization = await self.org_repo.get_by_slug(
+            self.settings.DEFAULT_ORGANIZATION_SLUG
+        )
         if organization is None:
             organization = await self.org_repo.create(
-                name=settings.DEFAULT_ORGANIZATION_NAME,
-                slug=settings.DEFAULT_ORGANIZATION_SLUG,
+                name=self.settings.DEFAULT_ORGANIZATION_NAME,
+                slug=self.settings.DEFAULT_ORGANIZATION_SLUG,
             )
 
         account = await self.oauth_repo.get_by_provider_account(

@@ -19,6 +19,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from app.agents.builders.chains_builder import create_example_chain_set
 from app.agents.builders.nodes_builder import create_example_node_set
 from app.agents.graphs.example_graph import create_example_graph
+from app.core.config import Settings
 from app.infrastructure.storage import StorageProvider
 
 logger = structlog.get_logger(__name__)
@@ -36,14 +37,16 @@ def compose_example_dependencies(
     *,
     chat_model: BaseChatModel,
     get_session: Callable,
+    app_settings: Settings,
     storage: StorageProvider | None = None,
 ) -> GraphDependencies:
     """Create the example workflow's chains and nodes."""
-    chains = create_example_chain_set(chat_model)
+    chains = create_example_chain_set(chat_model, app_settings=app_settings)
     logger.info("agent_chains_created", count=len(chains), scope="example")
     nodes = create_example_node_set(
         chains=chains,
         get_session=get_session,
+        settings=app_settings,
         storage=storage,
     )
     logger.info("agent_nodes_created", count=len(nodes), scope="example")
@@ -55,6 +58,7 @@ def compile_example_graph(
     chat_model: BaseChatModel,
     get_session: Callable,
     checkpointer: BaseCheckpointSaver,
+    app_settings: Settings,
     storage: StorageProvider | None = None,
 ):
     """Build and compile the example graph (public entry point for main.py).
@@ -71,6 +75,7 @@ def compile_example_graph(
     dependencies = compose_example_dependencies(
         chat_model=chat_model,
         get_session=get_session,
+        app_settings=app_settings,
         storage=storage,
     )
     graph_builder = create_example_graph(nodes=dependencies.nodes["example"])
@@ -81,6 +86,7 @@ def build_example_graph(
     chat_model: BaseChatModel,
     get_session: Callable,
     checkpointer: BaseCheckpointSaver,
+    app_settings: Settings,
     storage: StorageProvider | None = None,
 ):
     """Positional-arg convenience wrapper around ``compile_example_graph``."""
@@ -88,5 +94,6 @@ def build_example_graph(
         chat_model=chat_model,
         get_session=get_session,
         checkpointer=checkpointer,
+        app_settings=app_settings,
         storage=storage,
     )

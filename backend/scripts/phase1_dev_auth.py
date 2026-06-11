@@ -21,6 +21,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
+from app.core.config import Settings, get_settings  # noqa: E402
 from app.infrastructure.db.session import (  # noqa: E402
     cleanup_db_engine,
     get_session_factory,
@@ -34,9 +35,10 @@ from app.services.dev_auth_service import (  # noqa: E402
 
 async def seed_phase1_users(
     session: AsyncSession,
+    settings: Settings | None = None,
 ) -> dict[str, SeededPrincipal]:
     """Create or normalize throwaway users used by manual endpoint validation."""
-    return await DevAuthService(session).seed_users()
+    return await DevAuthService(session, settings=settings or get_settings()).seed_users()
 
 
 def render_shell_exports(seeded: dict[str, SeededPrincipal]) -> str:
@@ -72,8 +74,9 @@ def render_json(seeded: dict[str, SeededPrincipal]) -> str:
 
 
 async def _run(format_name: Literal["shell", "json"]) -> str:
-    async with get_session_factory()() as session:
-        seeded = await seed_phase1_users(session)
+    settings = get_settings()
+    async with get_session_factory(settings)() as session:
+        seeded = await seed_phase1_users(session, settings)
     await cleanup_db_engine()
     if format_name == "json":
         return render_json(seeded)

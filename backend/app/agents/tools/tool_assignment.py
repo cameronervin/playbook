@@ -31,7 +31,7 @@ def resolve_active_tools(
     tools: list[BaseTool] = []
     for spec in registry:
         if spec.enabled_predicate(config):
-            tools.append(spec.factory())
+            tools.append(spec.factory(config))
     return tools
 
 

@@ -11,7 +11,6 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.config import settings
 from app.core.exceptions import ForbiddenError
 from app.models.identity import User
 from app.schemas.kb_documents import KBWebhookPayload
@@ -104,8 +103,11 @@ async def test_role_update_syncs_audit_and_commit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_kb_webhook_verifies_signature_and_updates_status(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+async def test_kb_webhook_verifies_signature_and_updates_status(
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
     document = SimpleNamespace(
         id=uuid4(),
         organization_id=uuid4(),
@@ -121,6 +123,7 @@ async def test_kb_webhook_verifies_signature_and_updates_status(monkeypatch) -> 
     session = SimpleNamespace(commit=AsyncMock())
     service = KBDocumentWebhookService(
         session,
+        settings=test_settings,
         document_repo=document_repo,
         event_repo=event_repo,
     )
@@ -133,7 +136,7 @@ async def test_kb_webhook_verifies_signature_and_updates_status(monkeypatch) -> 
     )
     raw_body = payload.model_dump_json().encode()
     signature = "sha256=" + hmac.new(
-        settings.KB_WEBHOOK_SECRET.encode(),
+        test_settings.KB_WEBHOOK_SECRET.encode(),
         raw_body,
         hashlib.sha256,
     ).hexdigest()
@@ -155,10 +158,11 @@ async def test_kb_webhook_verifies_signature_and_updates_status(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_kb_webhook_rejects_invalid_signature(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+async def test_kb_webhook_rejects_invalid_signature(monkeypatch, test_settings) -> None:
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
     service = KBDocumentWebhookService(
         SimpleNamespace(commit=AsyncMock()),
+        settings=test_settings,
         document_repo=SimpleNamespace(),
         event_repo=SimpleNamespace(),
     )

@@ -11,11 +11,12 @@ session.commit() explicitly, so each method manages its own transaction.
 
 from contextlib import asynccontextmanager
 
+from app.core.config import Settings
 from app.infrastructure.db.session import get_session_factory
 
 
 @asynccontextmanager
-async def worker_db_session():
+async def worker_db_session(settings: Settings | None = None):
     """Async context manager yielding a fresh DB session for a worker task.
 
     Usage::
@@ -24,6 +25,6 @@ async def worker_db_session():
             repo = SomeRepository(session=session)
             await repo.create({...})
     """
-    session_factory = get_session_factory()
+    session_factory = get_session_factory(settings)
     async with session_factory() as session:
         yield session

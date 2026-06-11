@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import is_profile_complete
-from app.core.config import settings
+from app.core.config import Settings
 from app.repositories.identity import OrganizationRepository, UserRepository
 from app.services.auth_service import create_access_token
 
@@ -85,20 +85,24 @@ class DevAuthService:
         self,
         session: AsyncSession,
         *,
+        settings: Settings,
         org_repo: OrganizationRepository | None = None,
         user_repo: UserRepository | None = None,
     ) -> None:
         self.session = session
+        self.settings = settings
         self.org_repo = org_repo or OrganizationRepository(session)
         self.user_repo = user_repo or UserRepository(session)
 
     async def seed_users(self) -> dict[str, SeededPrincipal]:
         """Create or normalize deterministic local-development users."""
-        organization = await self.org_repo.get_by_slug(settings.DEFAULT_ORGANIZATION_SLUG)
+        organization = await self.org_repo.get_by_slug(
+            self.settings.DEFAULT_ORGANIZATION_SLUG
+        )
         if organization is None:
             organization = await self.org_repo.create(
-                name=settings.DEFAULT_ORGANIZATION_NAME,
-                slug=settings.DEFAULT_ORGANIZATION_SLUG,
+                name=self.settings.DEFAULT_ORGANIZATION_NAME,
+                slug=self.settings.DEFAULT_ORGANIZATION_SLUG,
             )
 
         seeded: dict[str, SeededPrincipal] = {}
@@ -137,7 +141,7 @@ class DevAuthService:
                 role=user.role,  # type: ignore[arg-type]
                 user_id=user.id,
                 organization_id=user.organization_id,
-                token=create_access_token(user),
+                token=create_access_token(user, self.settings),
                 next_route=self._next_route(spec.key, user),
             )
 

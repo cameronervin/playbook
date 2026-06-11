@@ -18,7 +18,7 @@ import structlog
 from celery import Celery
 from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 from app.workers.queues import (
     TASK_QUEUES,
     TASK_ROUTES,
@@ -31,38 +31,44 @@ logger = structlog.get_logger(__name__)
 
 _ASYNC_RESULT = TypeVar("_ASYNC_RESULT")
 
-backend_worker = Celery(
-    "playbook_backend",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
-)
+def create_worker_app(settings: Settings) -> Celery:
+    """Create the configured Celery worker app."""
+    worker = Celery(
+        "playbook_backend",
+        broker=settings.CELERY_BROKER_URL,
+        backend=settings.CELERY_RESULT_BACKEND,
+    )
+    worker.conf.update(
+        task_default_queue="backend-default",
+        task_queues=TASK_QUEUES,
+        task_routes=TASK_ROUTES,
+        task_serializer="json",
+        result_serializer="json",
+        accept_content=["json"],
+        enable_utc=True,
+        timezone="UTC",
+        task_track_started=True,
+        task_acks_late=True,
+        task_reject_on_worker_lost=True,
+        worker_prefetch_multiplier=1,
+        task_soft_time_limit=settings.CELERY_TASK_SOFT_TIME_LIMIT,
+        task_time_limit=settings.CELERY_TASK_HARD_TIME_LIMIT,
+        task_default_retry_delay=settings.CELERY_TASK_RETRY_COUNTDOWN,
+        playbook_task_max_retries=settings.CELERY_TASK_MAX_RETRIES,
+        task_publish_retry=True,
+        broker_transport_options={
+            "visibility_timeout": max(settings.CELERY_TASK_HARD_TIME_LIMIT * 4, 3600),
+        },
+        result_backend_transport_options={
+            "visibility_timeout": max(settings.CELERY_TASK_HARD_TIME_LIMIT * 4, 3600),
+        },
+        result_expires=86400,
+        worker_max_tasks_per_child=100,
+    )
+    return worker
 
-backend_worker.conf.update(
-    task_default_queue="backend-default",
-    task_queues=TASK_QUEUES,
-    task_routes=TASK_ROUTES,
-    task_serializer="json",
-    result_serializer="json",
-    accept_content=["json"],
-    enable_utc=True,
-    timezone="UTC",
-    task_track_started=True,
-    task_acks_late=True,
-    task_reject_on_worker_lost=True,
-    worker_prefetch_multiplier=1,
-    task_soft_time_limit=settings.CELERY_TASK_SOFT_TIME_LIMIT,
-    task_time_limit=settings.CELERY_TASK_HARD_TIME_LIMIT,
-    task_default_retry_delay=settings.CELERY_TASK_RETRY_COUNTDOWN,
-    task_publish_retry=True,
-    broker_transport_options={
-        "visibility_timeout": max(settings.CELERY_TASK_HARD_TIME_LIMIT * 4, 3600),
-    },
-    result_backend_transport_options={
-        "visibility_timeout": max(settings.CELERY_TASK_HARD_TIME_LIMIT * 4, 3600),
-    },
-    result_expires=86400,
-    worker_max_tasks_per_child=100,
-)
+
+backend_worker = create_worker_app(get_settings())
 
 _worker_loop: asyncio.AbstractEventLoop | None = None
 _worker_loop_owner_thread: int | None = None

@@ -1,8 +1,15 @@
 """Tests for Playbook backend settings."""
 
+import os
+from pathlib import Path
+import subprocess
+import sys
+
 from pydantic import ValidationError
 
 from app.core.config import Settings
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _base_settings(**overrides: object) -> Settings:
@@ -15,6 +22,55 @@ def _base_settings(**overrides: object) -> Settings:
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
+
+
+def _conflicting_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "ENVIRONMENT": "local",
+            "DEBUG": "release",
+            "DEV_AUTH_ENABLED": "true",
+            "ANTHROPIC_API_KEY": "test",
+        }
+    )
+    return env
+
+
+def test_importing_config_module_does_not_validate_runtime_environment() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import app.core.config; print('import-ok')",
+        ],
+        cwd=BACKEND_ROOT,
+        env=_conflicting_env(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "import-ok" in result.stdout
+
+
+def test_get_settings_preserves_runtime_validation() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.core.config import get_settings; get_settings()",
+        ],
+        cwd=BACKEND_ROOT,
+        env=_conflicting_env(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "DEV_AUTH_ENABLED can only be true" in result.stderr
 
 
 def test_settings_use_playbook_local_defaults() -> None:

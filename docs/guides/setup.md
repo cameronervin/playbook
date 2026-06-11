@@ -137,6 +137,10 @@ Each URL seeds a throwaway local user, sets the normal Playbook HttpOnly session
 cookie, and redirects to `/chat`, `/profile`, or `/admin` on the frontend. See
 [Dev Auth](dev_auth.md) for the concise reference.
 
+Backend pytest runs do not load `backend/.env`. The test harness injects a
+deterministic `Settings(_env_file=None, ...)` object with dev auth disabled, so
+local no-SSO settings can remain in `.env` without changing test behavior.
+
 The KB service signs status callbacks to
 `http://localhost:8000/api/v1/kb/webhook` with `X-KB-Signature:
 sha256=<hmac>`, where the HMAC secret is `KB_WEBHOOK_SECRET`.
