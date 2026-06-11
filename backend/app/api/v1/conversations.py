@@ -5,9 +5,15 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Header, Query, status
+from fastapi.responses import StreamingResponse
 
-from app.api.v1.dependencies import AthleteUserDep, ConversationServiceDep
+from app.api.v1.dependencies import (
+    AgentStreamServiceDep,
+    AthleteUserDep,
+    ConversationServiceDep,
+)
+from app.core.exceptions import ValidationError
 from app.schemas.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
@@ -15,6 +21,7 @@ from app.schemas.conversations import (
     MessageSubmitRequest,
     MessageSubmitResponse,
 )
+from app.services.agent_stream_service import AgentStreamService, format_sse_record
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -80,3 +87,64 @@ async def submit_message(
         conversation_id=conversation_id,
         request=request,
     )
+
+
+@router.get(
+    "/{conversation_id}/messages/{message_id}/stream",
+    response_class=StreamingResponse,
+)
+async def stream_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    athlete: AthleteUserDep,
+    service: ConversationServiceDep,
+    stream_service: AgentStreamServiceDep,
+    task_id: Annotated[str, Query(min_length=1)],
+    after_id: Annotated[str, Query(pattern=r"^\d+-\d+$")] = "0-0",
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+) -> StreamingResponse:
+    """Stream assistant generation events for a validated task."""
+    await service.validate_message_stream(
+        athlete=athlete,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        task_id=task_id,
+    )
+    cursor = _stream_cursor(after_id=after_id, last_event_id=last_event_id)
+    return StreamingResponse(
+        _iter_sse_events(
+            stream_service=stream_service,
+            task_id=task_id,
+            after_id=cursor,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _iter_sse_events(
+    *,
+    stream_service: AgentStreamService,
+    task_id: str,
+    after_id: str,
+):
+    async for record in stream_service.iter_task_events(task_id, after_id=after_id):
+        yield format_sse_record(record)
+
+
+def _stream_cursor(*, after_id: str, last_event_id: str | None) -> str:
+    if last_event_id is None or last_event_id == "":
+        return after_id
+    if not _is_stream_id(last_event_id):
+        raise ValidationError("Invalid Last-Event-ID cursor")
+    return last_event_id
+
+
+def _is_stream_id(value: str) -> bool:
+    parts = value.split("-", maxsplit=1)
+    if len(parts) != 2:
+        return False
+    return all(part.isdigit() for part in parts)

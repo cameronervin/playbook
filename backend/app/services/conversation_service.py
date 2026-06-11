@@ -243,6 +243,32 @@ class ConversationService:
             status=assistant_message.status,
         )
 
+    async def validate_message_stream(
+        self,
+        *,
+        athlete: User,
+        conversation_id: UUID,
+        message_id: UUID,
+        task_id: str,
+    ) -> None:
+        """Validate that an athlete can subscribe to one assistant message stream."""
+        conversation = await self.conversation_repo.get_for_athlete(
+            conversation_id=conversation_id,
+            organization_id=athlete.organization_id,
+            athlete_id=athlete.id,
+        )
+        if conversation is None:
+            raise NotFoundError("Conversation", str(conversation_id))
+
+        message = await self.message_repo.get(message_id)
+        if (
+            message is None
+            or message.conversation_id != conversation.id
+            or message.role != "assistant"
+            or message.message_metadata.get("task_id") != task_id
+        ):
+            raise NotFoundError("Message stream", str(message_id))
+
     async def _validate_attached_files(
         self,
         *,

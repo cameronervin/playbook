@@ -56,11 +56,9 @@ with [docs/api/endpoints.md](../../docs/api/endpoints.md):
 | KB documents | `GET /admin/kb/documents`, `POST /admin/kb/documents`, `GET /admin/kb/documents/{document_id}`, `PATCH /admin/kb/documents/{document_id}/metadata`, `POST /admin/kb/documents/{document_id}/retry`, `DELETE /admin/kb/documents/{document_id}`, `POST /kb/webhook` |
 | Health | `GET /health` |
 
-Remaining planned API surface: athlete chat message submit that enqueues a
-Celery agent task and returns `task_id`, athlete response stream bridged from
-Valkey Streams/pub-sub for that `task_id`, conversation file upload, analytics
-summary/query review, dashboard insight runs polled by `run_id`, and admin chat
-message submit/response stream bridged from Valkey Streams/pub-sub by `task_id`.
+Remaining planned API surface: conversation file upload, analytics summary/query
+review, dashboard insight runs polled by `run_id`, and admin chat message
+submit/response stream bridged from Valkey Streams/pub-sub by `task_id`.
 
 ## How Phase Files Work
 

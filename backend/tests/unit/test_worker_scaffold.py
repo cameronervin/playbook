@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from app.core.config import Settings, get_settings
+from app.infrastructure.streaming import AgentStreamEventType, InMemoryAgentStreamProvider
 from app.workers.app import backend_worker, create_worker_app
+from app.workers import tasks as worker_tasks
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import (
     BACKEND_AGENT_QUEUE,
@@ -142,7 +145,28 @@ def test_athlete_chat_dispatcher_uses_explicit_task_id(monkeypatch) -> None:
     assert WorkerTaskName.RUN_ATHLETE_CHAT.value == run_athlete_chat_task.name
 
 
-def test_athlete_chat_task_stub_returns_scaffold_payload_in_eager_mode() -> None:
+def test_athlete_chat_task_stub_publishes_not_implemented_error_in_eager_mode(
+    monkeypatch,
+) -> None:
+    provider = InMemoryAgentStreamProvider()
+    marked_failed: dict[str, str] = {}
+
+    async def fake_mark_failed(*, assistant_message_id: str, task_id: str) -> None:
+        marked_failed["assistant_message_id"] = assistant_message_id
+        marked_failed["task_id"] = task_id
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "get_agent_stream_provider",
+        lambda: provider,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        worker_tasks,
+        "_mark_athlete_chat_scaffold_failed",
+        fake_mark_failed,
+        raising=False,
+    )
     previous_always_eager = backend_worker.conf.task_always_eager
     previous_eager_propagates = backend_worker.conf.task_eager_propagates
     backend_worker.conf.task_always_eager = True
@@ -160,7 +184,26 @@ def test_athlete_chat_task_stub_returns_scaffold_payload_in_eager_mode() -> None
         backend_worker.conf.task_always_eager = previous_always_eager
         backend_worker.conf.task_eager_propagates = previous_eager_propagates
 
-    assert result.get(timeout=1)["status"] == "scaffolded"
+    payload = result.get(timeout=1)
+    assert payload["status"] == "failed"
+    assert payload["code"] == "agent_not_implemented"
+    assert marked_failed == {
+        "assistant_message_id": "00000000-0000-0000-0000-000000000004",
+        "task_id": payload["task_id"],
+    }
+    async def collect_records():
+        return [
+            record
+            async for record in provider.iter_events(payload["task_id"], after_id="0-0")
+        ]
+
+    records = asyncio.run(collect_records())
+    assert [record.event.event_type for record in records] == [
+        AgentStreamEventType.PROGRESS,
+        AgentStreamEventType.ERROR,
+    ]
+    assert records[0].event.data["status"] == "scaffold_started"
+    assert records[1].event.data["code"] == "agent_not_implemented"
 
 
 def test_future_task_stubs_raise_not_implemented_in_eager_mode() -> None:

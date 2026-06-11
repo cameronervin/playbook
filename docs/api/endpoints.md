@@ -49,6 +49,7 @@ Example error response:
 | POST | `/conversations` | Create a current-athlete conversation from the initial message |
 | GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations/files |
 | POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message, enqueue the Celery agent task, and return `202` with `task_id` stream metadata |
+| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream validated assistant response events as SSE from the Valkey stream for `task_id` |
 | GET | `/admin/kb/documents` | List KB documents and status |
 | POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
 | GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
@@ -83,7 +84,6 @@ For a repeatable local Swagger and curl validation pass, see
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks from the Valkey stream/channel for the returned `task_id` |
 | POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 
 ### Admin Analytics and Governance

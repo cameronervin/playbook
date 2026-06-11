@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -13,6 +13,19 @@ from app.infrastructure.streaming import (
     InMemoryAgentStreamProvider,
     ValkeyAgentStreamProvider,
 )
+
+
+class _FakePubSub:
+    def __init__(self) -> None:
+        self.subscribe = AsyncMock()
+        self.unsubscribe = AsyncMock()
+        self.get_message = AsyncMock(return_value=None)
+
+    async def __aenter__(self) -> "_FakePubSub":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
 
 
 def test_agent_stream_event_serializes_round_trip() -> None:
@@ -128,6 +141,7 @@ async def test_valkey_provider_publishes_to_task_stream_and_notification_channel
 @pytest.mark.asyncio
 async def test_valkey_provider_reads_stream_records_from_xread() -> None:
     redis_client = AsyncMock()
+    redis_client.pubsub = Mock(return_value=_FakePubSub())
     redis_client.xread.return_value = [
         (
             "agent-stream:task-123:events",
@@ -160,4 +174,103 @@ async def test_valkey_provider_reads_stream_records_from_xread() -> None:
         streams={"agent-stream:task-123:events": "0-0"},
         count=100,
         block=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_valkey_provider_continues_reading_until_terminal_event() -> None:
+    redis_client = AsyncMock()
+    pubsub = _FakePubSub()
+    redis_client.pubsub = Mock(return_value=pubsub)
+    redis_client.xread.side_effect = [
+        [
+            (
+                "agent-stream:task-123:events",
+                [
+                    (
+                        "1749560000000-0",
+                        {
+                            "task_id": "task-123",
+                            "event_type": "progress",
+                            "data": '{"status":"retrieving"}',
+                            "created_at": "2026-06-10T12:30:00+00:00",
+                        },
+                    )
+                ],
+            )
+        ],
+        [
+            (
+                "agent-stream:task-123:events",
+                [
+                    (
+                        "1749560000001-0",
+                        {
+                            "task_id": "task-123",
+                            "event_type": "complete",
+                            "data": "{}",
+                            "created_at": "2026-06-10T12:30:01+00:00",
+                        },
+                    )
+                ],
+            )
+        ],
+    ]
+    provider = ValkeyAgentStreamProvider(
+        redis_url="redis://localhost:6379/2",
+        redis_client=redis_client,
+        block_ms=1,
+    )
+
+    records = [
+        record async for record in provider.iter_events("task-123", after_id="0-0")
+    ]
+
+    assert [record.stream_id for record in records] == [
+        "1749560000000-0",
+        "1749560000001-0",
+    ]
+    assert redis_client.xread.await_count == 2
+    pubsub.subscribe.assert_awaited_once_with("agent-stream:task-123:notify")
+    pubsub.unsubscribe.assert_awaited_once_with("agent-stream:task-123:notify")
+
+
+@pytest.mark.asyncio
+async def test_valkey_provider_waits_for_notification_when_no_records() -> None:
+    redis_client = AsyncMock()
+    pubsub = _FakePubSub()
+    redis_client.pubsub = Mock(return_value=pubsub)
+    redis_client.xread.side_effect = [
+        [],
+        [
+            (
+                "agent-stream:task-123:events",
+                [
+                    (
+                        "1749560000001-0",
+                        {
+                            "task_id": "task-123",
+                            "event_type": "error",
+                            "data": '{"message":"failed"}',
+                            "created_at": "2026-06-10T12:30:01+00:00",
+                        },
+                    )
+                ],
+            )
+        ],
+    ]
+    provider = ValkeyAgentStreamProvider(
+        redis_url="redis://localhost:6379/2",
+        redis_client=redis_client,
+        block_ms=1,
+    )
+
+    records = [
+        record async for record in provider.iter_events("task-123", after_id="0-0")
+    ]
+
+    assert records[0].event.event_type == AgentStreamEventType.ERROR
+    pubsub.get_message.assert_awaited_once_with(
+        ignore_subscribe_messages=True,
+        timeout=0.001,
     )

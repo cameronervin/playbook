@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.infrastructure.streaming.events import (
     AgentStreamEvent,
@@ -62,8 +62,35 @@ class AsyncRedisClient(Protocol):
     async def publish(self, channel: str, message: str) -> int:
         """Publish a notification to a Redis channel."""
 
+    def pubsub(self) -> "AsyncRedisPubSub":
+        """Create a pub/sub connection context manager."""
+
     async def aclose(self) -> None:
         """Close the Redis client."""
+
+
+class AsyncRedisPubSub(Protocol):
+    """Subset of redis.asyncio PubSub used for stream wake-ups."""
+
+    async def __aenter__(self) -> "AsyncRedisPubSub":
+        """Enter the pub/sub context manager."""
+
+    async def __aexit__(self, *args: Any) -> None:
+        """Exit the pub/sub context manager."""
+
+    async def subscribe(self, *channels: str) -> None:
+        """Subscribe to one or more channels."""
+
+    async def unsubscribe(self, *channels: str) -> None:
+        """Unsubscribe from one or more channels."""
+
+    async def get_message(
+        self,
+        *,
+        ignore_subscribe_messages: bool,
+        timeout: float | None,
+    ) -> Any:
+        """Wait for one pub/sub message."""
 
 
 class InMemoryAgentStreamProvider(BaseAgentStreamProvider):
@@ -136,27 +163,37 @@ class ValkeyAgentStreamProvider(BaseAgentStreamProvider):
         *,
         after_id: str = "0-0",
     ) -> AsyncIterator[AgentStreamRecord]:
-        """Read task stream records after *after_id*.
-
-        This scaffold performs one blocking XREAD call and returns when no new
-        records are available or a terminal event is observed. Future SSE
-        endpoints can call this repeatedly or layer pub/sub wake-ups on top.
-        """
+        """Read task stream records after *after_id* until a terminal event."""
         client = self._get_client()
         last_id = after_id
-        response = await client.xread(
-            streams={self.stream_key(task_id): last_id},
-            count=self.read_count,
-            block=self.block_ms,
-        )
-        for _stream_name, entries in response:
-            for raw_stream_id, fields in entries:
-                stream_id = _decode_stream_id(raw_stream_id)
-                event = AgentStreamEvent.from_stream_fields(fields)
-                yield AgentStreamRecord(stream_id=stream_id, event=event)
-                last_id = stream_id
-                if event.is_terminal:
-                    return
+        channel_name = self.channel_name(task_id)
+        async with client.pubsub() as pubsub:
+            await pubsub.subscribe(channel_name)
+            try:
+                while True:
+                    saw_records = False
+                    response = await client.xread(
+                        streams={self.stream_key(task_id): last_id},
+                        count=self.read_count,
+                        block=self.block_ms,
+                    )
+                    for _stream_name, entries in response:
+                        for raw_stream_id, fields in entries:
+                            saw_records = True
+                            stream_id = _decode_stream_id(raw_stream_id)
+                            event = AgentStreamEvent.from_stream_fields(fields)
+                            yield AgentStreamRecord(stream_id=stream_id, event=event)
+                            last_id = stream_id
+                            if event.is_terminal:
+                                return
+
+                    if not saw_records:
+                        await pubsub.get_message(
+                            ignore_subscribe_messages=True,
+                            timeout=self.block_ms / 1000,
+                        )
+            finally:
+                await pubsub.unsubscribe(channel_name)
 
     def stream_key(self, task_id: str) -> str:
         """Return the Valkey stream key for a task."""

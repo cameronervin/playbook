@@ -7,6 +7,8 @@ from uuid import UUID
 
 import pytest
 
+from app.api.v1.dependencies import get_agent_stream_service
+from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.repositories.conversations import (
     ConversationFileChunkRepository,
     ConversationFileRepository,
@@ -15,6 +17,7 @@ from app.repositories.conversations import (
     MessageCitationRepository,
 )
 from app.repositories.identity import OrganizationRepository, UserRepository
+from app.services.agent_stream_service import AgentStreamService
 from app.workers import tasks as worker_tasks
 
 
@@ -378,6 +381,174 @@ async def test_submit_message_rejects_files_outside_conversation(
 
 
 @pytest.mark.asyncio
+async def test_stream_message_emits_seeded_sse_events(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-stream-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={"task_id": "task-stream-123"},
+    )
+    provider = InMemoryAgentStreamProvider()
+    stream_service = AgentStreamService(provider)
+    await stream_service.publish_progress("task-stream-123", status="retrieving")
+    await stream_service.publish_chunk("task-stream-123", content="Hello")
+    await stream_service.publish_complete(
+        "task-stream-123",
+        data={"assistant_message_id": str(assistant_message.id)},
+    )
+    route_client.app.dependency_overrides[get_agent_stream_service] = (
+        lambda: AgentStreamService(provider)
+    )
+    route_client.authenticate_as(athlete)
+
+    response = await route_client.client.get(
+        f"/api/v1/conversations/{conversation.id}/messages/"
+        f"{assistant_message.id}/stream?task_id=task-stream-123"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
+    assert "id: 1-0\nevent: progress\n" in response.text
+    assert "id: 2-0\nevent: chunk\n" in response.text
+    assert '"content":"Hello"' in response.text
+    assert "id: 3-0\nevent: complete\n" in response.text
+
+
+@pytest.mark.asyncio
+async def test_stream_message_resumes_from_after_id_and_last_event_id(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-stream-resume-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={"task_id": "task-stream-resume"},
+    )
+    provider = InMemoryAgentStreamProvider()
+    stream_service = AgentStreamService(provider)
+    await stream_service.publish_chunk("task-stream-resume", content="first")
+    await stream_service.publish_chunk("task-stream-resume", content="second")
+    await stream_service.publish_complete("task-stream-resume")
+    route_client.app.dependency_overrides[get_agent_stream_service] = (
+        lambda: AgentStreamService(provider)
+    )
+    route_client.authenticate_as(athlete)
+
+    response = await route_client.client.get(
+        f"/api/v1/conversations/{conversation.id}/messages/"
+        f"{assistant_message.id}/stream?task_id=task-stream-resume&after_id=0-0",
+        headers={"Last-Event-ID": "1-0"},
+    )
+
+    assert response.status_code == 200
+    assert "id: 1-0" not in response.text
+    assert "id: 2-0\nevent: chunk\n" in response.text
+    assert '"content":"second"' in response.text
+    assert "id: 3-0\nevent: complete\n" in response.text
+
+
+@pytest.mark.asyncio
+async def test_stream_message_validates_athlete_message_and_task_binding(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    owner = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="owner@example.com",
+        name="Owner Athlete",
+        auth_provider="google",
+        provider_subject="athlete-stream-owner",
+    )
+    other = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="other@example.com",
+        name="Other Athlete",
+        auth_provider="google",
+        provider_subject="athlete-stream-other",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=owner.id,
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={"task_id": "task-owner"},
+    )
+    route_client.app.dependency_overrides[get_agent_stream_service] = (
+        lambda: AgentStreamService(InMemoryAgentStreamProvider())
+    )
+
+    route_client.authenticate_as(owner)
+    wrong_task_response = await route_client.client.get(
+        f"/api/v1/conversations/{conversation.id}/messages/"
+        f"{assistant_message.id}/stream?task_id=wrong-task",
+        headers={"X-Request-ID": "req-wrong-task"},
+    )
+    route_client.authenticate_as(other)
+    wrong_athlete_response = await route_client.client.get(
+        f"/api/v1/conversations/{conversation.id}/messages/"
+        f"{assistant_message.id}/stream?task_id=task-owner",
+        headers={"X-Request-ID": "req-wrong-athlete"},
+    )
+
+    assert wrong_task_response.status_code == 404
+    assert wrong_task_response.json()["error"]["code"] == "NOT_FOUND"
+    assert wrong_task_response.json()["error"]["details"]["request_id"] == (
+        "req-wrong-task"
+    )
+    assert wrong_athlete_response.status_code == 404
+    assert wrong_athlete_response.json()["error"]["code"] == "NOT_FOUND"
+    assert wrong_athlete_response.json()["error"]["details"]["request_id"] == (
+        "req-wrong-athlete"
+    )
+
+
+@pytest.mark.asyncio
 async def test_conversation_create_openapi_uses_initial_message(route_client) -> None:
     response = await route_client.client.get("/openapi.json")
 
@@ -399,6 +570,10 @@ async def test_conversation_create_openapi_uses_initial_message(route_client) ->
     assert "task_id" in submit_response_schema["properties"]
     assert "stream_url" in submit_response_schema["properties"]
     assert "files" in detail_schema["properties"]
+    assert (
+        "/api/v1/conversations/{conversation_id}/messages/{message_id}/stream"
+        in response.json()["paths"]
+    )
 
 
 @pytest.mark.asyncio

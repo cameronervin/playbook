@@ -8,11 +8,16 @@ future-facing tasks fail loudly so accidental production dispatch is visible.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 import structlog
 
-from app.workers.app import backend_worker
+from app.infrastructure.streaming import get_agent_stream_provider
+from app.repositories.conversations import ConversationMessageRepository
+from app.services.agent_stream_service import AgentStreamService
+from app.workers.app import backend_worker, run_async
 from app.workers.queues import WorkerTaskName
+from app.workers.session import worker_db_session
 
 logger = structlog.get_logger(__name__)
 TASK_MAX_RETRIES = backend_worker.conf.playbook_task_max_retries
@@ -43,24 +48,107 @@ def run_athlete_chat_task(
     attached_file_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Phase 2 submit-only athlete chat entrypoint scaffold."""
+    task_id = str(self.request.id)
     logger.info(
         "backend_worker_athlete_chat_scaffold_invoked",
-        task_id=self.request.id,
+        task_id=task_id,
         conversation_id=conversation_id,
         user_message_id=user_message_id,
         assistant_message_id=assistant_message_id,
         organization_id=organization_id,
         attached_file_count=len(attached_file_ids or []),
     )
+    return run_async(
+        _run_athlete_chat_scaffold(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            organization_id=organization_id,
+            attached_file_ids=attached_file_ids or [],
+        )
+    )
+
+
+async def _run_athlete_chat_scaffold(
+    *,
+    task_id: str,
+    conversation_id: str,
+    user_message_id: str,
+    assistant_message_id: str,
+    organization_id: str,
+    attached_file_ids: list[str],
+) -> dict[str, Any]:
+    stream_service = AgentStreamService(get_agent_stream_provider())
+    await stream_service.publish_progress(
+        task_id,
+        status="scaffold_started",
+        metadata={
+            "conversation_id": conversation_id,
+            "assistant_message_id": assistant_message_id,
+        },
+    )
+    try:
+        await _mark_athlete_chat_scaffold_failed(
+            assistant_message_id=assistant_message_id,
+            task_id=task_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "athlete_chat_scaffold_status_update_failed",
+            task_id=task_id,
+            assistant_message_id=assistant_message_id,
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
+
+    await stream_service.publish_error(
+        task_id,
+        message="Athlete chat agent is not implemented yet.",
+        code="agent_not_implemented",
+        metadata={
+            "conversation_id": conversation_id,
+            "assistant_message_id": assistant_message_id,
+        },
+    )
     return {
-        "status": "scaffolded",
-        "task_id": self.request.id,
+        "status": "failed",
+        "code": "agent_not_implemented",
+        "task_id": task_id,
         "conversation_id": conversation_id,
         "user_message_id": user_message_id,
         "assistant_message_id": assistant_message_id,
         "organization_id": organization_id,
-        "attached_file_count": len(attached_file_ids or []),
+        "attached_file_count": len(attached_file_ids),
     }
+
+
+async def _mark_athlete_chat_scaffold_failed(
+    *,
+    assistant_message_id: str,
+    task_id: str,
+) -> None:
+    async with worker_db_session() as session:
+        message_repo = ConversationMessageRepository(session)
+        message = await message_repo.get(UUID(assistant_message_id))
+        if message is None:
+            logger.warning(
+                "athlete_chat_scaffold_message_not_found",
+                task_id=task_id,
+                assistant_message_id=assistant_message_id,
+            )
+            return
+
+        await message_repo.update_status_and_content(
+            message,
+            status="failed",
+            metadata={
+                **message.message_metadata,
+                "task_id": task_id,
+                "scaffold_error": "agent_not_implemented",
+            },
+        )
+        await session.commit()
 
 
 @backend_worker.task(
