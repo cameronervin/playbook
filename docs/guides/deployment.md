@@ -107,9 +107,10 @@ LiteLLM's database is optional for a minimal proxy, but it is required for the
 features Playbook wants in scope: virtual keys, spend tracking, budgets, and the
 admin UI. That means the production deployment should include a LiteLLM DB
 connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
-Provider API keys such as `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` should be
-available only to the LiteLLM proxy service. The backend and KB-service should
-hold only LiteLLM virtual/service keys.
+Provider API keys such as `OPENAI_API_KEY` should be available only to the
+LiteLLM proxy service. Add other provider keys only when aliases use those
+providers. The backend and KB-service should hold only LiteLLM virtual/service
+keys.
 
 The project-owned LiteLLM image is defined in
 `deploy/docker/Dockerfile.litellm` and uses `deploy/litellm/config.yaml` for

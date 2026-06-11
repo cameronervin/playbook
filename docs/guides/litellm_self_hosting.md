@@ -14,16 +14,22 @@ embeddings, and eval traffic do not hold direct provider API keys.
 
 Configured aliases:
 
-- `playbook-chat` for backend chat and eval judge calls.
-- `playbook-fast` for cheaper/faster future chat tasks.
-- `playbook-embed` for KB-service embeddings.
+- `playbook-chat` for backend chat and eval judge calls. Local defaults route
+  to `openai/gpt-5.4`.
+- `playbook-fast` for cheaper/faster future chat tasks. Local defaults route
+  to `openai/gpt-5.4-mini`.
+- `playbook-embed` for KB-service embeddings. Local defaults route to
+  `openai/text-embedding-3-small`.
 
-Provider API keys belong only in the LiteLLM env/secrets:
+Provider API keys belong only in the LiteLLM env/secrets. For the local OpenAI
+defaults, set:
 
 ```env
-ANTHROPIC_API_KEY=...
 OPENAI_API_KEY=...
 ```
+
+Add other provider keys, such as `ANTHROPIC_API_KEY`, only if you intentionally
+configure aliases for those providers.
 
 Backend and KB-service should only receive scoped LiteLLM virtual keys.
 

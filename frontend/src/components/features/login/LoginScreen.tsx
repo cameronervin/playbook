@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Code2 } from 'lucide-react'
 import { AuthCard } from '@/src/components/features/auth/AuthLayout'
 import { BrandLockup, GoogleLogo, MicrosoftLogo } from '@/src/components/ui'
 import { useAuthProviders, useStartOAuthLogin } from '@/src/hooks/useAuth'
@@ -10,11 +11,13 @@ interface LoginScreenProps {
   navigateAuthorizationUrl?: (url: string) => void
 }
 
-const PROVIDER_ORDER = ['microsoft', 'google'] as const
+const PROVIDER_ORDER = ['microsoft', 'google', 'dev'] as const
+const PROVIDER_SKELETON_ORDER = ['microsoft', 'google'] as const
 
 const providerLogo = {
   microsoft: <MicrosoftLogo />,
   google: <GoogleLogo />,
+  dev: <Code2 aria-hidden="true" className="h-5 w-5 text-fg-2" strokeWidth={1.8} />,
 } as const
 
 function AuthProviderSkeleton() {
@@ -69,7 +72,8 @@ export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
         LOG IN TO CONTINUE
       </h1>
       <div className="mt-8 grid w-full gap-3">
-        {showProviderSkeletons && PROVIDER_ORDER.map((provider) => <AuthProviderSkeleton key={provider} />)}
+        {showProviderSkeletons &&
+          PROVIDER_SKELETON_ORDER.map((provider) => <AuthProviderSkeleton key={provider} />)}
         {showProviderError && <p className="text-sm text-danger">SSO providers are not available right now.</p>}
         {providers.map((provider) => (
           <button

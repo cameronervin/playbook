@@ -145,6 +145,11 @@ export function ChatMainSkeleton() {
                 Ask PlaybookAI
               </h1>
             </div>
+            <p className="m-0 text-balance text-sm leading-6 text-fg-3">
+              Get answers to your athletics questions,
+              <br />
+              PlaybookAI is your coach off the field.
+            </p>
           </div>
         </div>
         <div className="flex shrink-0 justify-center bg-bg-base px-7 pb-[22px] pt-3.5">

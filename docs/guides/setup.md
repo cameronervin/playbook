@@ -32,10 +32,10 @@ cp deploy/envs/.env.litellm.local.example deploy/envs/.env.litellm.local
 ```
 
 Edit `deploy/envs/.env.litellm.local` before making real model calls. Provider
-API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) belong in that LiteLLM-only env
-file, not in backend or KB-service env files. For first local boot, the backend
-and KB-service examples use `sk-local-litellm-master-key` as their LiteLLM
-service key; after LiteLLM starts, generate a scoped key from
+API keys, such as `OPENAI_API_KEY`, belong in that LiteLLM-only env file, not in
+backend or KB-service env files. For first local boot, the backend and
+KB-service examples use `sk-local-litellm-master-key` as their LiteLLM service
+key; after LiteLLM starts, generate a scoped key from
 `http://localhost:4000/ui` and replace `LITELLM_API_KEY` /
 `LLM_GATEWAY_API_KEY`.
 
@@ -123,19 +123,22 @@ Browser OAuth callbacks set the Playbook session cookie and redirect to
 `text/html` still receive the JSON `SessionResponse`.
 
 For local UI validation without Google/Microsoft OAuth, set
-`DEV_AUTH_ENABLED=true` while `ENVIRONMENT=local` and `DEBUG=true`, then open one
-of these backend URLs in the same browser you use for the frontend:
+`DEV_AUTH_ENABLED=true` while `ENVIRONMENT=local` and `DEBUG=true`, then use the
+Developer SSO provider on the login screen or open one of these backend URLs in
+the same browser you use for the frontend:
 
 ```text
-http://localhost:8000/api/v1/dev/session/athlete
-http://localhost:8000/api/v1/dev/session/new_athlete
-http://localhost:8000/api/v1/dev/session/admin
-http://localhost:8000/api/v1/dev/session/super_admin
+http://localhost:8000/api/v1/auth/dev/login
+http://localhost:8000/api/v1/auth/dev/login?persona=athlete
+http://localhost:8000/api/v1/auth/dev/login?persona=new_athlete
+http://localhost:8000/api/v1/auth/dev/login?persona=admin
+http://localhost:8000/api/v1/auth/dev/login?persona=super_admin
 ```
 
-Each URL seeds a throwaway local user, sets the normal Playbook HttpOnly session
-cookie, and redirects to `/chat`, `/profile`, or `/admin` on the frontend. See
-[Dev Auth](dev_auth.md) for the concise reference.
+Each URL starts the normal OAuth login/callback path, seeds a throwaway local
+user, sets the normal Playbook HttpOnly session cookie, and redirects to
+`/chat`, `/profile`, or `/admin` on the frontend. See [Dev Auth](dev_auth.md)
+for the concise reference.
 
 Backend pytest runs do not load `backend/.env`. The test harness injects a
 deterministic `Settings(_env_file=None, ...)` object with dev auth disabled, so

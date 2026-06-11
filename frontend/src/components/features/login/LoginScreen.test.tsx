@@ -78,6 +78,27 @@ describe('LoginScreen', () => {
     expect(navigateAuthorizationUrl).toHaveBeenCalledWith('https://oauth.example/microsoft')
   })
 
+  it('renders Developer SSO last when the local provider is returned', async () => {
+    authMocks.providers = [
+      { provider: 'google', label: 'Google', enabled: true, login_url: '/api/v1/auth/google/login' },
+      { provider: 'dev', label: 'Developer SSO', enabled: true, login_url: '/api/v1/auth/dev/login' },
+      { provider: 'microsoft', label: 'Microsoft', enabled: true, login_url: '/api/v1/auth/microsoft/login' },
+    ]
+    const navigateAuthorizationUrl = renderLogin()
+    const buttons = screen.getAllByRole('button')
+
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'Continue with Microsoft',
+      'Continue with Google',
+      'Continue with Developer SSO',
+    ])
+
+    await userEvent.click(screen.getByRole('button', { name: /continue with developer sso/i }))
+
+    expect(authMocks.mutateAsync).toHaveBeenCalledWith('dev')
+    expect(navigateAuthorizationUrl).toHaveBeenCalledWith('https://oauth.example/dev')
+  })
+
   it('does not start OAuth when a provider is disabled', async () => {
     authMocks.providers = [
       { provider: 'google', label: 'Google', enabled: true, login_url: '/api/v1/auth/google/login' },

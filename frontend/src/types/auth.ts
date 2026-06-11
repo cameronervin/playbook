@@ -13,7 +13,7 @@ export interface CurrentUser {
 }
 
 export interface AuthProvider {
-  provider: 'google' | 'microsoft'
+  provider: 'google' | 'microsoft' | 'dev'
   label: string
   enabled: boolean
   login_url: string

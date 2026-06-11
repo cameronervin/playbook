@@ -13,6 +13,7 @@ from structlog.testing import capture_logs
 
 from app.api.v1.dependencies import get_auth_service
 from app.core.config import Settings
+from app.infrastructure.auth import OAuthIdentity
 from app.models.identity import OAuthAccount, User
 from app.repositories.identity import OrganizationRepository, UserRepository
 from app.services.auth_service import AuthService
@@ -22,8 +23,8 @@ DEFAULT_ACCESS_COOKIE_NAME = "access_token"
 TOKEN_EXPIRY = 999999
 
 
-class FakeOAuthClient:
-    """Tiny OAuth client fake matching the httpx-oauth methods we use."""
+class FakeOAuthProviderClient:
+    """Tiny provider adapter fake matching the infrastructure auth protocol."""
 
     def __init__(self, provider: str) -> None:
         self.provider = provider
@@ -47,39 +48,67 @@ class FakeOAuthClient:
     def email(self) -> str:
         return f"{self.provider}@example.com"
 
-    async def get_authorization_url(self, redirect_uri: str, *, state: str) -> str:
+    async def get_authorization_url(
+        self,
+        redirect_uri: str,
+        *,
+        state: str,
+        persona: str | None = None,
+    ) -> str:
+        assert persona is None
         self.last_redirect_uri = redirect_uri
         self.last_state = state
         query = urlencode({"redirect_uri": redirect_uri, "state": state})
         return f"https://oauth.example/{self.provider}/authorize?{query}"
 
-    async def get_access_token(self, code: str, redirect_uri: str) -> dict[str, object]:
+    async def exchange_callback(
+        self,
+        *,
+        code: str,
+        redirect_uri: str,
+    ) -> OAuthIdentity:
         self.last_redirect_uri = redirect_uri
-        return {
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token,
-            "expires_at": TOKEN_EXPIRY,
-        }
-
-    async def get_id_email(self, access_token: str) -> tuple[str, str]:
         if self.fail_identity_lookup:
             raise OAuth2Error(
                 "provider identity failed "
                 f"{self.access_token} {self.refresh_token}"
             )
-        return self.subject, self.email
+        return OAuthIdentity(
+            provider=self.provider,
+            subject=self.subject,
+            email=self.email,
+            access_token=self.access_token,
+            refresh_token=self.refresh_token,
+            expires_at=TOKEN_EXPIRY,
+        )
 
 
-class FakeOAuthClientFactory:
-    """Provider client factory that keeps fakes stable across requests."""
+class FakeProviderRegistry:
+    """Provider registry fake that returns protocol-level provider clients."""
 
     def __init__(self) -> None:
         self.clients = {
-            "google": FakeOAuthClient("google"),
-            "microsoft": FakeOAuthClient("microsoft"),
+            "google": FakeOAuthProviderClient("google"),
+            "microsoft": FakeOAuthProviderClient("microsoft"),
         }
 
-    def get_client(self, provider: str, _settings: Settings) -> FakeOAuthClient:
+    def list_providers(self):
+        return [
+            {
+                "provider": "google",
+                "label": "Google",
+                "enabled": True,
+                "login_url": "/api/v1/auth/google/login",
+            },
+            {
+                "provider": "microsoft",
+                "label": "Microsoft",
+                "enabled": True,
+                "login_url": "/api/v1/auth/microsoft/login",
+            },
+        ]
+
+    def get_client(self, provider: str):
         return self.clients[provider]
 
 
@@ -94,12 +123,17 @@ def _configure_oauth_settings(
     monkeypatch.setattr(settings, "MICROSOFT_OAUTH_CLIENT_SECRET", "microsoft-secret")
 
 
-def _override_auth_service(route_client, db_session, fake_factory, settings: Settings) -> None:
+def _override_auth_service_with_registry(
+    route_client,
+    db_session,
+    provider_registry,
+    settings: Settings,
+) -> None:
     def override_auth_service() -> AuthService:
         return AuthService(
             db_session,
             settings=settings,
-            client_factory=fake_factory,
+            provider_registry=provider_registry,
         )
 
     route_client.app.dependency_overrides[get_auth_service] = override_auth_service
@@ -142,6 +176,35 @@ async def test_auth_provider_listing_uses_configured_providers(
 
 
 @pytest.mark.asyncio
+async def test_auth_provider_listing_includes_dev_provider_only_when_available(
+    route_client,
+    monkeypatch,
+    test_settings,
+) -> None:
+    _configure_oauth_settings(monkeypatch, test_settings)
+
+    disabled_response = await route_client.client.get("/api/v1/auth/providers")
+
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", True)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+    enabled_response = await route_client.client.get("/api/v1/auth/providers")
+
+    assert disabled_response.status_code == 200
+    assert [provider["provider"] for provider in disabled_response.json()["providers"]] == [
+        "google",
+        "microsoft",
+    ]
+    assert enabled_response.status_code == 200
+    assert enabled_response.json()["providers"][-1] == {
+        "provider": "dev",
+        "label": "Developer SSO",
+        "enabled": True,
+        "login_url": "/api/v1/auth/dev/login",
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("provider", ["google", "microsoft"])
 async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     route_client,
@@ -152,11 +215,16 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
 ) -> None:
     _configure_oauth_settings(monkeypatch, test_settings)
     monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
-    fake_factory = FakeOAuthClientFactory()
-    _override_auth_service(route_client, db_session, fake_factory, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
 
     login_response = await route_client.client.get(f"/api/v1/auth/{provider}/login")
-    oauth_client = fake_factory.clients[provider]
+    oauth_client = provider_registry.clients[provider]
 
     assert login_response.status_code == 200
     assert login_response.json()["authorization_url"].startswith(
@@ -221,11 +289,16 @@ async def test_oauth_callback_redirects_browser_callers_after_setting_cookie(
     _configure_oauth_settings(monkeypatch, test_settings)
     monkeypatch.setattr(test_settings, "FRONTEND_URL", "http://localhost:3000")
     monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
-    fake_factory = FakeOAuthClientFactory()
-    _override_auth_service(route_client, db_session, fake_factory, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
 
     login_response = await route_client.client.get("/api/v1/auth/google/login")
-    google_client = fake_factory.clients["google"]
+    google_client = provider_registry.clients["google"]
     assert login_response.status_code == 200
     assert google_client.last_state is not None
 
@@ -253,12 +326,17 @@ async def test_oauth_callback_failure_does_not_persist_or_log_provider_tokens(
 ) -> None:
     _configure_oauth_settings(monkeypatch, test_settings)
     monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
-    fake_factory = FakeOAuthClientFactory()
-    fake_factory.clients["google"].fail_identity_lookup = True
-    _override_auth_service(route_client, db_session, fake_factory, test_settings)
+    provider_registry = FakeProviderRegistry()
+    provider_registry.clients["google"].fail_identity_lookup = True
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
 
     login_response = await route_client.client.get("/api/v1/auth/google/login")
-    google_client = fake_factory.clients["google"]
+    google_client = provider_registry.clients["google"]
     assert login_response.status_code == 200
     assert google_client.last_state is not None
 
@@ -299,8 +377,13 @@ async def test_oauth_login_supports_google_and_microsoft(
     provider,
 ) -> None:
     _configure_oauth_settings(monkeypatch, test_settings)
-    fake_factory = FakeOAuthClientFactory()
-    _override_auth_service(route_client, db_session, fake_factory, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
 
     response = await route_client.client.get(f"/api/v1/auth/{provider}/login")
 
@@ -308,6 +391,112 @@ async def test_oauth_login_supports_google_and_microsoft(
     assert f"https://oauth.example/{provider}/authorize" in response.json()[
         "authorization_url"
     ]
+
+
+@pytest.mark.asyncio
+async def test_dev_oauth_login_and_callback_create_super_admin_session(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", True)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+    monkeypatch.setattr(test_settings, "FRONTEND_URL", "http://localhost:3000")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+
+    login_response = await route_client.client.get(
+        "/api/v1/auth/dev/login",
+        params={"persona": "super_admin"},
+    )
+
+    assert login_response.status_code == 200
+    authorization_url = login_response.json()["authorization_url"]
+    assert "/api/v1/auth/dev/callback" in authorization_url
+    assert "code=dev-super_admin" in authorization_url
+    assert "state=" in authorization_url
+
+    callback_response = await route_client.client.get(
+        authorization_url.replace("http://localhost:8000", ""),
+        headers={"Accept": "text/html"},
+        follow_redirects=False,
+    )
+    me_response = await route_client.client.get("/api/v1/users/me")
+
+    assert callback_response.status_code == 303
+    assert callback_response.headers["location"] == "http://localhost:3000/admin"
+    assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in callback_response.headers["set-cookie"]
+    assert me_response.status_code == 200
+    assert me_response.json()["role"] == "super_admin"
+    assert me_response.json()["email"] == "phase1-super@example.com"
+
+    user = await db_session.scalar(
+        select(User).where(User.email == "phase1-super@example.com")
+    )
+    assert user is not None
+    assert user.auth_provider == "dev"
+    assert user.provider_subject == "phase1-super_admin"
+    assert user.is_superuser is True
+
+
+@pytest.mark.asyncio
+async def test_dev_oauth_login_defaults_to_athlete_persona(
+    route_client,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", True)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+
+    login_response = await route_client.client.get("/api/v1/auth/dev/login")
+
+    assert login_response.status_code == 200
+    assert "code=dev-athlete" in login_response.json()["authorization_url"]
+
+
+@pytest.mark.asyncio
+async def test_dev_oauth_login_is_unavailable_when_dev_auth_is_disabled(
+    route_client,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "DEV_AUTH_ENABLED", False)
+    monkeypatch.setattr(test_settings, "ENVIRONMENT", "local")
+    monkeypatch.setattr(test_settings, "DEBUG", True)
+
+    response = await route_client.client.get("/api/v1/auth/dev/login")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_real_oauth_login_rejects_dev_persona_query(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    _configure_oauth_settings(monkeypatch, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
+
+    response = await route_client.client.get(
+        "/api/v1/auth/google/login",
+        params={"persona": "admin"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.asyncio

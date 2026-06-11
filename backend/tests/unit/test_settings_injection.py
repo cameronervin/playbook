@@ -36,7 +36,7 @@ def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, **values)
 
 
-def test_create_app_uses_supplied_settings_for_dev_auth_routes() -> None:
+def test_create_app_never_mounts_legacy_dev_session_route() -> None:
     disabled_app = create_app(app_settings=_settings(DEV_AUTH_ENABLED=False))
     enabled_app = create_app(
         app_settings=_settings(
@@ -50,7 +50,8 @@ def test_create_app_uses_supplied_settings_for_dev_auth_routes() -> None:
     enabled_paths = {route.path for route in enabled_app.routes}
 
     assert "/api/v1/dev/session/{persona}" not in disabled_paths
-    assert "/api/v1/dev/session/{persona}" in enabled_paths
+    assert "/api/v1/dev/session/{persona}" not in enabled_paths
+    assert "/api/v1/auth/{provider}/login" in enabled_paths
 
 
 @pytest.mark.asyncio

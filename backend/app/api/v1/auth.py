@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import RedirectResponse
 
 from app.api.v1.dependencies import AuthServiceDep, CurrentUserDep
+from app.auth.dev_personas import DevAuthPersona
 from app.schemas.users import (
     AuthProvidersResponse,
     LogoutResponse,
@@ -37,9 +38,15 @@ async def login(
     request: Request,
     response: Response,
     service: AuthServiceDep,
+    persona: DevAuthPersona | None = None,
 ) -> OAuthLoginResponse:
     """Return an OAuth authorization URL."""
-    return await service.login_url(provider=provider, request=request, response=response)
+    return await service.login_url(
+        provider=provider,
+        request=request,
+        response=response,
+        persona=persona,
+    )
 
 
 @router.get("/{provider}/callback", response_model=SessionResponse)

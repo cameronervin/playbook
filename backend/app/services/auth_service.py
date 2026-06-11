@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
 
 import jwt
 import structlog
@@ -14,8 +13,22 @@ from httpx_oauth.oauth2 import HTTPXOAuthError, OAuth2Error
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import is_profile_complete
+from app.auth.dev_personas import DevAuthPersona
+from app.auth.session import (
+    clear_oauth_state_cookie,
+    cookie_domain,
+    create_access_token,
+    set_access_token_cookie,
+)
 from app.core.config import Settings
 from app.core.exceptions import OAuthError, ValidationError
+from app.infrastructure.auth import (
+    OAuthIdentity,
+    OAuthProviderCallbackError,
+    OAuthProviderEmailMissingError,
+    OAuthProviderRegistry,
+    ProviderName,
+)
 from app.models.identity import User
 from app.repositories.identity import (
     OAuthAccountRepository,
@@ -32,20 +45,7 @@ from app.schemas.users import (
 
 logger = structlog.get_logger(__name__)
 
-ProviderName = Literal["google", "microsoft"]
 _STATE_COOKIE_MAX_AGE = 600
-
-
-def create_access_token(user: User, settings: Settings) -> str:
-    """Create the app JWT used by Playbook API dependencies."""
-    now = datetime.now(UTC)
-    payload = {
-        "sub": str(user.id),
-        "role": user.role,
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=settings.JWT_LIFETIME_SECONDS)).timestamp()),
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
 def user_to_response(user: User) -> UserResponse:
@@ -63,57 +63,6 @@ def user_to_response(user: User) -> UserResponse:
     )
 
 
-def _cookie_domain(settings: Settings) -> str | None:
-    return settings.COOKIE_DOMAIN or None
-
-
-def set_access_token_cookie(
-    response: Response,
-    token: str,
-    settings: Settings,
-) -> None:
-    """Attach the app access token as an HttpOnly cookie."""
-    response.set_cookie(
-        settings.ACCESS_TOKEN_COOKIE_NAME,
-        token,
-        max_age=settings.JWT_LIFETIME_SECONDS,
-        httponly=True,
-        secure=settings.ENVIRONMENT.lower() in {"prod", "production"},
-        samesite="lax",
-        domain=_cookie_domain(settings),
-    )
-
-
-def clear_oauth_state_cookie(response: Response, settings: Settings) -> None:
-    """Clear the OAuth CSRF state cookie."""
-    response.delete_cookie(
-        settings.OAUTH_STATE_COOKIE_NAME,
-        domain=_cookie_domain(settings),
-    )
-
-
-class OAuthClientFactory:
-    """Create OAuth clients lazily so optional provider setup stays cheap."""
-
-    def get_client(self, provider: ProviderName, settings: Settings):
-        if provider == "google":
-            from httpx_oauth.clients.google import GoogleOAuth2
-
-            return GoogleOAuth2(
-                settings.GOOGLE_OAUTH_CLIENT_ID,
-                settings.GOOGLE_OAUTH_CLIENT_SECRET,
-            )
-        if provider == "microsoft":
-            from httpx_oauth.clients.microsoft import MicrosoftGraphOAuth2
-
-            return MicrosoftGraphOAuth2(
-                settings.MICROSOFT_OAUTH_CLIENT_ID,
-                settings.MICROSOFT_OAUTH_CLIENT_SECRET,
-                tenant=settings.MICROSOFT_OAUTH_TENANT,
-            )
-        raise ValidationError("Unsupported OAuth provider")
-
-
 class AuthService:
     """Playbook OAuth and session orchestration."""
 
@@ -125,36 +74,25 @@ class AuthService:
         org_repo: OrganizationRepository | None = None,
         user_repo: UserRepository | None = None,
         oauth_repo: OAuthAccountRepository | None = None,
-        client_factory: OAuthClientFactory | None = None,
+        provider_registry: OAuthProviderRegistry | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.org_repo = org_repo or OrganizationRepository(session)
         self.user_repo = user_repo or UserRepository(session)
         self.oauth_repo = oauth_repo or OAuthAccountRepository(session)
-        self.client_factory = client_factory or OAuthClientFactory()
+        self.provider_registry = provider_registry or OAuthProviderRegistry(settings)
 
     def providers(self) -> AuthProvidersResponse:
         """Return enabled OAuth providers."""
         providers = [
             AuthProviderResponse(
-                provider="google",
-                label="Google",
-                enabled=bool(
-                    self.settings.GOOGLE_OAUTH_CLIENT_ID
-                    and self.settings.GOOGLE_OAUTH_CLIENT_SECRET
-                ),
-                login_url="/api/v1/auth/google/login",
-            ),
-            AuthProviderResponse(
-                provider="microsoft",
-                label="Microsoft",
-                enabled=bool(
-                    self.settings.MICROSOFT_OAUTH_CLIENT_ID
-                    and self.settings.MICROSOFT_OAUTH_CLIENT_SECRET
-                ),
-                login_url="/api/v1/auth/microsoft/login",
-            ),
+                provider=provider.provider,
+                label=provider.label,
+                enabled=provider.enabled,
+                login_url=provider.login_url,
+            )
+            for provider in self.provider_registry.list_providers()
         ]
         return AuthProvidersResponse(providers=providers)
 
@@ -164,9 +102,10 @@ class AuthService:
         provider: ProviderName,
         request: Request,
         response: Response,
+        persona: DevAuthPersona | None = None,
     ) -> OAuthLoginResponse:
         """Create an OAuth authorization URL and bind CSRF state in a cookie."""
-        self._assert_provider_enabled(provider)
+        self._validate_persona(provider=provider, persona=persona)
         csrf = secrets.token_urlsafe(32)
         now = datetime.now(UTC)
         state = jwt.encode(
@@ -186,12 +125,13 @@ class AuthService:
             httponly=True,
             secure=self.settings.ENVIRONMENT.lower() in {"prod", "production"},
             samesite="lax",
-            domain=_cookie_domain(self.settings),
+            domain=cookie_domain(self.settings),
         )
-        client = self.client_factory.get_client(provider, self.settings)
+        client = self.provider_registry.get_client(provider)
         authorization_url = await client.get_authorization_url(
             self._redirect_uri(provider, request),
             state=state,
+            persona=persona,
         )
         return OAuthLoginResponse(authorization_url=authorization_url)
 
@@ -205,33 +145,35 @@ class AuthService:
         response: Response,
     ) -> SessionResponse:
         """Handle OAuth callback, upsert user/account, and create a session."""
-        self._assert_provider_enabled(provider)
         self._validate_state(provider=provider, state=state, request=request)
-        client = self.client_factory.get_client(provider, self.settings)
+        client = self.provider_registry.get_client(provider)
         try:
-            token = await client.get_access_token(
-                code,
-                self._redirect_uri(provider, request),
+            identity = await client.exchange_callback(
+                code=code,
+                redirect_uri=self._redirect_uri(provider, request),
             )
-            account_id, account_email = await client.get_id_email(token["access_token"])
-        except (HTTPXOAuthError, OAuth2Error):
+        except (
+            OAuthProviderCallbackError,
+            HTTPXOAuthError,
+            OAuth2Error,
+        ):
             raise OAuthError(
                 "OAuth provider callback failed",
                 details={"provider": provider},
             ) from None
+        except OAuthProviderEmailMissingError:
+            raise OAuthError(
+                "OAuth provider did not return an email address",
+                details={"provider": provider},
+            ) from None
 
-        if not account_email:
+        if not identity.email:
             raise OAuthError(
                 "OAuth provider did not return an email address",
                 details={"provider": provider},
             )
 
-        user = await self._upsert_user_from_oauth(
-            provider=provider,
-            account_id=account_id,
-            account_email=account_email,
-            token=token,
-        )
+        user = await self._upsert_user_from_oauth(identity)
         await self.session.commit()
         access_token = create_access_token(user, self.settings)
         set_access_token_cookie(response, access_token, self.settings)
@@ -245,7 +187,7 @@ class AuthService:
         return SessionResponse(
             user=user_to_response(user),
             access_token=access_token,
-            next_route="/chat" if is_profile_complete(user) else "/profile",
+            next_route=self._next_route(user=user, identity=identity),
         )
 
     def browser_redirect_response(self, session: SessionResponse) -> RedirectResponse:
@@ -262,23 +204,18 @@ class AuthService:
         """Clear the app access token cookie."""
         response.delete_cookie(
             self.settings.ACCESS_TOKEN_COOKIE_NAME,
-            domain=_cookie_domain(self.settings),
+            domain=cookie_domain(self.settings),
         )
 
-    def _assert_provider_enabled(self, provider: ProviderName) -> None:
-        enabled = {
-            "google": bool(
-                self.settings.GOOGLE_OAUTH_CLIENT_ID
-                and self.settings.GOOGLE_OAUTH_CLIENT_SECRET
-            ),
-            "microsoft": bool(
-                self.settings.MICROSOFT_OAUTH_CLIENT_ID
-                and self.settings.MICROSOFT_OAUTH_CLIENT_SECRET
-            ),
-        }[provider]
-        if not enabled:
+    @staticmethod
+    def _validate_persona(
+        *,
+        provider: ProviderName,
+        persona: DevAuthPersona | None,
+    ) -> None:
+        if provider != "dev" and persona is not None:
             raise ValidationError(
-                f"OAuth provider '{provider}' is not configured",
+                "Dev persona is only supported for Developer SSO",
                 details={"provider": provider},
             )
 
@@ -312,14 +249,7 @@ class AuthService:
         ):
             raise ValidationError("Invalid OAuth state")
 
-    async def _upsert_user_from_oauth(
-        self,
-        *,
-        provider: ProviderName,
-        account_id: str,
-        account_email: str,
-        token: dict[str, Any],
-    ) -> User:
+    async def _upsert_user_from_oauth(self, identity: OAuthIdentity) -> User:
         organization = await self.org_repo.get_by_slug(
             self.settings.DEFAULT_ORGANIZATION_SLUG
         )
@@ -330,8 +260,8 @@ class AuthService:
             )
 
         account = await self.oauth_repo.get_by_provider_account(
-            oauth_name=provider,
-            account_id=account_id,
+            oauth_name=identity.provider,
+            account_id=identity.subject,
         )
         user = None
         if account is not None:
@@ -339,47 +269,70 @@ class AuthService:
         if user is None:
             user = await self.user_repo.get_by_org_email(
                 organization_id=organization.id,
-                email=account_email,
+                email=identity.email,
             )
         if user is None:
             user = await self.user_repo.create(
                 organization_id=organization.id,
-                email=account_email,
-                name=self._default_name(account_email),
-                auth_provider=provider,
-                provider_subject=account_id,
-                role="athlete",
+                email=identity.email,
+                name=identity.name or self._default_name(identity.email),
+                auth_provider=identity.provider,
+                provider_subject=identity.subject,
+                role=identity.role or "athlete",
+                sport_team=identity.sport_team,
                 is_verified=True,
             )
         else:
             user = await self.user_repo.update_oauth_identity(
                 user,
-                email=account_email,
-                name=user.name or self._default_name(account_email),
-                auth_provider=provider,
-                provider_subject=account_id,
+                email=identity.email,
+                name=self._resolved_name(user, identity),
+                auth_provider=identity.provider,
+                provider_subject=identity.subject,
                 is_verified=True,
             )
+            if identity.role is not None and user.role != identity.role:
+                user = await self.user_repo.update_role(user, role=identity.role)
+            if not user.is_active:
+                user = await self.user_repo.set_active(user, is_active=True)
+            if identity.provider == "dev" and (
+                user.name != identity.name or user.sport_team != identity.sport_team
+            ):
+                user = await self.user_repo.update_profile(
+                    user,
+                    name=identity.name or self._default_name(identity.email),
+                    sport_team=identity.sport_team,
+                )
 
         if account is None:
             await self.oauth_repo.create(
                 user_id=user.id,
-                oauth_name=provider,
-                access_token=token["access_token"],
-                expires_at=token.get("expires_at"),
-                refresh_token=token.get("refresh_token"),
-                account_id=account_id,
-                account_email=account_email,
+                oauth_name=identity.provider,
+                access_token=identity.access_token,
+                expires_at=identity.expires_at,
+                refresh_token=identity.refresh_token,
+                account_id=identity.subject,
+                account_email=identity.email,
             )
         else:
             await self.oauth_repo.update_tokens(
                 account,
-                access_token=token["access_token"],
-                expires_at=token.get("expires_at"),
-                refresh_token=token.get("refresh_token"),
-                account_email=account_email,
+                access_token=identity.access_token,
+                expires_at=identity.expires_at,
+                refresh_token=identity.refresh_token,
+                account_email=identity.email,
             )
         return user
+
+    def _next_route(self, *, user: User, identity: OAuthIdentity) -> str:
+        if identity.provider == "dev" and user.role in {"admin", "super_admin"}:
+            return "/admin"
+        return "/chat" if is_profile_complete(user) else "/profile"
+
+    def _resolved_name(self, user: User, identity: OAuthIdentity) -> str:
+        if identity.provider == "dev" and identity.name:
+            return identity.name
+        return user.name or identity.name or self._default_name(identity.email)
 
     @staticmethod
     def _default_name(email: str) -> str:

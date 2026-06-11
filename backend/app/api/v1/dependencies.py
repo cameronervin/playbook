@@ -29,7 +29,6 @@ from app.services.agent_stream_service import AgentStreamService
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
 from app.services.conversation_service import ConversationService
-from app.services.dev_auth_service import DevAuthService
 from app.services.kb_document_service import (
     KBDocumentService,
     KBDocumentWebhookService,
@@ -88,11 +87,6 @@ def get_agent_stream_service(
     return AgentStreamService(provider)
 
 
-def get_dev_auth_service(session: SessionDep, settings: SettingsDep) -> DevAuthService:
-    """Return local-development auth service dependency."""
-    return DevAuthService(session, settings=settings)
-
-
 def get_kb_document_service(
     session: SessionDep,
     storage: StorageProviderDep,
@@ -125,7 +119,6 @@ AgentStreamServiceDep = Annotated[
     AgentStreamService,
     Depends(get_agent_stream_service),
 ]
-DevAuthServiceDep = Annotated[DevAuthService, Depends(get_dev_auth_service)]
 KBDocumentServiceDep = Annotated[
     KBDocumentService,
     Depends(get_kb_document_service),

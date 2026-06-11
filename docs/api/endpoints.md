@@ -37,7 +37,7 @@ Example error response:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Liveness/readiness check |
-| GET | `/auth/providers` | List configured Google/Microsoft OAuth providers |
+| GET | `/auth/providers` | List configured OAuth providers; includes local-only Developer SSO when dev auth is enabled |
 | GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
 | GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session; browser callers receive a 303 redirect to `FRONTEND_URL + next_route` |
 | POST | `/auth/logout` | Clear the current app session cookie |
@@ -68,7 +68,7 @@ environments.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/dev/session/{persona}` | Seed a deterministic local user, set the app session cookie, and redirect to the matching frontend route. Valid personas: `athlete`, `new_athlete`, `admin`, `super_admin` |
+| GET | `/auth/dev/login?persona={persona}` | Start local fake SSO through the normal OAuth login/callback flow. `persona` defaults to `athlete`; valid values are `athlete`, `new_athlete`, `admin`, `super_admin` |
 
 ```bash
 curl http://localhost:8000/api/v1/health

@@ -2,12 +2,12 @@ model_list:
   - model_name: playbook-chat
     litellm_params:
       model: os.environ/LITELLM_PLAYBOOK_CHAT_MODEL
-      api_key: os.environ/ANTHROPIC_API_KEY
+      api_key: os.environ/OPENAI_API_KEY
 
   - model_name: playbook-fast
     litellm_params:
       model: os.environ/LITELLM_PLAYBOOK_FAST_MODEL
-      api_key: os.environ/ANTHROPIC_API_KEY
+      api_key: os.environ/OPENAI_API_KEY
 
   - model_name: playbook-embed
     litellm_params:
