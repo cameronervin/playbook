@@ -89,7 +89,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         chunks = [
             RetrievedChunk(
                 text=item.get("text", ""),
-                metadata=item.get("metadata", {}),
+                metadata=_chunk_metadata(item),
                 similarity_score=item.get("score"),
             )
             for item in raw_items
@@ -235,3 +235,17 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
             raise KBConnectionError(f"KB server error ({response.status_code}) for {path}")
 
         return response.json()
+
+
+def _chunk_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(item.get("metadata", {}) or {})
+    for key in (
+        "document_id",
+        "kb_service_document_id",
+        "chunk_id",
+        "chunk_index",
+        "score",
+    ):
+        if key in item and key not in metadata:
+            metadata[key] = item[key]
+    return metadata

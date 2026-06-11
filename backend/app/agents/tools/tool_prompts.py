@@ -15,19 +15,21 @@ class ToolPromptKey(NamedTuple):
     tool_name: str
 
 
-EXAMPLE_KB_PROMPT = """
+ATHLETE_KB_PROMPT = """
 <tools>
-- **query_example_knowledgebase**:
-You have access to a knowledge base retrieval tool.
+- **search_playbook_knowledgebase**:
+Use this tool before making NIL, compliance, recruiting, harassment/reporting,
+or department process claims. Query official Playbook athletic department
+knowledge base sources with focused, specific search terms.
 
-Query it for any supporting context that would improve your result. Prefer
-focused, specific queries over broad ones — narrower queries yield
-higher-relevance results. Treat the user's request as the primary source of
-truth and use retrieved context only to enhance your output.
+For supported answers, include every supporting source key returned by this tool
+in the structured cited_source_keys field. Do not invent source keys. If tool
+results are missing or do not support the answer, use answer_type "unsupported"
+and direct the athlete to the athletic department.
 </tools>
 """
 
 
 TOOL_PROMPT_REGISTRY: dict[ToolPromptKey, str] = {
-    ToolPromptKey("example", "query_example_knowledgebase"): EXAMPLE_KB_PROMPT,
+    ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"): ATHLETE_KB_PROMPT,
 }

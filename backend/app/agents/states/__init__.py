@@ -1,5 +1,13 @@
 """Graph state schemas for agent workflows."""
 
-from app.agents.states.example_state import ExampleResult, ExampleState
+from app.agents.states.athlete_chat_state import (
+    AthleteChatAnswerType,
+    AthleteChatState,
+    AthleteChatStructuredResponse,
+)
 
-__all__ = ["ExampleResult", "ExampleState"]
+__all__ = [
+    "AthleteChatAnswerType",
+    "AthleteChatState",
+    "AthleteChatStructuredResponse",
+]

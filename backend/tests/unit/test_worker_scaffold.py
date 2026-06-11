@@ -145,15 +145,31 @@ def test_athlete_chat_dispatcher_uses_explicit_task_id(monkeypatch) -> None:
     assert WorkerTaskName.RUN_ATHLETE_CHAT.value == run_athlete_chat_task.name
 
 
-def test_athlete_chat_task_stub_publishes_not_implemented_error_in_eager_mode(
+def test_athlete_chat_task_runs_agent_entrypoint_in_eager_mode(
     monkeypatch,
 ) -> None:
     provider = InMemoryAgentStreamProvider()
-    marked_failed: dict[str, str] = {}
 
-    async def fake_mark_failed(*, assistant_message_id: str, task_id: str) -> None:
-        marked_failed["assistant_message_id"] = assistant_message_id
-        marked_failed["task_id"] = task_id
+    async def fake_run_agent(**kwargs: object) -> dict[str, object]:
+        task_id = str(kwargs["task_id"])
+        stream_service = worker_tasks.AgentStreamService(provider)
+        await stream_service.publish_progress(task_id, status="loading_context")
+        await stream_service.publish_chunk(task_id, content="Grounded answer.")
+        await stream_service.publish_complete(
+            task_id,
+            data={
+                "assistant_message_id": kwargs["assistant_message_id"],
+                "answer_type": "grounded_answer",
+                "citation_count": 1,
+            },
+        )
+        return {
+            "status": "complete",
+            "task_id": task_id,
+            "assistant_message_id": kwargs["assistant_message_id"],
+            "answer_type": "grounded_answer",
+            "citation_count": 1,
+        }
 
     monkeypatch.setattr(
         worker_tasks,
@@ -163,8 +179,78 @@ def test_athlete_chat_task_stub_publishes_not_implemented_error_in_eager_mode(
     )
     monkeypatch.setattr(
         worker_tasks,
-        "_mark_athlete_chat_scaffold_failed",
-        fake_mark_failed,
+        "_run_athlete_chat_agent",
+        fake_run_agent,
+        raising=False,
+    )
+    previous_always_eager = backend_worker.conf.task_always_eager
+    previous_eager_propagates = backend_worker.conf.task_eager_propagates
+    backend_worker.conf.task_always_eager = True
+    backend_worker.conf.task_eager_propagates = True
+    try:
+        result = run_athlete_chat_task.delay(
+            conversation_id="00000000-0000-0000-0000-000000000001",
+            athlete_user_id="00000000-0000-0000-0000-000000000002",
+            user_message_id="00000000-0000-0000-0000-000000000003",
+            assistant_message_id="00000000-0000-0000-0000-000000000004",
+            organization_id="00000000-0000-0000-0000-000000000005",
+            attached_file_ids=[],
+        )
+    finally:
+        backend_worker.conf.task_always_eager = previous_always_eager
+        backend_worker.conf.task_eager_propagates = previous_eager_propagates
+
+    payload = result.get(timeout=1)
+    assert payload["status"] == "complete"
+    assert payload["answer_type"] == "grounded_answer"
+    assert payload["citation_count"] == 1
+
+    async def collect_records():
+        return [
+            record
+            async for record in provider.iter_events(payload["task_id"], after_id="0-0")
+        ]
+
+    records = asyncio.run(collect_records())
+    assert [record.event.event_type for record in records] == [
+        AgentStreamEventType.PROGRESS,
+        AgentStreamEventType.CHUNK,
+        AgentStreamEventType.COMPLETE,
+    ]
+    assert records[0].event.data["status"] == "loading_context"
+    assert records[1].event.data["content"] == "Grounded answer."
+    assert records[2].event.data["answer_type"] == "grounded_answer"
+
+
+def test_athlete_chat_task_failure_publishes_agent_error_in_eager_mode(
+    monkeypatch,
+) -> None:
+    provider = InMemoryAgentStreamProvider()
+
+    async def fake_run_agent(**kwargs: object) -> dict[str, object]:
+        task_id = str(kwargs["task_id"])
+        stream_service = worker_tasks.AgentStreamService(provider)
+        await stream_service.publish_error(
+            task_id,
+            message="Athlete chat generation failed.",
+            code="agent_failed",
+        )
+        return {
+            "status": "failed",
+            "code": "agent_failed",
+            "task_id": task_id,
+        }
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "get_agent_stream_provider",
+        lambda: provider,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        worker_tasks,
+        "_run_athlete_chat_agent",
+        fake_run_agent,
         raising=False,
     )
     previous_always_eager = backend_worker.conf.task_always_eager
@@ -186,11 +272,8 @@ def test_athlete_chat_task_stub_publishes_not_implemented_error_in_eager_mode(
 
     payload = result.get(timeout=1)
     assert payload["status"] == "failed"
-    assert payload["code"] == "agent_not_implemented"
-    assert marked_failed == {
-        "assistant_message_id": "00000000-0000-0000-0000-000000000004",
-        "task_id": payload["task_id"],
-    }
+    assert payload["code"] == "agent_failed"
+
     async def collect_records():
         return [
             record
@@ -199,11 +282,9 @@ def test_athlete_chat_task_stub_publishes_not_implemented_error_in_eager_mode(
 
     records = asyncio.run(collect_records())
     assert [record.event.event_type for record in records] == [
-        AgentStreamEventType.PROGRESS,
         AgentStreamEventType.ERROR,
     ]
-    assert records[0].event.data["status"] == "scaffold_started"
-    assert records[1].event.data["code"] == "agent_not_implemented"
+    assert records[0].event.data["code"] == "agent_failed"
 
 
 def test_future_task_stubs_raise_not_implemented_in_eager_mode() -> None:

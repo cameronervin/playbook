@@ -2,9 +2,8 @@
 
 Pattern: injected context is estimated (chars/4 heuristic — accurate enough for
 a guardrail without a tokenizer dependency) and trimmed to a per-chain budget.
-Budgets are read from ``settings.context_token_budget_map`` when present; the
-scaffold ships without budgets configured, so ``enforce_context_token_budget``
-is a no-op until you add them.
+Budgets are read from ``settings.context_token_budget_map`` when present, so
+``enforce_context_token_budget`` is a no-op until a workflow configures them.
 """
 
 from __future__ import annotations
@@ -50,7 +49,7 @@ def enforce_context_token_budget(
     context: str,
     *,
     phase: str,
-    example_id: str,
+    run_id: str,
     settings: Settings | None = None,
 ) -> str:
     """Enforce a per-chain token budget on injected context.
@@ -70,7 +69,7 @@ def enforce_context_token_budget(
     logger.warning(
         "context_truncated_to_token_budget",
         phase=phase,
-        example_id=example_id,
+        run_id=run_id,
         original_tokens=original_tokens,
         budget_tokens=budget,
         truncated_tokens=estimate_tokens(truncated),

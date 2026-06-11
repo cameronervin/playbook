@@ -1,19 +1,18 @@
-"""Agent layer for the scaffold.
+"""Agent layer for Playbook workflows.
 
-This package houses the LangGraph agent subsystem. It demonstrates a single
-generic ``example`` workflow that exercises every architectural folder:
+This package houses the LangGraph agent subsystem. The active product workflow
+is athlete chat, executed by a Celery worker after the API persists the user
+turn and assistant placeholder:
 
     states/   -> typed graph state (TypedDict + add_messages reducer)
     prompts/  -> system prompt strings
-    chains/   -> small LLM-call units (one create_agent per chain)
-    nodes/    -> graph nodes (load_state -> chain -> save_state) + router
+    chains/   -> structured create_agent units
+    nodes/    -> graph nodes (load_state -> safety -> agent -> save_state)
     graphs/   -> StateGraph topology
-    executors/-> drives graph.ainvoke() from the API layer
+    executors/-> drives graph.astream() from worker tasks
     builders/ -> compose chains -> nodes -> graph and compile it
-    tools/    -> declarative ToolSpec registry + runtime assignment
+    tools/    -> knowledge-base retrieval tools
     context/  -> token budgeting, prompt cache, policies, serializers,
                  middleware (context injection) and prompt composers
-    guardrails.py / retry.py -> cross-cutting execution safety
-
-See ``STUBS.md`` for the full composition flow and "how to add X" recipes.
+    guardrails/ -> execution guardrails, retry policy, and safety checks
 """

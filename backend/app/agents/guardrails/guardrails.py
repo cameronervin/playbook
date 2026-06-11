@@ -82,7 +82,7 @@ def assert_message_loop_bounded(
     messages: list[BaseMessage],
     *,
     phase: str,
-    example_id: str,
+    run_id: str,
     settings: Settings | None = None,
 ) -> None:
     """Fail fast when message fan-out suggests an unbounded loop."""
@@ -93,7 +93,7 @@ def assert_message_loop_bounded(
     logger.error(
         "agent_message_loop_guard_triggered",
         phase=phase,
-        example_id=example_id,
+        run_id=run_id,
         message_count=len(messages),
         max_allowed=max_messages,
     )
@@ -104,7 +104,7 @@ def assert_message_loop_bounded(
         ),
         details={
             "phase": phase,
-            "example_id": example_id,
+            "run_id": run_id,
             "message_count": len(messages),
             "max_messages": max_messages,
         },

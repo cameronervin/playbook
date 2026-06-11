@@ -1,8 +1,5 @@
-"""Executors drive compiled graphs from the API layer."""
+"""Executors drive compiled graphs from worker and API boundaries."""
 
-from app.agents.executors.example_executor import (
-    ExampleExecutor,
-    get_example_executor,
-)
+from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
 
-__all__ = ["ExampleExecutor", "get_example_executor"]
+__all__ = ["AthleteChatExecutor"]

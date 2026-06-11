@@ -5,8 +5,8 @@ gateway layer. This module just produces stable cache keys/versioning that can
 be threaded through LangGraph ``configurable`` so prefix stability is auditable
 across runs.
 
-The scaffold ships caching disabled by default; ``build_cache_config`` returns
-an empty dict unless ``settings.PROMPT_CACHE_ENABLED`` is set.
+Prompt caching is disabled by default; ``build_cache_config`` returns an empty
+dict unless ``settings.PROMPT_CACHE_ENABLED`` is set.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def build_cache_config(
     *,
     mode: str,
     phase: str,
-    example_id: UUID | str | None = None,
+    run_id: UUID | str | None = None,
     settings: Settings | None = None,
 ) -> dict[str, str]:
     """Return LangGraph configurable cache-routing fields (or empty if disabled)."""
@@ -30,8 +30,8 @@ def build_cache_config(
 
     namespace_root = getattr(app_settings, "AGENT_CACHE_NAMESPACE", "agent")
     namespace = f"{namespace_root}:{mode}:{phase}"
-    if example_id is not None:
-        namespace = f"{namespace}:{example_id}"
+    if run_id is not None:
+        namespace = f"{namespace}:{run_id}"
 
     return {
         "cache_namespace": namespace,

@@ -1,38 +1,33 @@
-"""Node-set construction for the example workflow.
-
-Pattern: the nodes builder takes the chains dict and infrastructure handles
-(session factory, storage) and produces the ``{node_name -> node_fn}`` dict the
-graph registers. It keeps node wiring out of both the chains builder and the
-graph topology.
-"""
+"""Node-set construction for Playbook agent workflows."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from app.agents.nodes.example.chains import create_example_nodes
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.agents.nodes.athlete_chat import create_athlete_chat_nodes
+from app.agents.tools.knowledgebase import SourceRegistry
 from app.core.config import Settings
-from app.infrastructure.storage import StorageProvider
+from app.services.agent_stream_service import AgentStreamService
 
 
-def create_example_node_set(
+def create_athlete_chat_node_set(
     *,
     chains: dict[str, Any],
-    get_session: Callable,
+    session: AsyncSession,
     settings: Settings,
-    storage: StorageProvider | None = None,
+    stream_service: AgentStreamService,
+    source_registry: SourceRegistry,
 ) -> dict[str, Any]:
-    """Create the node set for the example workflow.
-
-    ``storage`` is accepted to mirror the production signature (some nodes need
-    blob storage); the example nodes don't use it yet.
-    """
+    """Create the node set for the athlete chat workflow."""
     return {
-        "example": create_example_nodes(
+        "athlete_chat": create_athlete_chat_nodes(
             chains=chains,
-            get_session=get_session,
+            session=session,
             settings=settings,
+            stream_service=stream_service,
+            source_registry=source_registry,
         )
     }
 
@@ -40,16 +35,18 @@ def create_example_node_set(
 def create_all_nodes(
     *,
     chains: dict[str, Any],
-    get_session: Callable,
+    session: AsyncSession,
     settings: Settings,
-    storage: StorageProvider | None = None,
+    stream_service: AgentStreamService,
+    source_registry: SourceRegistry,
 ) -> dict[str, Any]:
-    """Create all node sets for the agent subsystem (currently just example)."""
+    """Create all node sets for the active agent subsystem."""
     return {
-        **create_example_node_set(
+        **create_athlete_chat_node_set(
             chains=chains,
-            get_session=get_session,
+            session=session,
             settings=settings,
-            storage=storage,
+            stream_service=stream_service,
+            source_registry=source_registry,
         )
     }

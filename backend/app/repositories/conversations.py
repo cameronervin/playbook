@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
@@ -313,6 +313,13 @@ class MessageCitationRepository:
         for citation in result.all():
             citations_by_message[citation.message_id].append(citation)
         return citations_by_message
+
+    async def delete_by_message(self, message_id: UUID) -> None:
+        """Delete citations for a message without committing."""
+        await self.session.execute(
+            delete(MessageCitation).where(MessageCitation.message_id == message_id)
+        )
+        await self.session.flush()
 
 
 class ConversationFileRepository:

@@ -16,6 +16,7 @@ from app.agents.tools.tool_prompts import TOOL_PROMPT_REGISTRY, ToolPromptKey
 from app.agents.tools.tool_registry import (
     TOOL_REGISTRY,
     WORKFLOW_CHAIN_NAMES,
+    ToolBuildContext,
     ToolSpec,
     ToolWorkflow,
 )
@@ -24,15 +25,22 @@ WorkflowChainToolMap = dict[ToolWorkflow, dict[str, list[BaseTool]]]
 
 
 def resolve_active_tools(
-    config: object,
+    config: object | ToolBuildContext,
     registry: Iterable[ToolSpec] = TOOL_REGISTRY,
 ) -> list[BaseTool]:
     """Build all enabled tools in stable registry order."""
+    context = _tool_build_context(config)
     tools: list[BaseTool] = []
     for spec in registry:
-        if spec.enabled_predicate(config):
-            tools.append(spec.factory(config))
+        if spec.enabled_predicate(context):
+            tools.append(spec.factory(context))
     return tools
+
+
+def _tool_build_context(config: object | ToolBuildContext) -> ToolBuildContext:
+    if isinstance(config, ToolBuildContext):
+        return config
+    return ToolBuildContext(settings=config)
 
 
 def build_workflow_chain_tool_map(

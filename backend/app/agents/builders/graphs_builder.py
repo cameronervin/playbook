@@ -1,26 +1,29 @@
-"""Graph compilation for the example workflow.
-
-Pattern: the graphs builder ties everything together. It composes shared
-chain/node dependencies once, then compiles the topology with a checkpointer.
-``compile_example_graph`` is the single public entry point main.py calls at
-startup.
-"""
+"""Graph compilation for Playbook agent workflows."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import structlog
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.builders.chains_builder import create_example_chain_set
-from app.agents.builders.nodes_builder import create_example_node_set
-from app.agents.graphs.example_graph import create_example_graph
+from app.agents.builders.chains_builder import create_athlete_chat_chain_set
+from app.agents.builders.nodes_builder import create_athlete_chat_node_set
+from app.agents.graphs.athlete_chat_graph import create_athlete_chat_graph
+from app.agents.tools.knowledgebase import (
+    SourceRegistry,
+)
+from app.agents.tools.tool_assignment import (
+    build_workflow_chain_tool_map,
+    resolve_active_tools,
+)
+from app.agents.tools.tool_registry import ToolBuildContext
 from app.core.config import Settings
-from app.infrastructure.storage import StorageProvider
+from app.infrastructure.knowledgebase import BaseKnowledgebaseProvider
+from app.services.agent_stream_service import AgentStreamService
 
 logger = structlog.get_logger(__name__)
 
@@ -31,69 +34,86 @@ class GraphDependencies:
 
     chains: dict[str, Any]
     nodes: dict[str, Any]
+    source_registry: SourceRegistry
 
 
-def compose_example_dependencies(
+def compose_athlete_chat_dependencies(
     *,
     chat_model: BaseChatModel,
-    get_session: Callable,
+    session: AsyncSession,
+    knowledgebase_provider: BaseKnowledgebaseProvider,
+    stream_service: AgentStreamService,
     app_settings: Settings,
-    storage: StorageProvider | None = None,
 ) -> GraphDependencies:
-    """Create the example workflow's chains and nodes."""
-    chains = create_example_chain_set(chat_model, app_settings=app_settings)
-    logger.info("agent_chains_created", count=len(chains), scope="example")
-    nodes = create_example_node_set(
-        chains=chains,
-        get_session=get_session,
+    """Create the athlete chat workflow's tools, chains, and nodes."""
+    tool_context = ToolBuildContext(
         settings=app_settings,
-        storage=storage,
+        knowledgebase_provider=knowledgebase_provider,
     )
-    logger.info("agent_nodes_created", count=len(nodes), scope="example")
-    return GraphDependencies(chains=chains, nodes=nodes)
+    active_tools = resolve_active_tools(tool_context)
+    chain_tool_map = build_workflow_chain_tool_map(active_tools)
+    athlete_tools = chain_tool_map["athlete_chat"]["athlete_chat"]
+    source_registry = tool_context.source_registries.get(
+        "search_playbook_knowledgebase",
+        {},
+    )
+    chains = create_athlete_chat_chain_set(
+        chat_model=chat_model,
+        tools=athlete_tools,
+    )
+    logger.info("agent_chains_created", count=len(chains), scope="athlete_chat")
+    nodes = create_athlete_chat_node_set(
+        chains=chains,
+        session=session,
+        settings=app_settings,
+        stream_service=stream_service,
+        source_registry=source_registry,
+    )
+    logger.info("agent_nodes_created", count=len(nodes), scope="athlete_chat")
+    return GraphDependencies(
+        chains=chains,
+        nodes=nodes,
+        source_registry=source_registry,
+    )
 
 
-def compile_example_graph(
+def compile_athlete_chat_graph(
     *,
     chat_model: BaseChatModel,
-    get_session: Callable,
-    checkpointer: BaseCheckpointSaver,
+    session: AsyncSession,
+    knowledgebase_provider: BaseKnowledgebaseProvider,
+    stream_service: AgentStreamService,
+    checkpointer: BaseCheckpointSaver | None,
     app_settings: Settings,
-    storage: StorageProvider | None = None,
 ):
-    """Build and compile the example graph (public entry point for main.py).
-
-    Args:
-        chat_model: LangChain chat model from the LLM provider.
-        get_session: Async session-factory dependency (e.g. ``get_db``).
-        checkpointer: LangGraph checkpointer for state persistence.
-        storage: Optional blob storage provider.
-
-    Returns:
-        A compiled LangGraph ready for ``ExampleExecutor``.
-    """
-    dependencies = compose_example_dependencies(
+    """Build and compile the athlete chat graph."""
+    dependencies = compose_athlete_chat_dependencies(
         chat_model=chat_model,
-        get_session=get_session,
+        session=session,
+        knowledgebase_provider=knowledgebase_provider,
+        stream_service=stream_service,
         app_settings=app_settings,
-        storage=storage,
     )
-    graph_builder = create_example_graph(nodes=dependencies.nodes["example"])
+    graph_builder = create_athlete_chat_graph(
+        nodes=dependencies.nodes["athlete_chat"],
+    )
     return graph_builder.compile(checkpointer=checkpointer)
 
 
-def build_example_graph(
+def build_athlete_chat_graph(
     chat_model: BaseChatModel,
-    get_session: Callable,
-    checkpointer: BaseCheckpointSaver,
+    session: AsyncSession,
+    knowledgebase_provider: BaseKnowledgebaseProvider,
+    stream_service: AgentStreamService,
+    checkpointer: BaseCheckpointSaver | None,
     app_settings: Settings,
-    storage: StorageProvider | None = None,
 ):
-    """Positional-arg convenience wrapper around ``compile_example_graph``."""
-    return compile_example_graph(
+    """Positional-arg convenience wrapper around ``compile_athlete_chat_graph``."""
+    return compile_athlete_chat_graph(
         chat_model=chat_model,
-        get_session=get_session,
+        session=session,
+        knowledgebase_provider=knowledgebase_provider,
+        stream_service=stream_service,
         checkpointer=checkpointer,
         app_settings=app_settings,
-        storage=storage,
     )

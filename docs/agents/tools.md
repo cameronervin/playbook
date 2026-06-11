@@ -14,7 +14,7 @@ schema, handler) and bound to the chains/agents that should have access.
 ```
 Chain build time:  register tool → bind to agent (create_agent(tools=[...]))
 Run time:          model decides to call tool → handler runs → result returned
-                   to the model as a tool message → model continues
+                   to the model as a tool message → model returns structured output
 ```
 
 Keep tools small and single-purpose. Business logic that doesn't need the model
@@ -25,18 +25,37 @@ tool — nodes give you better retry handling and clearer separation of concerns
 
 | Tool | Description |
 |------|-------------|
-| `example_tool` | Illustrative tool — echoes/transforms its input. Replace with your real tools. |
+| `search_playbook_knowledgebase` | Athlete chat profile for searching official Playbook KB sources before NIL, compliance, recruiting, reporting, or process guidance. |
+
+The reusable implementation lives in `backend/app/agents/tools/knowledgebase.py`
+as a profile-based factory, and active product tools are declared in
+`backend/app/agents/tools/tool_registry.py`:
+
+```python
+ToolSpec(
+    tool_name="search_playbook_knowledgebase",
+    factory=_create_athlete_kb_tool,
+    workflow_chain_targets={"athlete_chat": ("athlete_chat",)},
+    prompt_keys=(ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"),),
+)
+```
+
+Use profile-specific tool names and descriptions for each agent. Keep the
+provider call, result normalization, source-key formatting, and citation
+metadata mapping in the reusable factory. Athlete chat records cited source keys
+in structured output; `save_state` persists citations only when those keys match
+tool-returned sources.
 
 ## Adding a Tool
 
-1. Define the tool in `backend/app/agents/tools/`:
+1. Define or reuse a tool factory in `backend/app/agents/tools/`:
 
 ```python
 from langchain_core.tools import tool
 
 
 @tool
-def example_tool(query: str) -> str:
+def lookup_department_guidance(query: str) -> str:
     """Look up information for the given query.
 
     The docstring is the description the model sees — make it precise:
@@ -46,21 +65,25 @@ def example_tool(query: str) -> str:
     return f"Result for: {query}"
 ```
 
-2. Bind it to the chain/agent that should use it, in
-   `backend/app/agents/chains/`:
+2. Declare it in `backend/app/agents/tools/tool_registry.py`:
 
 ```python
-from app.agents.tools.example_tool import example_tool
-
-def create_example_chain(chat_model):
-    return create_agent(
-        model=chat_model,
-        system_prompt=EXAMPLE_PROMPT,
-        tools=[example_tool],
-    )
+ToolSpec(
+    tool_name="search_playbook_knowledgebase",
+    factory=_create_athlete_kb_tool,
+    enabled_predicate=_kb_tools_enabled,
+    workflow_chain_targets={"athlete_chat": ("athlete_chat",)},
+)
 ```
 
-3. Add a row to the **Built-in Tools** table above.
+3. Add any model-facing tool instructions in `tool_prompts.py`, keyed by
+   `(chain, tool_name)`.
+
+4. Let the graph builder call `resolve_active_tools(...)` and
+   `build_workflow_chain_tool_map(...)`; do not create tool profiles directly in
+   graph builders.
+
+5. Add a row to the **Built-in Tools** table above.
 
 ## Guidelines
 

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-> Template — replace the `Example` domain entity and any placeholder names with your product's concepts.
+> Playbook architecture overview for the FastAPI, LangGraph, Next.js, and KB-service stack.
 
 ## System Diagram
 ```
@@ -54,7 +54,7 @@ app/
 │   ├── executors/     # Run/resume a graph, manage checkpoints
 │   ├── context/       # Context injection policies and serializers
 │   ├── prompts/       # Task-specific prompts
-│   └── tools/         # Agent tools (e.g. example_tool)
+│   └── tools/         # Agent tools (e.g. search_playbook_knowledgebase)
 └── infrastructure/    # External integrations
     ├── db/            # SQLAlchemy engine/session helpers
     ├── storage/       # S3 client (boto3)

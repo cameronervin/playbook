@@ -149,11 +149,17 @@ return StreamingResponse(
 9. The worker publishes events through `AgentStreamService`.
 
 ```python
-await stream_service.publish_progress(task_id, status="scaffold_started")
-await stream_service.publish_error(
+await stream_service.publish_progress(task_id, status="loading_context")
+await stream_service.publish_progress(task_id, status="checking_safety")
+await stream_service.publish_progress(task_id, status="running_agent")
+await stream_service.publish_chunk(task_id, content="Final assistant text")
+await stream_service.publish_complete(
     task_id,
-    message="Athlete chat agent is not implemented yet.",
-    code="agent_not_implemented",
+    data={
+        "assistant_message_id": "uuid",
+        "answer_type": "grounded_answer",
+        "citation_count": 1,
+    },
 )
 ```
 
@@ -211,7 +217,7 @@ Example SSE frame:
 ```text
 id: 1749560000000-0
 event: progress
-data: {"stream_id":"1749560000000-0","task_id":"...","event_type":"progress","data":{"status":"scaffold_started"}}
+data: {"stream_id":"1749560000000-0","task_id":"...","event_type":"progress","data":{"status":"loading_context"}}
 ```
 
 15. The stream closes when a terminal event arrives.
@@ -235,15 +241,20 @@ Last-Event-ID: 1749560000000-0
 The next `xread` starts after that stream ID, so already delivered events are
 not replayed.
 
-## Future LangGraph Handoff
+## LangGraph Handoff
 
-The future agent worker should publish LangGraph stream parts through
-`AgentStreamService.publish_langgraph_part(...)`.
+The athlete chat worker runs `AthleteChatExecutor`, which compiles the athlete
+chat graph through `compile_athlete_chat_graph(...)` in `graphs_builder`. The
+compiled graph uses conversation id as the LangGraph thread id. Its nodes load
+bounded history, run deterministic safety checks, invoke the structured
+`create_agent(...)` athlete chain when needed, validate cited source keys, and
+persist the assistant response.
 
 ```python
 async for part in graph.astream(
-    inputs,
-    stream_mode=["messages", "updates", "custom"],
+    initial_state,
+    config=build_graph_invoke_config(thread_id=conversation_id, ...),
+    stream_mode=["updates", "custom"],
     version="v2",
 ):
     await stream_service.publish_langgraph_part(task_id, part)
@@ -252,10 +263,10 @@ async for part in graph.astream(
 Mapping:
 
 ```text
-LangGraph messages -> chunk
 LangGraph custom   -> progress, unless it declares chunk/complete/error
 LangGraph updates  -> graph_update progress with safe node metadata only
 ```
 
-The HTTP SSE endpoint does not need to change when the real LangGraph agent is
-added.
+The graph publishes the final assistant chunk only from `save_state`, after
+required KB source support and citation keys are validated. This avoids
+streaming an unsupported policy answer before citation checks complete.

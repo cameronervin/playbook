@@ -1,9 +1,10 @@
 # Context Engineering
 
 > How to control what each agent step receives, to reduce token usage, improve
-> focus, and lower cost. The pattern is **policy-driven**: declarative policies
-> say what each step gets, serializers transform state into token-efficient
-> text, and a middleware factory injects it at runtime.
+> focus, and lower cost. Athlete chat currently uses dedicated LangChain
+> middleware that preserves bounded history and appends compact runtime flags.
+> The policy/serializer utilities remain available for future workflows that
+> need declarative context injection.
 
 ## Overview
 
@@ -12,13 +13,13 @@
 │                     Context Engineering Flow                         │
 │                                                                      │
 │  ┌──────────────┐     ┌───────────────────┐     ┌────────────────┐  │
-│  │   Policies   │────►│ Middleware Factory │────►│  Serializers   │  │
-│  │ policies.py  │     │   middleware.py    │     │ serializers.py │  │
+│  │ Graph State  │────►│ Athlete Middleware │────►│  Guardrails    │  │
+│  │ load_state   │     │ athlete_chat_...py │     │ guardrails/    │  │
 │  └──────────────┘     └───────────────────┘     └────────────────┘  │
 │         │                      │                        │            │
 │         │                      ▼                        │            │
 │         │            ┌─────────────────┐               │            │
-│         └───────────►│ inject_context  │◄──────────────┘            │
+│         └───────────►│ runtime context │◄──────────────┘            │
 │                      │   (middleware)  │                             │
 │                      └────────┬────────┘                             │
 │                               ▼                                      │
@@ -29,49 +30,36 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Three components:
+Three active components:
 
-1. **Policies** — declarative definitions of what each step receives.
-2. **Serializers** — token-efficient transforms from state → text.
-3. **Middleware factory** — builds runtime context injection from a policy.
+1. **Graph state** — bounded messages and JSON-safe runtime fields loaded by graph nodes.
+2. **Middleware** — filters message noise, enforces loop guardrails, and appends compact flags.
+3. **Tools** — retrieve large or authoritative context just in time.
 
-## 1. Policies
+## 1. Athlete Middleware
 
-A policy is the single source of truth for what context a step gets.
+Athlete chat uses `create_athlete_chat_middleware()` in the nested
+`create_agent(...)` chain. The middleware:
 
-```python
-from dataclasses import dataclass
-from typing import Literal
+- keeps the bounded prior conversation history loaded by `load_state`;
+- drops blank human/AI messages while preserving system messages, AI tool calls,
+  and tool results;
+- applies `assert_message_loop_bounded(...)`;
+- appends only compact runtime context: current question, KB-support flag,
+  topic/risk labels, and attached-file IDs/count.
 
+It must not inject KB search results, extracted uploaded-file text, secrets, or
+citation metadata. The model gets official guidance through
+`search_playbook_knowledgebase`, and `save_state` validates/persists citations.
 
-@dataclass(frozen=True)
-class ContextField:
-    name: str                                          # state field name
-    serialization: Literal["compact", "full", "json"]  # tier
-    required: bool = True
-    description: str = ""
-    edit_field: bool = False   # the step's own artifact, for re-runs/edits
+## 2. Policy Utilities
 
+For future workflows, a policy can be the single source of truth for what
+context a step gets. `policies.py` defines `ContextField` and
+`PhaseContextPolicy`; the registry is intentionally empty until another
+workflow needs declarative context injection.
 
-@dataclass(frozen=True)
-class StepContextPolicy:
-    step: str
-    fields: tuple[ContextField, ...]
-    description: str = ""
-
-
-# Registry for runtime lookup
-CONTEXT_POLICIES: dict[str, StepContextPolicy] = {
-    "analyze": ANALYZE_POLICY,
-    "summarize": SUMMARIZE_POLICY,
-}
-
-
-def get_policy(step: str) -> StepContextPolicy:
-    return CONTEXT_POLICIES[step]
-```
-
-## 2. Serializers
+## 3. Serializers
 
 Serializers turn state objects into text at a chosen level of detail. Use tiers
 to spend tokens only where they matter.
@@ -95,45 +83,6 @@ def get_serializer(field_name: str, tier: str):
     return SERIALIZER_REGISTRY[(field_name, tier)]
 ```
 
-## 3. Middleware Factory
-
-The factory builds a context injector from a policy at runtime, so a policy
-change automatically changes behavior — no per-step middleware to maintain.
-
-```python
-def create_context_injector(step: str):
-    policy = get_policy(step)
-
-    @wrap_model_call
-    def inject_context(request, handler):
-        parts = []
-        for field in policy.fields:
-            value = request.state.get(field.name)
-            if value is None:
-                continue
-            serializer = get_serializer(field.name, field.serialization)
-            label = FIELD_LABELS.get(field.name, field.name.title())
-            if field.edit_field:
-                label = f"{label} to Edit"
-            parts.append(f"## {label}\n{serializer(value)}")
-
-        context = "\n\n---\n\n".join(parts)
-        messages = [*request.messages, HumanMessage(content=context)]
-        return handler(request.override(messages=messages))
-
-    return inject_context
-```
-
-Use it when building a chain:
-
-```python
-return create_agent(
-    model=chat_model,
-    system_prompt=ANALYZE_PROMPT,
-    middleware=[create_context_injector("analyze")],
-)
-```
-
 ## Token Budgeting
 
 - Track token usage per step and per run.
@@ -148,6 +97,13 @@ return create_agent(
   keeps the model's instructions consistent.
 - Put instructions in the **system prompt**; put data in the **injected context
   message**. Don't mix the two.
+- For athlete chat, conversation history is loaded by
+  `load_state` and passed as bounded LangChain messages. The athlete-specific
+  middleware preserves that history, filters blank message entries, applies the
+  message-loop guard, and appends a compact runtime context with the current
+  question, KB-support flag, labels, and attached-file IDs/count only. KB context
+  is loaded just-in-time through the `search_playbook_knowledgebase` tool, and
+  citation metadata is captured from tool results rather than injected wholesale.
 
 ## Prompt Caching
 
@@ -173,5 +129,6 @@ backend/app/agents/context/
 ├── __init__.py
 ├── policies.py       # ContextField, StepContextPolicy, CONTEXT_POLICIES
 ├── serializers.py    # serializers + SERIALIZER_REGISTRY
-└── middleware.py     # create_context_injector factory, FIELD_LABELS
+└── middleware/
+    └── athlete_chat_middleware.py
 ```

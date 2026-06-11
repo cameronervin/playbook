@@ -145,6 +145,8 @@ class Settings(BaseSettings):
     AGENT_MAX_RETRIES: int = 3
     AGENT_RETRY_BACKOFF: float = 2.0  # Initial backoff (seconds, exponential)
     CHECKPOINT_RETENTION_DAYS: int = 30
+    ATHLETE_CHAT_HISTORY_LIMIT: int = 20
+    ATHLETE_CHAT_MAX_CITATIONS: int = 5
 
     # --- Observability ---------------------------------------------------------
     TRACING_ENABLED: bool = False

@@ -1,51 +1,44 @@
-"""Chain construction for the example workflow.
-
-Pattern: the chains builder is where tools, prompts, and chains come together.
-It (1) resolves the active tools from the registry, (2) composes per-chain
-prompts with the active tools' snippets, (3) assigns tools to chains, and
-(4) constructs each chain. The result is a ``{chain_name -> chain}`` dict the
-nodes builder consumes.
-"""
+"""Chain construction for Playbook agent workflows."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import BaseTool
 
-from app.agents.chains.example_chain import create_example_chain
-from app.agents.context.prompt_composers.example_prompt_composer import (
-    build_example_prompts,
+from app.agents.chains.athlete_chat_chain import create_athlete_chat_chain
+from app.agents.context.prompt_composers.athlete_chat_prompt_composer import (
+    build_athlete_chat_prompts,
 )
-from app.agents.tools.tool_assignment import (
-    build_workflow_chain_tool_map,
-    resolve_active_tools,
-)
-from app.core.config import Settings, get_settings
 
 
-def create_example_chain_set(
+def create_athlete_chat_chain_set(
+    *,
     chat_model: BaseChatModel,
-    app_settings: Settings | None = None,
+    tools: Sequence[BaseTool],
 ) -> dict[str, Any]:
-    """Create the chains required by the example workflow."""
-    settings = app_settings or get_settings()
-    tools = resolve_active_tools(settings)
-    prompts = build_example_prompts([tool.name for tool in tools])
-    example_chain_tools = build_workflow_chain_tool_map(tools).get("example", {})
-
+    """Create the chains required by the athlete chat workflow."""
+    prompts = build_athlete_chat_prompts([tool.name for tool in tools])
     return {
-        "example": create_example_chain(
-            chat_model,
-            tools=example_chain_tools.get("example", []),
-            prompt=prompts["example"],
+        "athlete_chat": create_athlete_chat_chain(
+            chat_model=chat_model,
+            tools=tools,
+            system_prompt=prompts["athlete_chat"],
         ),
     }
 
 
 def create_all_chains(
+    *,
     chat_model: BaseChatModel,
-    app_settings: Settings | None = None,
+    tools: Sequence[BaseTool],
 ) -> dict[str, Any]:
-    """Create all chain sets for the agent subsystem (currently just example)."""
-    return {**create_example_chain_set(chat_model, app_settings=app_settings)}
+    """Create all chain sets for the active agent subsystem."""
+    return {
+        **create_athlete_chat_chain_set(
+            chat_model=chat_model,
+            tools=tools,
+        )
+    }
