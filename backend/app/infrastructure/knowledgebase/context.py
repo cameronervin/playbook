@@ -59,8 +59,8 @@ def _chunk_citation(chunk: RetrievedChunk) -> str:
 def assemble_context(chunks: list[RetrievedChunk], max_tokens: int) -> str:
     """Assemble retrieved chunks into a citation-formatted context string.
 
-    Chunks are sorted by descending similarity score before assembly.
-    Lower-scored chunks are truncated first when the total exceeds max_tokens.
+    Chunks are expected to arrive in provider-ranked order. Lower-ranked chunks
+    are truncated first when the total exceeds max_tokens.
 
     Args:
         chunks: Retrieved chunks from a search result.
@@ -72,17 +72,11 @@ def assemble_context(chunks: list[RetrievedChunk], max_tokens: int) -> str:
     if not chunks:
         return ""
 
-    sorted_chunks = sorted(
-        chunks,
-        key=lambda c: c.similarity_score if c.similarity_score is not None else 0.0,
-        reverse=True,
-    )
-
     fixed_overhead = _estimate_tokens(_HEADER + _FOOTER)
     remaining_budget = max_tokens - fixed_overhead
 
     sections: list[str] = []
-    for chunk in sorted_chunks:
+    for chunk in chunks:
         citation = _chunk_citation(chunk)
         citation_tokens = _estimate_tokens(citation)
 

@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from app.core.config import Settings
 from app.infrastructure.knowledgebase.context import assemble_context
+from app.infrastructure.knowledgebase.ranking import rank_retrieved_chunks
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
@@ -83,6 +84,7 @@ class MockProvider(BaseKnowledgebaseProvider):
             if (item.get("similarity_score") or 0) >= resolved_score_threshold
         ]
 
+        chunks = rank_retrieved_chunks(chunks)
         context = assemble_context(chunks, self.settings.KB_CONTEXT_MAX_TOKENS)
         latency_ms = int((time.monotonic() - start) * 1000)
 
@@ -112,8 +114,26 @@ class MockProvider(BaseKnowledgebaseProvider):
             status="pending",
         )
 
-    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
-        return KBDocumentStatusResponse(task_id=task_id, status="SUCCESS")
+    async def get_document_status(self, document_id: str) -> KBDocumentStatusResponse:
+        try:
+            resolved_document_id = UUID(str(document_id))
+        except ValueError:
+            resolved_document_id = None
+        return KBDocumentStatusResponse(
+            document_id=resolved_document_id,
+            status="SUCCESS",
+        )
+
+    async def retry_document(
+        self,
+        kb_service_document_id: str,
+    ) -> KBDocumentIngestResponse:
+        return KBDocumentIngestResponse(
+            kb_service_document_id=uuid4(),
+            playbook_document_id=uuid4(),
+            task_id=f"mock-retry-{kb_service_document_id}",
+            status="pending",
+        )
 
     async def delete_document(self, kb_service_document_id: str) -> None:
         return None

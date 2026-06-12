@@ -49,15 +49,15 @@ So that bad extraction or no-text failures can be corrected.
 ### US-15
 As an admin
 I want metadata tags for documents
-So that retrieval can prefer official, current, and high-priority sources.
+So that retrieval and citations can expose current source context.
 
 > **New in Playbook MVP.** Metadata tags are preferred over a hard category taxonomy.
 
 #### Acceptance Criteria
 1. Admins can assign metadata tags to documents.
-2. Tags support official/priority/source/freshness concepts.
+2. Tags support source and freshness concepts.
 3. Retrieval stores and returns metadata needed for ranking and citations.
-4. Official or priority metadata can influence retrieval when sources conflict.
+4. Admin-uploaded shared KB documents are official by definition for MVP.
 5. Metadata changes are recorded in the audit log.
 
 ### US-16
@@ -78,12 +78,12 @@ As an athlete
 I want Playbook to use the newest source when documents conflict
 So that answers reflect current department guidance.
 
-> **New in Playbook MVP.** Newest source is the default conflict rule, with room for official/priority metadata.
+> **New in Playbook MVP.** Newest source is the default conflict rule.
 
 #### Acceptance Criteria
 1. Retrieved context includes document freshness metadata.
 2. When sources conflict, the agent prefers the newest applicable document by default.
-3. Official or priority tags can override freshness when configured.
+3. Admin-official status and priority do not override freshness in MVP.
 4. If conflict remains unresolved, the agent explains the conflict and directs the athlete to the athletic department.
 
 ## Edge Cases

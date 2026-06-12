@@ -32,13 +32,16 @@ Athlete-uploaded conversation files are explicitly outside the shared KB service
 corpus for MVP. They are stored and chunked in the main backend schema as private
 conversation context.
 
-## Existing Scaffold
+## Implemented Contract
 
 ```text
-POST /api/kb/ingest/url
+POST /api/kb/configuration/resolve
+  -> resolve or create the default Playbook KB configuration
+
+POST /api/kb/ingest/document
   -> parse -> chunk -> embed -> pgvector
 
-POST /api/kb/embed/search
+POST /api/kb/search
   -> query embedding -> pgvector cosine search -> ranked chunks
 ```
 
@@ -71,7 +74,7 @@ Admin upload
 
 1. Support admin-uploaded local files by accepting a signed/presigned file URL and Playbook document metadata.
 2. Preserve Playbook metadata tags in durable vector metadata.
-3. Return source title, source date, official flag, priority, visibility policy, document ID, and chunk ID with search results.
+3. Return source title, source date, visibility policy, document ID, and chunk ID with search results.
 4. Exclude failed, deleted, archived, or unready documents from search.
 5. Keep athlete conversation files separate from the shared KB corpus.
 6. Surface parse/no-text/embed/load failures clearly for admin retry.
@@ -87,8 +90,6 @@ Admin upload
   "chunk_id": "uuid",
   "source_title": "NIL Policy Handbook",
   "source_date": "2026-01-15",
-  "is_official": true,
-  "priority": 10,
   "visibility_policy": { "scope": "all_athletes" },
   "score": 0.82
 }

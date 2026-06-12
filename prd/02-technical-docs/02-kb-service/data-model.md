@@ -117,8 +117,8 @@ Required `cmetadata` keys:
 - `chunk_index`
 - `source_title`
 - `source_date`
-- `is_official`
-- `priority`
+- `is_official` (internal compatibility; normalized true for new MVP ingest)
+- `priority` (internal compatibility; normalized 0 for new MVP ingest)
 - `visibility_policy`
 - `metadata_tags`
 - `content_type`

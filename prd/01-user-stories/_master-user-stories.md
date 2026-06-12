@@ -214,15 +214,15 @@ So that bad extraction or no-text failures can be corrected.
 ### US-15
 As an admin
 I want metadata tags for documents
-So that retrieval can prefer official, current, and high-priority sources.
+So that retrieval and citations can expose current source context.
 
 > **New in Playbook MVP.** Metadata tags are preferred over a hard category taxonomy.
 
 #### Acceptance Criteria
 1. Admins can assign metadata tags to documents.
-2. Tags support official/priority/source/freshness concepts.
+2. Tags support source and freshness concepts.
 3. Retrieval stores and returns metadata needed for ranking and citations.
-4. Official or priority metadata can influence retrieval when sources conflict.
+4. Admin-uploaded shared KB documents are official by definition for MVP.
 5. Metadata changes are recorded in the audit log.
 
 ### US-16
@@ -243,12 +243,12 @@ As an athlete
 I want Playbook to use the newest source when documents conflict
 So that answers reflect current department guidance.
 
-> **New in Playbook MVP.** Newest source is the default conflict rule, with room for official/priority metadata.
+> **New in Playbook MVP.** Newest source is the default conflict rule.
 
 #### Acceptance Criteria
 1. Retrieved context includes document freshness metadata.
 2. When sources conflict, the agent prefers the newest applicable document by default.
-3. Official or priority tags can override freshness when configured.
+3. Admin-official status and priority do not override freshness in MVP.
 4. If conflict remains unresolved, the agent explains the conflict and directs the athlete to the athletic department.
 
 ## Epic 4: Admin Analytics and Insights
@@ -413,7 +413,7 @@ So that the prototype can use athletics-inspired theming without implying endors
 | Auth | OAuth provider callback fails | No session created; user sees retryable error |
 | Auth | Athlete leaves required profile fields blank | Inline validation blocks chat entry |
 | Chat | No KB support for policy/process question | Agent declines and directs user to athletic department |
-| Chat | Sources conflict | Prefer newest or official/priority source; decline if unresolved |
+| Chat | Sources conflict | Prefer newest applicable source; decline if unresolved |
 | Chat | Emergency request | Refuse advice and show emergency instructions |
 | Uploads | Admin doc has no extractable text | Mark failed with reason; allow retry/re-upload |
 | Uploads | Athlete file unsupported | Reject before generation with clear message |

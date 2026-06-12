@@ -12,8 +12,7 @@ def test_search_request_requires_organization_id() -> None:
     with pytest.raises(ValidationError):
         SearchRequest(
             query="nil disclosure",
-            configuration_id=uuid4(),
-            max_docs=10,
+            limit=10,
             score_threshold=0.7,
         )
 
@@ -23,9 +22,11 @@ def test_search_request_accepts_organization_id() -> None:
     request = SearchRequest(
         query="nil disclosure",
         organization_id=organization_id,
-        configuration_id=uuid4(),
-        max_docs=10,
+        visibility_context={"role": "athlete"},
+        limit=10,
         score_threshold=0.7,
     )
 
     assert request.organization_id == organization_id
+    assert request.visibility_context == {"role": "athlete"}
+    assert request.limit == 10

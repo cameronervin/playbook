@@ -91,7 +91,7 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
 5. Run safety pre-check for emergency, medical, legal, mental-health, harassment/reporting, recruiting, NIL, and compliance risk.
 6. Retrieve KB context using organization and visibility filters.
 7. Retrieve conversation file context if file IDs are present.
-8. Rank context using freshness, official-source, and priority metadata.
+8. Rank context using semantic relevance and freshness metadata.
 9. Generate answer chunks and publish stream events to Valkey Streams under `task_id`.
 10. Attach bottom citations for grounded answers.
 11. Persist assistant message, citations, topic/risk labels, and safety outcome.
@@ -109,7 +109,6 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
       "chunk_id": "uuid",
       "source_title": "string",
       "source_date": "date",
-      "is_official": true,
       "rank": 1
     }
   ],
@@ -123,9 +122,9 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
 
 1. Retrieve only documents with `processing_status = ready`.
 2. Apply active visibility policy; MVP policy is all athletes.
-3. Rank by semantic score first, then official/priority metadata, then source date.
+3. Rank by semantic score first, then source date within near-similar matches.
 4. If sources conflict, prefer newest applicable document by default.
-5. Official or priority metadata may override freshness.
+5. Admin-uploaded shared KB documents are official by definition for MVP; priority does not override freshness.
 6. If conflict cannot be resolved, explain that guidance appears conflicting and direct the athlete to the athletic department.
 7. Never fabricate citations.
 
@@ -286,7 +285,7 @@ Constraints:
 | Citation integrity | Citations map to retrieved context |
 | Refusal | Unsupported and sensitive questions decline correctly |
 | Emergency | Emergency instructions appear and advice is refused |
-| Conflict handling | Newest or official/priority source is preferred |
+| Conflict handling | Newest applicable source is preferred |
 | Dashboard insights | Agent-curated topic/risk summaries match seeded chat data |
 | Admin chat | Answers reference authorized analytics or dashboard insight records |
 

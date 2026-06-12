@@ -70,8 +70,6 @@ async def upload_document(
         ),
     ] = None,
     source_date: Annotated[date | None, Form()] = None,
-    is_official: Annotated[bool, Form()] = False,
-    priority: Annotated[int, Form(ge=0)] = 0,
 ) -> KBDocumentResponse:
     """Upload a shared KB document and request ingestion."""
     upload = KBDocumentUpload(
@@ -81,8 +79,6 @@ async def upload_document(
         title=title,
         metadata_tags=_metadata_tags_from_form(metadata_tags),
         source_date=source_date,
-        is_official=is_official,
-        priority=priority,
     )
     return await service.upload_document(actor=actor, upload=upload)
 

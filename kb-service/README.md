@@ -15,18 +15,26 @@ the scaffold's knowledgebase feature; the main `backend/` calls it over HTTP via
 ## Pipeline
 
 ```
-POST /api/kb/ingest/url ─▶ IngestionService ─▶ Celery chain
-                                                  parse_task   (docling + native parsers, complexity-routed)
-                                                    │  └─ stages page text to S3 (NDJSON)
-                                                  chunk_task   (tiktoken recursive splitter)
-                                                    │  └─ stages chunks to S3 (NDJSON)
-                                                  embed_task   (fan-out dispatcher)
-                                                    └─▶ group(embed_batch_task)  (OpenAI / LiteLLM embeddings)
-                                                          └─ writes vectors → pgvector (kb.langchain_pg_embedding)
-                                                          └─ last batch dispatches load_vector_task (finalize)
+POST /api/kb/configuration/resolve ─▶ automatic idempotent default config
 
-POST /api/kb/embed/search ─▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ ranked chunks
+POST /api/kb/ingest/document ───────▶ IngestionService ─▶ Celery chain
+                                                          parse_task   (docling + native parsers, complexity-routed)
+                                                            │  └─ stages page text to S3 (NDJSON)
+                                                          chunk_task   (tiktoken recursive splitter)
+                                                            │  └─ stages chunks to S3 (NDJSON)
+                                                          embed_task   (fan-out dispatcher)
+                                                            └─▶ group(embed_batch_task)  (OpenAI / LiteLLM embeddings)
+                                                                  └─ writes vectors → pgvector (kb.langchain_pg_embedding)
+                                                                  └─ last batch dispatches load_vector_task (finalize)
+
+POST /api/kb/search ────────────────▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ ranked results
 ```
+
+`/configuration/resolve` owns the singleton Playbook defaults
+(`Playbook KB Pipeline` + `playbook-kb`) and is safe to call on a fresh local
+database. Search resolves that default internally before vector lookup, so a
+new database returns zero results instead of requiring manual configuration
+seeding.
 
 ## Stack
 
@@ -52,7 +60,8 @@ app/
   repositories/            CRUD + vector similarity search
   services/                ingestion / search / configuration orchestration
   api/                     routers + deps (service_auth, services)
-  workers/                 Celery app, tasks, per-thread state, rate limiter
+  workers/                 Celery app, task package, per-thread state, rate limiter
+    tasks/                 parse/chunk/embed/finalize/notify/watchdog modules
   infrastructure/
     db/session.py          thread-local async engine + NullPool (Celery-thread safe)
     parsers/               contracts + extractors + complexity routing + OCR stub

@@ -235,8 +235,6 @@ def _format_source(source: KnowledgebaseSource, *, rank: int) -> str:
         ("chunk_id", "Chunk ID"),
         ("chunk_index", "Chunk index"),
         ("source_date", "Source date"),
-        ("is_official", "Official"),
-        ("priority", "Priority"),
     ):
         if key in source.metadata and source.metadata[key] is not None:
             lines.append(f"{label}: {source.metadata[key]}")

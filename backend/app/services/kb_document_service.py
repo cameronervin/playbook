@@ -62,8 +62,6 @@ class KBDocumentUpload:
     title: str | None = None
     metadata_tags: dict[str, Any] | None = None
     source_date: date | None = None
-    is_official: bool = False
-    priority: int = 0
 
 
 def kb_document_to_response(document: KBDocument) -> KBDocumentResponse:
@@ -153,8 +151,8 @@ class KBDocumentService:
             storage_key=storage_key,
             metadata_tags=upload.metadata_tags or {},
             source_date=upload.source_date,
-            is_official=upload.is_official,
-            priority=upload.priority,
+            is_official=True,
+            priority=0,
         )
         await self.event_repo.create(
             document_id=document.id,
@@ -177,8 +175,8 @@ class KBDocumentService:
                 size_bytes=document.size_bytes,
                 source_title=document.title,
                 source_date=document.source_date,
-                is_official=document.is_official,
-                priority=document.priority,
+                is_official=True,
+                priority=0,
                 visibility_policy=document.visibility_policy,
                 metadata_tags=document.metadata_tags,
             )
@@ -219,15 +217,13 @@ class KBDocumentService:
         document_id: UUID,
         request: KBDocumentMetadataUpdateRequest,
     ) -> KBDocumentResponse:
-        """Update KB document ranking/metadata fields."""
+        """Update KB document metadata fields."""
         document = await self._get_document_or_404(actor, document_id)
         previous = {
             "metadata_tags": document.metadata_tags,
             "source_date": document.source_date.isoformat()
             if document.source_date
             else None,
-            "is_official": document.is_official,
-            "priority": document.priority,
         }
         updated = await self.document_repo.update_metadata(
             document,
@@ -241,12 +237,6 @@ class KBDocumentService:
                 if request.source_date is not None
                 else document.source_date
             ),
-            is_official=(
-                request.is_official
-                if request.is_official is not None
-                else document.is_official
-            ),
-            priority=request.priority if request.priority is not None else document.priority,
         )
         await self.event_repo.create(
             document_id=document.id,
@@ -274,26 +264,31 @@ class KBDocumentService:
     ) -> KBDocumentResponse:
         """Retry ingestion by re-sending the original presigned URL to KB."""
         document = await self._get_document_or_404(actor, document_id)
-        signed_url = await self.storage.get_presigned_url(
-            document.storage_key,
-            download_filename=document.filename,
-        )
-        ingest_response = await self.kb_provider.ingest_document(
-            KBDocumentIngestRequest(
-                organization_id=actor.organization_id,
-                playbook_document_id=document.id,
-                source_uri=signed_url,
-                filename=document.filename,
-                content_type=document.content_type,
-                size_bytes=document.size_bytes,
-                source_title=document.title,
-                source_date=document.source_date,
-                is_official=document.is_official,
-                priority=document.priority,
-                visibility_policy=document.visibility_policy,
-                metadata_tags=document.metadata_tags,
+        if document.kb_service_document_id is not None:
+            ingest_response = await self.kb_provider.retry_document(
+                str(document.kb_service_document_id)
             )
-        )
+        else:
+            signed_url = await self.storage.get_presigned_url(
+                document.storage_key,
+                download_filename=document.filename,
+            )
+            ingest_response = await self.kb_provider.ingest_document(
+                KBDocumentIngestRequest(
+                    organization_id=actor.organization_id,
+                    playbook_document_id=document.id,
+                    source_uri=signed_url,
+                    filename=document.filename,
+                    content_type=document.content_type,
+                    size_bytes=document.size_bytes,
+                    source_title=document.title,
+                    source_date=document.source_date,
+                    is_official=True,
+                    priority=0,
+                    visibility_policy=document.visibility_policy,
+                    metadata_tags=document.metadata_tags,
+                )
+            )
         await self.document_repo.update_status(
             document,
             processing_status="uploaded",

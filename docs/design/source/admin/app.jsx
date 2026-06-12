@@ -68,12 +68,11 @@ function AdminApp() {
     setTimeout(() => setDocs(prev => prev.map(d => d.id === id ? { ...d, status: 'ready' } : d)), 2200);
   };
   const deleteDoc = (id) => setDocs(prev => prev.filter(d => d.id !== id));
-  const toggleOfficial = (id) => setDocs(prev => prev.map(d => d.id === id ? { ...d, official: !d.official } : d));
   const saveMeta = (id, patch) => setDocs(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d));
   const uploadDoc = (collId) => {
     const id = 'doc_up_' + (++docSeq);
     const title = 'NEW_UPLOAD_' + docSeq + '.PDF';
-    const nd = { id, collId, title, type: 'PDF', size: '0.9 MB', status: 'processing', uploaded: 'Just now', uploader: 'You', tags: [], official: false, priority: 'Normal', source_date: '—', visibility: 'All athletes', reason: null };
+    const nd = { id, collId, title, type: 'PDF', size: '0.9 MB', status: 'processing', uploaded: 'Just now', uploader: 'You', tags: [], source_date: '—', visibility: 'All athletes', reason: null };
     setDocs(prev => [nd, ...prev]);
     setTimeout(() => setDocs(prev => prev.map(d => d.id === id ? { ...d, status: 'ready' } : d)), 2600);
   };
@@ -98,7 +97,7 @@ function AdminApp() {
 
   let main = null;
   if (route === 'insights') main = <Dashboard summary={ADMIN_SUMMARY} insight={insight} timeWindow={timeWindow} onTimeWindow={setTimeWindow} onGenerate={generateInsight} onOpenChat={openChat} insightStatus={insightStatus} />;
-  else if (route === 'kb') main = <KBManage collections={collections} docs={docs} canManage={isSuperAdmin} onUpload={uploadDoc} onRetry={retryDoc} onDelete={deleteDoc} onToggleOfficial={toggleOfficial} onSaveMeta={saveMeta} onCreateCollection={createCollection} />;
+  else if (route === 'kb') main = <KBManage collections={collections} docs={docs} canManage={isSuperAdmin} onUpload={uploadDoc} onRetry={retryDoc} onDelete={deleteDoc} onSaveMeta={saveMeta} onCreateCollection={createCollection} />;
   else if (route === 'users') main = <UsersView users={users} onChangeRole={changeRole} />;
 
   return (

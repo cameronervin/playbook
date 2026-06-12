@@ -39,7 +39,7 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | GET | `/admin/kb/documents` | List KB documents and status | admin |
 | POST | `/admin/kb/documents` | Upload KB document | admin |
 | GET | `/admin/kb/documents/{document_id}` | Get document metadata/status | admin |
-| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags, official flag, priority, source date | admin |
+| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags and source date | admin |
 | POST | `/admin/kb/documents/{document_id}/retry` | Retry failed/ready document processing | admin |
 | DELETE | `/admin/kb/documents/{document_id}` | Delete or archive document | admin |
 
@@ -192,8 +192,7 @@ and `updated_at`.
       "rank": 1,
       "metadata": {
         "document_id": "uuid",
-        "source_date": "2026-01-15",
-        "is_official": true
+        "source_date": "2026-01-15"
       }
     }
   ],
@@ -208,8 +207,6 @@ Content-Type: multipart/form-data
 
 file=@nil-handbook.pdf
 metadata_tags={"topic":"nil","source_type":"policy"}
-is_official=true
-priority=10
 source_date=2026-01-15
 ```
 

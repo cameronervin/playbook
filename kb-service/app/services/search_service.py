@@ -5,11 +5,10 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.configuration_repo import ConfigurationRepository
 from app.repositories.vector_repo import AsyncVectorRepository
-from app.schemas.search import SearchChunk, SearchRequest, SearchResponse
+from app.schemas.search import SearchRequest, SearchResponse, SearchResult
+from app.services.configuration_service import ConfigurationService
 
 if TYPE_CHECKING:
     # Imported only for typing — the concrete provider (and its openai dependency)
@@ -19,32 +18,43 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+def _metadata_filter_from_visibility_context(
+    visibility_context: dict,
+) -> dict[str, object]:
+    visibility_policy = visibility_context.get("visibility_policy")
+    if isinstance(visibility_policy, dict):
+        return {"visibility_policy": visibility_policy}
+    if visibility_context.get("role") == "athlete":
+        return {"visibility_policy": {"scope": "all_athletes"}}
+    return {"visibility_policy": {"scope": "all_athletes"}}
+
+
 class SearchService:
     def __init__(
         self,
-        session: AsyncSession,
-        config_repo: ConfigurationRepository,
+        configuration_service: ConfigurationService,
         vector_repo: AsyncVectorRepository,
         embed_provider: "BaseEmbedProvider",
     ) -> None:
-        self._config_repo = config_repo
+        self._config_service = configuration_service
         self._vector_repo = vector_repo
         self._embed_provider = embed_provider
 
     async def search(self, req: SearchRequest) -> SearchResponse:
-        config = await self._config_repo.get(req.configuration_id)
-        if not config:
-            raise LookupError(f"Configuration {req.configuration_id} not found")
+        config = await self._config_service.resolve()
+        metadata_filter = _metadata_filter_from_visibility_context(
+            req.visibility_context
+        )
 
         logger.info(
             "kb_embed_search_request",
             query=req.query,
             organization_id=str(req.organization_id),
-            configuration_id=str(req.configuration_id),
+            configuration_id=str(config.id),
             configuration_name=config.name,
-            max_docs=req.max_docs,
+            limit=req.limit,
             score_threshold=req.score_threshold,
-            metadata_filter=req.metadata_filter,
+            visibility_context=req.visibility_context,
         )
 
         # embed() is a sync, network-bound call. Run it in a worker thread so we
@@ -55,40 +65,40 @@ class SearchService:
                 "kb_embed_search_response",
                 query=req.query,
                 organization_id=str(req.organization_id),
-                configuration_id=str(req.configuration_id),
+                configuration_id=str(config.id),
                 total=0,
-                chunks=[],
+                results=[],
             )
-            return SearchResponse(chunks=[], query=req.query, total=0)
+            return SearchResponse(results=[], query=req.query, total=0)
         query_vector = vectors[0]
 
         chunk_results = await self._vector_repo.search(
-            configuration_id=req.configuration_id,
+            configuration_id=config.id,
             organization_id=req.organization_id,
             query_vector=query_vector,
-            max_docs=req.max_docs,
+            max_docs=req.limit,
             score_threshold=req.score_threshold,
-            metadata_filter=req.metadata_filter,
+            metadata_filter=metadata_filter,
         )
-        response_chunks = [SearchChunk(**chunk) for chunk in chunk_results]
+        response_results = [SearchResult(**chunk) for chunk in chunk_results]
         logger.info(
             "kb_embed_search_response",
             query=req.query,
             organization_id=str(req.organization_id),
-            configuration_id=str(req.configuration_id),
+            configuration_id=str(config.id),
             configuration_name=config.name,
-            total=len(response_chunks),
-            chunks=[
+            total=len(response_results),
+            results=[
                 {
                     "document_id": str(c.document_id),
                     "score": round(c.score, 4),
                     "text_preview": c.text[:200],
                 }
-                for c in response_chunks[:5]
+                for c in response_results[:5]
             ],
         )
         return SearchResponse(
-            chunks=response_chunks,
+            results=response_results,
             query=req.query,
-            total=len(response_chunks),
+            total=len(response_results),
         )

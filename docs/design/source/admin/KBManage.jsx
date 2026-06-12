@@ -4,7 +4,7 @@
    documents read clean. Create/delete gated to super admin; metadata edits
    available to all admins. */
 
-function KBManage({ collections, docs, canManage, onUpload, onRetry, onDelete, onToggleOfficial, onSaveMeta, onCreateCollection }) {
+function KBManage({ collections, docs, canManage, onUpload, onRetry, onDelete, onSaveMeta, onCreateCollection }) {
   const [openId, setOpenId] = React.useState(null);
   const [editId, setEditId] = React.useState(null);
 
@@ -17,7 +17,7 @@ function KBManage({ collections, docs, canManage, onUpload, onRetry, onDelete, o
       {open
         ? <CollectionDetail coll={open} docs={docsFor(open.id)} canManage={canManage}
             onBack={() => setOpenId(null)} onUpload={() => onUpload(open.id)}
-            onEdit={setEditId} onRetry={onRetry} onDelete={onDelete} onToggleOfficial={onToggleOfficial} />
+            onEdit={setEditId} onRetry={onRetry} onDelete={onDelete} />
         : <CollectionGrid collections={collections} docsFor={docsFor} canManage={canManage}
             onOpen={setOpenId} onCreate={() => setOpenId(onCreateCollection())} />}
 
@@ -79,7 +79,7 @@ function CollectionCard({ coll, docs, onClick }) {
 }
 
 /* ---- collection detail: documents within ---- */
-function CollectionDetail({ coll, docs, canManage, onBack, onUpload, onEdit, onRetry, onDelete, onToggleOfficial }) {
+function CollectionDetail({ coll, docs, canManage, onBack, onUpload, onEdit, onRetry, onDelete }) {
   return (
     <React.Fragment>
       <PageHeader title={coll.name} sub={docs.length + ' ' + (docs.length === 1 ? 'document' : 'documents') + ' · grounds athlete answers'}>
@@ -99,7 +99,7 @@ function CollectionDetail({ coll, docs, canManage, onBack, onUpload, onEdit, onR
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               {docs.map(d => <DocItem key={d.id} doc={d} canManage={canManage}
-                onEdit={() => onEdit(d.id)} onRetry={() => onRetry(d.id)} onDelete={() => onDelete(d.id)} onToggleOfficial={() => onToggleOfficial(d.id)} />)}
+                onEdit={() => onEdit(d.id)} onRetry={() => onRetry(d.id)} onDelete={() => onDelete(d.id)} />)}
             </div>
           )}
         </div>
@@ -108,7 +108,7 @@ function CollectionDetail({ coll, docs, canManage, onBack, onUpload, onEdit, onR
   );
 }
 
-function DocItem({ doc, canManage, onEdit, onRetry, onDelete, onToggleOfficial }) {
+function DocItem({ doc, canManage, onEdit, onRetry, onDelete }) {
   const [hover, setHover] = React.useState(false);
   const [menu, setMenu] = React.useState(false);
   const ext = (doc.title.split('.').pop() || '').toLowerCase();
@@ -122,9 +122,8 @@ function DocItem({ doc, canManage, onEdit, onRetry, onDelete, onToggleOfficial }
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, color: 'var(--fg-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>{doc.title}</span>
-            {doc.official && <Icon name="shield-check" size={14} style={{ color: 'var(--success)', flex: 'none' }} title="Official" />}
           </div>
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{doc.size} · {doc.uploaded} · {doc.uploader}{doc.priority === 'High' ? ' · High priority' : ''}</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{doc.size} · {doc.uploaded} · {doc.uploader}</div>
         </div>
 
         {/* tags */}
@@ -147,7 +146,6 @@ function DocItem({ doc, canManage, onEdit, onRetry, onDelete, onToggleOfficial }
               <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
               <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 41, width: 192, background: 'var(--surface-raised)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', padding: 6, animation: 'pbmenu var(--dur-med) var(--ease-out) both' }}>
                 <RowMenuItem icon="pencil" label="Edit metadata" onClick={() => { setMenu(false); onEdit(); }} />
-                <RowMenuItem icon="shield-check" label={doc.official ? 'Remove official flag' : 'Mark official'} onClick={() => { setMenu(false); onToggleOfficial(); }} />
                 {failed && canManage && <RowMenuItem icon="refresh-cw" label="Retry processing" onClick={() => { setMenu(false); onRetry(); }} />}
                 {canManage && <RowMenuItem icon="trash" label="Delete / archive" danger onClick={() => { setMenu(false); onDelete(); }} />}
               </div>
@@ -181,12 +179,10 @@ function RowMenuItem({ icon, label, danger, onClick }) {
 /* ---- metadata edit drawer ---- */
 function MetaDrawer({ doc, canManage, onClose, onSave, onRetry, onDelete }) {
   const [tags, setTags] = React.useState(doc.tags.join(', '));
-  const [official, setOfficial] = React.useState(doc.official);
-  const [priority, setPriority] = React.useState(doc.priority);
   const [sourceDate, setSourceDate] = React.useState(doc.source_date === '—' ? '' : doc.source_date);
   const [visibility, setVisibility] = React.useState(doc.visibility);
 
-  const save = () => onSave({ tags: tags.split(',').map(s => s.trim()).filter(Boolean), official, priority, source_date: sourceDate || '—', visibility });
+  const save = () => onSave({ tags: tags.split(',').map(s => s.trim()).filter(Boolean), source_date: sourceDate || '—', visibility });
 
   return (
     <React.Fragment>
@@ -210,10 +206,6 @@ function MetaDrawer({ doc, canManage, onClose, onSave, onRetry, onDelete }) {
             <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="NIL, Compliance" style={inputStyle} />
           </Field>
 
-          <Field label="Priority" hint="Higher priority is preferred at retrieval">
-            <Segmented options={['Low', 'Normal', 'High']} value={priority} onChange={setPriority} size="sm" />
-          </Field>
-
           <Field label="Source date">
             <input value={sourceDate} onChange={(e) => setSourceDate(e.target.value)} placeholder="e.g. Mar 2026" style={inputStyle} />
           </Field>
@@ -223,17 +215,6 @@ function MetaDrawer({ doc, canManage, onClose, onSave, onRetry, onDelete }) {
               <FilterSelect value={visibility} options={['All athletes', 'Compliance staff', 'Coaches only']} onChange={setVisibility} />
             </div>
           </Field>
-
-          <div onClick={() => setOfficial(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', background: 'var(--surface)', border: '1px solid ' + (official ? 'var(--border-brand)' : 'var(--border)'), borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            <Icon name="shield-check" size={17} style={{ color: official ? 'var(--success)' : 'var(--fg-4)', flex: 'none' }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, color: 'var(--fg-1)' }}>Official source</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--fg-3)' }}>Prefer this document when answers conflict</div>
-            </div>
-            <span style={{ width: 38, height: 22, borderRadius: 'var(--radius-pill)', background: official ? 'var(--brand)' : 'var(--surface-hover)', position: 'relative', flex: 'none', transition: 'background var(--dur-fast)' }}>
-              <span style={{ position: 'absolute', top: 2, left: official ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: official ? 'var(--fg-on-brand)' : 'var(--fg-3)', transition: 'left var(--dur-fast)' }} />
-            </span>
-          </div>
 
           {doc.status === 'failed' && canManage && (
             <PBButton variant="secondary" size="md" icon="refresh-cw" onClick={onRetry} style={{ justifyContent: 'center' }}>Retry processing</PBButton>

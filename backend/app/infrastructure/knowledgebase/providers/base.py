@@ -103,8 +103,15 @@ class BaseKnowledgebaseProvider(ABC):
         """Start ingestion for an admin-uploaded document."""
         raise NotImplementedError
 
-    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
-        """Return KB-service ingestion status for a task/document."""
+    async def get_document_status(self, document_id: str) -> KBDocumentStatusResponse:
+        """Return KB-service ingestion status for a document."""
+        raise NotImplementedError
+
+    async def retry_document(
+        self,
+        kb_service_document_id: str,
+    ) -> KBDocumentIngestResponse:
+        """Retry ingestion for an existing KB-service document."""
         raise NotImplementedError
 
     async def delete_document(self, kb_service_document_id: str) -> None:

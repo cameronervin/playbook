@@ -204,14 +204,12 @@ else
     -F 'title=NIL Handbook' \
     -F 'metadata_tags={"topic":"nil","source_type":"policy"}' \
     -F 'source_date=2026-01-15' \
-    -F 'is_official=true' \
-    -F 'priority=10' \
     -F "file=@$TMP_DIR/playbook-nil-handbook.pdf;type=application/pdf"
   DOC_ID="$(jq -r '.id // empty' "$BODY_FILE")"
   if [ -z "$DOC_ID" ]; then
     fail "KB upload did not return id"
   fi
-  expect_jq "KB upload metadata" '.metadata_tags.topic == "nil" and .is_official == true and .priority == 10'
+  expect_jq "KB upload metadata" '(.metadata_tags.topic == "nil") and (has("is_official") | not) and (has("priority") | not)'
 
   expect_status "KB get document" "200" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -221,8 +219,8 @@ else
     -X PATCH "$BASE/api/v1/admin/kb/documents/$DOC_ID/metadata" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
-    -d '{"metadata_tags":{"topic":"compliance"},"priority":3}'
-  expect_jq "KB metadata updated" '.metadata_tags.topic == "compliance" and .priority == 3'
+    -d '{"metadata_tags":{"topic":"compliance"}}'
+  expect_jq "KB metadata updated" '(.metadata_tags.topic == "compliance") and (has("priority") | not)'
 
   expect_status "KB retry document" "200" \
     -X POST "$BASE/api/v1/admin/kb/documents/$DOC_ID/retry" \

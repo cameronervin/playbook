@@ -27,6 +27,7 @@ from app.core.exceptions import (
 )
 from app.infrastructure.knowledgebase.context import assemble_context
 from app.infrastructure.knowledgebase.dedup import deduplicate_chunks
+from app.infrastructure.knowledgebase.ranking import rank_retrieved_chunks
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
@@ -66,7 +67,6 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
         start = time.monotonic()
-        config_id = configuration_id or await self.resolve_configuration()
         resolved_max_docs = max_docs if max_docs is not None else self.settings.KB_MAX_DOCS
         resolved_score_threshold = (
             score_threshold
@@ -77,18 +77,14 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         payload: dict[str, Any] = {
             "query": query,
             "organization_id": str(organization_id),
-            "max_docs": resolved_max_docs,
+            "limit": resolved_max_docs,
             "score_threshold": resolved_score_threshold,
-            "configuration_id": config_id,
+            "visibility_context": _visibility_context(metadata_filter),
         }
-        if metadata_filter:
-            payload["metadata_filter"] = metadata_filter
 
-        # Current kb-service returns "chunks"; future semantic routes may return
-        # "results" with the same citation-ready item shape.
-        data = await self._post("/api/kb/embed/search", payload)
+        data = await self._post("/api/kb/search", payload)
 
-        raw_items = _search_items(data)
+        raw_items = data.get("results", []) if isinstance(data, dict) else []
         chunks = [
             RetrievedChunk(
                 text=item.get("text", ""),
@@ -97,7 +93,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
             )
             for item in raw_items
         ]
-        chunks = deduplicate_chunks(chunks)
+        chunks = rank_retrieved_chunks(deduplicate_chunks(chunks))
         context = assemble_context(chunks, self.settings.KB_CONTEXT_MAX_TOKENS)
         latency_ms = int((time.monotonic() - start) * 1000)
 
@@ -123,13 +119,11 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         if self._config_id is not None:
             return self._config_id
 
-        # The kb-service has no dedicated resolve endpoint; configurations are
-        # looked up by name via the list route (GET /api/kb/configuration/?name=).
-        data = await self._get(
-            "/api/kb/configuration/", params={"name": self.settings.KB_CONFIG_NAME}
+        data = await self._post(
+            "/api/kb/configuration/resolve",
+            {},
         )
-        rows = data if isinstance(data, list) else []
-        config_id = rows[0].get("id") if rows else None
+        config_id = data.get("id") if isinstance(data, dict) else None
         if not config_id:
             raise KBConfigError(
                 f"KB configuration '{self.settings.KB_CONFIG_NAME}' could not be resolved"
@@ -144,51 +138,58 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         self,
         request: KBDocumentIngestRequest,
     ) -> KBDocumentIngestResponse:
-        """Start ingestion through the current KB-service /ingest/url route."""
+        """Start ingestion through the KB-service semantic document route."""
         config_id = await self.resolve_configuration()
         payload = {
-            "document_id": str(request.playbook_document_id),
             "organization_id": str(request.organization_id),
+            "playbook_document_id": str(request.playbook_document_id),
             "configuration_id": config_id,
-            "url": request.source_uri,
+            "source_uri": request.source_uri,
             "filename": request.filename,
-            "metadata": {
-                "organization_id": str(request.organization_id),
-                "playbook_document_id": str(request.playbook_document_id),
-                "source_title": request.source_title,
-                "source_date": (
-                    request.source_date.isoformat() if request.source_date else None
-                ),
-                "is_official": request.is_official,
-                "priority": request.priority,
-                "visibility_policy": request.visibility_policy,
-                "metadata_tags": request.metadata_tags,
-                "content_type": request.content_type,
-                "size_bytes": request.size_bytes,
-            },
+            "content_type": request.content_type,
+            "size_bytes": request.size_bytes,
+            "source_title": request.source_title,
+            "source_date": request.source_date.isoformat() if request.source_date else None,
+            "is_official": request.is_official,
+            "priority": request.priority,
+            "visibility_policy": request.visibility_policy,
+            "metadata_tags": request.metadata_tags,
         }
-        data = await self._post("/api/kb/ingest/url", payload)
+        data = await self._post("/api/kb/ingest/document", payload)
         return KBDocumentIngestResponse(
-            kb_service_document_id=data["document_id"],
+            kb_service_document_id=data["kb_service_document_id"],
             playbook_document_id=request.playbook_document_id,
             task_id=data.get("task_id"),
-            status="pending",
+            status=data.get("status", "pending"),
         )
 
-    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
-        """Fetch task status through the current KB-service polling route."""
-        data = await self._get(f"/api/kb/status/{task_id}")
+    async def get_document_status(self, document_id: str) -> KBDocumentStatusResponse:
+        """Fetch document status through the KB-service semantic route."""
+        data = await self._get(f"/api/kb/status/documents/{document_id}")
         return KBDocumentStatusResponse(
-            document_id=data.get("document_id"),
-            task_id=data.get("task_id", task_id),
-            status=data.get("celery_state"),
+            document_id=data.get("kb_service_document_id"),
+            task_id=data.get("task_id"),
+            status=data.get("status"),
             error_message=data.get("error_message"),
             metadata={"stages": data.get("stages", [])},
         )
 
+    async def retry_document(
+        self,
+        kb_service_document_id: str,
+    ) -> KBDocumentIngestResponse:
+        """Retry ingestion through the KB-service semantic route."""
+        data = await self._post(f"/api/kb/documents/{kb_service_document_id}/retry", {})
+        return KBDocumentIngestResponse(
+            kb_service_document_id=data["kb_service_document_id"],
+            playbook_document_id=data["playbook_document_id"],
+            task_id=data.get("task_id"),
+            status=data.get("status", "pending"),
+        )
+
     async def delete_document(self, kb_service_document_id: str) -> None:
-        """Delete a document through the current KB-service route."""
-        await self._delete(f"/api/kb/document/{kb_service_document_id}")
+        """Delete a document through the KB-service semantic route."""
+        await self._delete(f"/api/kb/documents/{kb_service_document_id}")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -263,12 +264,8 @@ def _chunk_metadata(item: dict[str, Any]) -> dict[str, Any]:
     return metadata
 
 
-def _search_items(data: Any) -> list[dict[str, Any]]:
-    if not isinstance(data, dict):
-        return []
-    items = data.get("results")
-    if items is None:
-        items = data.get("chunks", [])
-    if not isinstance(items, list):
-        return []
-    return [item for item in items if isinstance(item, dict)]
+def _visibility_context(metadata_filter: dict | None) -> dict[str, Any]:
+    visibility_policy = (metadata_filter or {}).get("visibility_policy")
+    if isinstance(visibility_policy, dict):
+        return {"role": "athlete", "visibility_policy": visibility_policy}
+    return {"role": "athlete"}

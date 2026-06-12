@@ -48,7 +48,7 @@ from app.infrastructure.embedders.factory import build_fresh_embed_provider
 logger = structlog.get_logger(__name__)
 
 # Public Celery app object. Named ``kb_worker`` and imported by the service
-# layer (ingestion/status services) as well as ``tasks.py``.
+# layer (ingestion/status services) as well as the ``tasks`` package.
 kb_worker = Celery("kb", broker=settings.CELERY_BROKER_URL)
 
 kb_worker.conf.update(
@@ -89,7 +89,7 @@ kb_worker.conf.update(
 )
 
 
-import app.workers.tasks  # noqa: F401, E402 — must import to register tasks with kb_worker
+import app.workers.tasks  # noqa: F401, E402, I001 — must import to register tasks with kb_worker
 
 
 # Module-level singletons — populated on worker startup.

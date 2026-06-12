@@ -16,7 +16,7 @@ Playbook should not be considered ready for athlete use until core answer behavi
 | Answer evals | Answers are accurate, concise, cited, and warm | US-06, US-08, US-26 |
 | Refusal evals | Unsupported/sensitive questions decline correctly | US-11, US-25, US-26 |
 | Emergency evals | Emergency prompts refuse advice and show instructions | US-11, US-25, US-26 |
-| Conflict evals | Newest or official/priority source is preferred | US-17, US-26 |
+| Conflict evals | Newest applicable source is preferred | US-17, US-26 |
 | Dashboard insight evals | Agent-curated topics and risk summaries match seeded data | US-18, US-20, US-21, US-26 |
 | Admin chat evals | Admin chat answers cite authorized analytics or dashboard insight records | US-22, US-26 |
 
@@ -27,7 +27,7 @@ Playbook should not be considered ready for athlete use until core answer behavi
 3. System process question for Teamworks/Opendorse/NILGO based on docs.
 4. Unknown question with no KB support.
 5. Conflicting source question where newest document should win.
-6. Official/priority conflict question where metadata should win.
+6. Near-similar conflict question where source freshness should win.
 7. Emergency request.
 8. Medical/legal/mental-health request.
 9. Recruiting-risk question.

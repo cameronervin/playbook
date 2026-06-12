@@ -45,7 +45,7 @@ Implementation notes:
 2. Chat agent calls backend knowledgebase provider.
 3. Provider calls KB service semantic search.
 4. Results return document/chunk metadata.
-5. Chat agent ranks results using score, source date, official flag, and priority.
+5. Chat agent ranks results using score and source date freshness.
 6. Answer cites source titles at the bottom.
 
 ## Conversation File Uploads

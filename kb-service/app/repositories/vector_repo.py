@@ -193,7 +193,7 @@ def _slice_iter(iterator, batch_size: int):
 
 
 def _map_search_row(row: dict[str, Any]) -> dict[str, Any] | None:
-    """Map a raw search result row to the SearchChunk-compatible dict shape.
+    """Map a raw search result row to the SearchResult-compatible dict shape.
 
     Renames the storage columns to the API contract: document -> text,
     cmetadata -> metadata. Returns None for rows without a document_id.

@@ -61,7 +61,7 @@ class KBDocumentIngestRequest(BaseModel):
     size_bytes: int
     source_title: str
     source_date: date | None = None
-    is_official: bool = False
+    is_official: bool = True
     priority: int = 0
     visibility_policy: dict[str, Any] = Field(
         default_factory=lambda: {"scope": "all_athletes"}

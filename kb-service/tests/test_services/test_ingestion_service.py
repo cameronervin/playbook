@@ -5,7 +5,11 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.services.ingestion_service import _metadata_with_organization
+from app.schemas.ingest import IngestDocumentRequest
+from app.services.ingestion_service import (
+    _metadata_from_ingest_request,
+    _metadata_with_organization,
+)
 
 
 def test_metadata_with_organization_stamps_missing_scope() -> None:
@@ -31,3 +35,25 @@ def test_metadata_with_organization_rejects_conflicting_scope() -> None:
 
     assert exc_info.value.status_code == 400
     assert "organization_id" in str(exc_info.value.detail)
+
+
+def test_ingest_metadata_normalizes_admin_documents_as_official_without_priority() -> None:
+    request = IngestDocumentRequest(
+        organization_id=uuid4(),
+        playbook_document_id=uuid4(),
+        configuration_id=uuid4(),
+        source_uri="s3://bucket/nil.pdf",
+        filename="nil.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="NIL Handbook",
+        is_official=False,
+        priority=10,
+        metadata_tags={"topic": "nil"},
+    )
+
+    metadata = _metadata_from_ingest_request(request)
+
+    assert metadata["is_official"] is True
+    assert metadata["priority"] == 0
+    assert metadata["metadata_tags"] == {"topic": "nil"}

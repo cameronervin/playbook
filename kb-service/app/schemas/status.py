@@ -1,4 +1,4 @@
-"""Pydantic schemas for GET /api/kb/status/{task_id} (polling fallback)."""
+"""Pydantic schemas for document status contract endpoints."""
 from __future__ import annotations
 
 import uuid
@@ -17,6 +17,16 @@ class TaskStatusResponse(BaseModel):
     task_id: str
     document_id: uuid.UUID | None
     celery_state: str | None
+    stages: list[StageStatus]
+    error_message: str | None = None
+    updated_at: datetime | None = None
+
+
+class DocumentStatusResponse(BaseModel):
+    kb_service_document_id: uuid.UUID
+    playbook_document_id: uuid.UUID | None = None
+    task_id: str | None = None
+    status: str | None = None
     stages: list[StageStatus]
     error_message: str | None = None
     updated_at: datetime | None = None

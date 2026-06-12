@@ -68,6 +68,17 @@ class _FakeLocalKBProvider(LocalKBProvider):
         return self.payload
 
 
+class _RecordingLocalKBProvider(LocalKBProvider):
+    def __init__(self, settings, payload: dict) -> None:
+        super().__init__(settings)
+        self.payload = payload
+        self.posts: list[tuple[str, dict]] = []
+
+    async def _post(self, path: str, json_body: dict) -> dict:
+        self.posts.append((path, json_body))
+        return self.payload
+
+
 async def _invoke_tool(tool, query: str):
     return await tool.ainvoke(
         {"query": query},
@@ -134,6 +145,8 @@ async def test_knowledgebase_tool_uses_profile_name_description_and_filters() ->
     ]
     assert "[S-" in result
     assert "NIL Handbook" in result
+    assert "Official:" not in result
+    assert "Priority:" not in result
     assert list(source_registry.values())[0].source_title == "NIL Handbook"
 
 
@@ -170,11 +183,11 @@ async def test_knowledgebase_tool_formats_citation_ready_metadata() -> None:
     assert "Chunk index: 4" in result
 
 
-async def test_local_kb_provider_accepts_enriched_chunks_payload(test_settings) -> None:
+async def test_local_kb_provider_accepts_canonical_results_payload(test_settings) -> None:
     provider = _FakeLocalKBProvider(
         test_settings,
         {
-            "chunks": [
+            "results": [
                 {
                     "document_id": "00000000-0000-0000-0000-000000000011",
                     "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
@@ -193,7 +206,10 @@ async def test_local_kb_provider_accepts_enriched_chunks_payload(test_settings) 
     result = await provider.search("nil disclosure", organization_id=ORG_ID)
     await provider.close()
 
+    assert provider.posts[0][0] == "/api/kb/search"
     assert provider.posts[0][1]["organization_id"] == str(ORG_ID)
+    assert provider.posts[0][1]["limit"] == 10
+    assert provider.posts[0][1]["visibility_context"] == {"role": "athlete"}
     assert result.zero_hit is False
     assert result.sources[0].metadata["document_id"] == (
         "00000000-0000-0000-0000-000000000011"
@@ -209,11 +225,63 @@ async def test_local_kb_provider_accepts_enriched_chunks_payload(test_settings) 
     assert result.sources[0].metadata["score"] == 0.91
 
 
-async def test_local_kb_provider_accepts_future_results_payload(test_settings) -> None:
+async def test_local_kb_provider_ranks_near_matches_by_source_date_only(
+    test_settings,
+) -> None:
     provider = _FakeLocalKBProvider(
         test_settings,
         {
             "results": [
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000011",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                    "chunk_id": "00000000-0000-0000-0000-000000000012",
+                    "chunk_index": 1,
+                    "text": "Older high-priority guidance.",
+                    "score": 0.93,
+                    "metadata": {
+                        "source_title": "Older Guide",
+                        "source_date": "2026-01-01",
+                        "is_official": True,
+                        "priority": 100,
+                    },
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000031",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000041",
+                    "chunk_id": "00000000-0000-0000-0000-000000000032",
+                    "chunk_index": 2,
+                    "text": "Newer normal guidance.",
+                    "score": 0.91,
+                    "metadata": {
+                        "source_title": "Newer Guide",
+                        "source_date": "2026-03-01",
+                        "is_official": False,
+                        "priority": 0,
+                    },
+                },
+            ],
+            "query": "nil disclosure",
+            "total": 2,
+        },
+    )
+
+    result = await provider.search("nil disclosure", organization_id=ORG_ID)
+    await provider.close()
+
+    assert [chunk.metadata["source_title"] for chunk in result.sources] == [
+        "Newer Guide",
+        "Older Guide",
+    ]
+
+
+async def test_local_kb_provider_does_not_accept_legacy_chunks_payload(
+    test_settings,
+) -> None:
+    provider = _FakeLocalKBProvider(
+        test_settings,
+        {
+            "chunks": [
                 {
                     "document_id": "00000000-0000-0000-0000-000000000031",
                     "kb_service_document_id": "00000000-0000-0000-0000-000000000041",
@@ -235,11 +303,26 @@ async def test_local_kb_provider_accepts_future_results_payload(test_settings) -
     result = await provider.search("compliance", organization_id=ORG_ID)
     await provider.close()
 
-    assert provider.posts[0][1]["organization_id"] == str(ORG_ID)
-    assert result.sources[0].text == "Compliance text."
-    assert result.sources[0].metadata["source_title"] == "Compliance Manual"
-    assert result.sources[0].metadata["source_date"] == "2026-02-01"
-    assert result.sources[0].metadata["chunk_index"] == 9
+    assert provider.posts[0][0] == "/api/kb/search"
+    assert result.zero_hit is True
+    assert result.sources == []
+
+
+async def test_local_kb_provider_resolves_default_configuration_without_manual_collection(
+    test_settings,
+) -> None:
+    provider = _RecordingLocalKBProvider(
+        test_settings,
+        {"id": "00000000-0000-0000-0000-000000000051"},
+    )
+
+    first = await provider.resolve_configuration()
+    second = await provider.resolve_configuration()
+    await provider.close()
+
+    assert first == "00000000-0000-0000-0000-000000000051"
+    assert second == first
+    assert provider.posts == [("/api/kb/configuration/resolve", {})]
 
 
 async def test_athlete_kb_tool_filters_by_visibility_policy_scope() -> None:

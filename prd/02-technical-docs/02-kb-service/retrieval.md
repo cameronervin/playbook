@@ -22,7 +22,7 @@ Athlete conversation files are not searched by the KB service in MVP.
 4. KB service embeds the query.
 5. KB service runs cosine similarity search against ready vectors.
 6. KB service returns chunk text, score, document IDs, and metadata.
-7. Main backend may re-rank or filter using safety policy, source date, official flag, and priority.
+7. Main backend may re-rank or filter using safety policy and source date.
 8. Assistant answer cites returned sources through `message_citations`.
 
 ## Required Filtering
@@ -45,11 +45,12 @@ vectors without organization metadata are not eligible for retrieval.
 The KB service returns similarity score and metadata. Final answer orchestration
 may combine:
 - vector similarity score,
-- `is_official`,
-- `priority`,
 - `source_date`,
 - freshness/conflict rules,
 - safety/risk category.
+
+Admin-uploaded shared KB documents are official by definition for MVP, and
+priority is not used as a ranking control.
 
 KB search should not fabricate policy conclusions. It only returns retrieved
 chunks and metadata.
@@ -65,8 +66,6 @@ Each result must include:
 - `score`,
 - `metadata.source_title`,
 - `metadata.source_date`,
-- `metadata.is_official`,
-- `metadata.priority`,
 - `metadata.organization_id`,
 - `metadata.visibility_policy`.
 

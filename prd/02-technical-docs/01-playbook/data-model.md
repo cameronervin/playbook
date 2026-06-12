@@ -379,7 +379,10 @@ Checkpoint requirements:
 - `organization_id` enables future multi-college support.
 - `visibility_policy` enables future sport/team/audience document access.
 - `role` can evolve into normalized role assignments if coach/compliance/NIL personas are added.
-- `metadata_tags`, `is_official`, `priority`, and `source_date` support deterministic retrieval conflict handling.
+- `metadata_tags` and `source_date` support deterministic retrieval conflict handling.
+- `is_official` and `priority` remain internal compatibility columns for MVP;
+  admin-uploaded shared KB documents are treated as official and priority is not
+  a user-facing ranking control.
 - `conversation_file_chunks` can later gain private conversation-scoped embeddings,
   but those vectors must remain filtered by `conversation_id`/owner and separate
   from the shared KB corpus.

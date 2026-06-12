@@ -112,14 +112,14 @@ const ADMIN_INSIGHT_RUNS = [
 /* ---------------- KB documents (GET /admin/kb/documents) ---------------- */
 // status: uploaded | processing | ready | failed
 const ADMIN_DOCS = [
-  { id: 'doc_a1', collId: 'compliance', title: 'NIL_POLICY_2025.PDF', type: 'PDF', size: '1.8 MB', status: 'ready', uploaded: 'Mar 14, 2026', uploader: 'You', tags: ['NIL', 'Compliance'], official: true, priority: 'High', source_date: 'Mar 2026', visibility: 'All athletes', reason: null },
-  { id: 'doc_a2', collId: 'compliance', title: 'NCAA_BYLAW_13.PDF', type: 'PDF', size: '3.2 MB', status: 'ready', uploaded: 'Jan 9, 2026', uploader: 'M. Carter', tags: ['Recruiting', 'Compliance'], official: true, priority: 'High', source_date: 'Aug 2025', visibility: 'All athletes', reason: null },
-  { id: 'doc_a3', collId: 'travel', title: 'PER_DIEM_RATES.XLSX', type: 'XLSX', size: '88 KB', status: 'ready', uploaded: 'Jun 1, 2026', uploader: 'You', tags: ['Travel'], official: true, priority: 'Normal', source_date: 'Jun 2026', visibility: 'All athletes', reason: null },
-  { id: 'doc_a4', collId: 'compliance', title: 'NIL_AGENCY_GUIDE_2027.DOCX', type: 'DOCX', size: '640 KB', status: 'processing', uploaded: 'Jun 3, 2026', uploader: 'You', tags: ['NIL'], official: false, priority: 'Normal', source_date: '—', visibility: 'All athletes', reason: null },
-  { id: 'doc_a5', collId: 'academics', title: 'STUDY_HALL_POLICY.PDF', type: 'PDF', size: '420 KB', status: 'ready', uploaded: 'Feb 2, 2026', uploader: 'R. Diaz', tags: ['Academics'], official: true, priority: 'Normal', source_date: 'Jan 2026', visibility: 'All athletes', reason: null },
-  { id: 'doc_a6', collId: 'compliance', title: 'RECRUITING_DEAD_PERIODS.PDF', type: 'PDF', size: '1.1 MB', status: 'failed', uploaded: 'Jun 3, 2026', uploader: 'You', tags: ['Recruiting'], official: false, priority: 'High', source_date: '—', visibility: 'All athletes', reason: 'Scanned PDF — no extractable text layer. Re-upload a text-based version.' },
-  { id: 'doc_a7', collId: 'donor', title: 'BOOSTER_HANDBOOK_2024.PPTX', type: 'PPTX', size: '12.4 MB', status: 'ready', uploaded: 'Nov 18, 2025', uploader: 'M. Carter', tags: ['Donor', 'Compliance'], official: false, priority: 'Low', source_date: 'Nov 2024', visibility: 'All athletes', reason: null },
-  { id: 'doc_a8', collId: 'compliance', title: 'TRANSFER_PORTAL_SOP.PDF', type: 'PDF', size: '560 KB', status: 'uploaded', uploaded: 'Jun 3, 2026', uploader: 'You', tags: ['Compliance'], official: false, priority: 'Normal', source_date: 'Jan 2026', visibility: 'All athletes', reason: null },
+  { id: 'doc_a1', collId: 'compliance', title: 'NIL_POLICY_2025.PDF', type: 'PDF', size: '1.8 MB', status: 'ready', uploaded: 'Mar 14, 2026', uploader: 'You', tags: ['NIL', 'Compliance'], source_date: 'Mar 2026', visibility: 'All athletes', reason: null },
+  { id: 'doc_a2', collId: 'compliance', title: 'NCAA_BYLAW_13.PDF', type: 'PDF', size: '3.2 MB', status: 'ready', uploaded: 'Jan 9, 2026', uploader: 'M. Carter', tags: ['Recruiting', 'Compliance'], source_date: 'Aug 2025', visibility: 'All athletes', reason: null },
+  { id: 'doc_a3', collId: 'travel', title: 'PER_DIEM_RATES.XLSX', type: 'XLSX', size: '88 KB', status: 'ready', uploaded: 'Jun 1, 2026', uploader: 'You', tags: ['Travel'], source_date: 'Jun 2026', visibility: 'All athletes', reason: null },
+  { id: 'doc_a4', collId: 'compliance', title: 'NIL_AGENCY_GUIDE_2027.DOCX', type: 'DOCX', size: '640 KB', status: 'processing', uploaded: 'Jun 3, 2026', uploader: 'You', tags: ['NIL'], source_date: '—', visibility: 'All athletes', reason: null },
+  { id: 'doc_a5', collId: 'academics', title: 'STUDY_HALL_POLICY.PDF', type: 'PDF', size: '420 KB', status: 'ready', uploaded: 'Feb 2, 2026', uploader: 'R. Diaz', tags: ['Academics'], source_date: 'Jan 2026', visibility: 'All athletes', reason: null },
+  { id: 'doc_a6', collId: 'compliance', title: 'RECRUITING_DEAD_PERIODS.PDF', type: 'PDF', size: '1.1 MB', status: 'failed', uploaded: 'Jun 3, 2026', uploader: 'You', tags: ['Recruiting'], source_date: '—', visibility: 'All athletes', reason: 'Scanned PDF — no extractable text layer. Re-upload a text-based version.' },
+  { id: 'doc_a7', collId: 'donor', title: 'BOOSTER_HANDBOOK_2024.PPTX', type: 'PPTX', size: '12.4 MB', status: 'ready', uploaded: 'Nov 18, 2025', uploader: 'M. Carter', tags: ['Donor', 'Compliance'], source_date: 'Nov 2024', visibility: 'All athletes', reason: null },
+  { id: 'doc_a8', collId: 'compliance', title: 'TRANSFER_PORTAL_SOP.PDF', type: 'PDF', size: '560 KB', status: 'uploaded', uploaded: 'Jun 3, 2026', uploader: 'You', tags: ['Compliance'], source_date: 'Jan 2026', visibility: 'All athletes', reason: null },
 ];
 
 /* ---------------- KB collections (how documents are divided) ---------------- */
@@ -146,7 +146,7 @@ const ADMIN_AUDIT = [
   { id: 'ev_02', actor: 'You', action: 'kb.upload', label: 'Uploaded KB document', target_type: 'document', target_id: 'doc_a8', when: 'Jun 3 · 1:55 PM', meta: 'TRANSFER_PORTAL_SOP.PDF' },
   { id: 'ev_03', actor: 'You', action: 'kb.upload', label: 'Uploaded KB document', target_type: 'document', target_id: 'doc_a6', when: 'Jun 3 · 1:40 PM', meta: 'RECRUITING_DEAD_PERIODS.PDF · failed processing' },
   { id: 'ev_04', actor: 'M. Carter', action: 'role.change', label: 'Promoted user to admin', target_type: 'user', target_id: 'u6', when: 'Jun 2 · 9:12 AM', meta: 'd.lowe@okstate.edu · athlete → admin' },
-  { id: 'ev_05', actor: 'You', action: 'kb.metadata', label: 'Updated document metadata', target_type: 'document', target_id: 'doc_a3', when: 'Jun 1 · 4:03 PM', meta: 'PER_DIEM_RATES.XLSX · priority: Normal, official: true' },
+  { id: 'ev_05', actor: 'You', action: 'kb.metadata', label: 'Updated document metadata', target_type: 'document', target_id: 'doc_a3', when: 'Jun 1 · 4:03 PM', meta: 'PER_DIEM_RATES.XLSX · source date: Jun 2026' },
   { id: 'ev_06', actor: 'R. Diaz', action: 'kb.delete', label: 'Archived KB document', target_type: 'document', target_id: 'doc_x9', when: 'May 30 · 11:20 AM', meta: 'TICKET_TRANSFER_GUIDE_OLD.PDF' },
   { id: 'ev_07', actor: 'M. Carter', action: 'kb.retry', label: 'Retried failed document', target_type: 'document', target_id: 'doc_a2', when: 'Jan 9 · 10:02 AM', meta: 'NCAA_BYLAW_13.PDF' },
 ];

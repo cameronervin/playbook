@@ -14,7 +14,7 @@ Related docs:
 
 ## Issues To Resolve
 
-1. **Visibility filter mismatch**: athlete chat filters on `visibility_scope`,
+1. **Resolved — Visibility filter mismatch**: athlete chat filters on `visibility_scope`,
    while KB ingestion stores `visibility_policy`. Normalize on
    `visibility_policy.scope`.
 2. **Resolved — Missing organization scoping**: retrieval now requires trusted
@@ -22,7 +22,7 @@ Related docs:
    value, and filters vector search by `organization_id` before returning
    chunks. Existing vectors without org metadata are intentionally invisible
    until re-ingested or backfilled.
-3. **Unready documents may be searchable**: KB search reads vector rows directly
+3. **Resolved — Unready documents may be searchable**: KB search reads vector rows directly
    without filtering against ready/success document status. Failed,
    in-progress, and deleted documents must be excluded.
 4. **Resolved — Citation metadata is incomplete**: KB vector inserts now stamp
@@ -32,20 +32,27 @@ Related docs:
    top level plus in `metadata`. The backend local provider accepts both
    current `chunks` and future `results` payloads and persists citations with
    Playbook `document_id`, stable `chunk_id`, and full source metadata.
-5. **Default KB configuration is manual/fragile**: keep the configuration
-   concept, but make the default Playbook configuration automatic and
-   idempotent so fresh local ingest/search does not require manual setup.
-6. **KB-service API contract drift**: reconcile PRD semantic routes with the
-   current scaffold routes, or document the intentional adapter mapping.
-7. **No-text extraction is unclear**: documents that produce zero usable chunks
-   should fail with a clear no-text reason instead of silently continuing.
-8. **Ranking/conflict handling is incomplete**: retrieval/agent orchestration
-   does not yet apply `is_official`, `priority`, and `source_date` conflict
-   rules.
+5. **Resolved — Default KB configuration is automatic/idempotent**: KB-service
+   `/configuration/resolve` now owns the singleton Playbook defaults, recovers
+   from concurrent first-call creates, and search resolves the default before
+   vector lookup so fresh local ingest/search does not require manual setup.
+6. **Resolved — KB-service API contract drift**: reconciled with a hard cutover to PRD
+   semantic routes only. Backend `LocalKBProvider` now calls canonical
+   `/configuration/resolve`, `/ingest/document`, `/search`,
+   `/status/documents/{document_id}`, `/documents/{document_id}/retry`, and
+   `/documents/{document_id}` routes; old scaffold routes are absent from
+   OpenAPI and return 404.
+7. **Resolved — No-text extraction is unclear**: documents that produce zero
+   usable parser text or zero usable chunks now fail with a clear
+   `NO_TEXT_EXTRACTED` reason instead of silently continuing.
+8. **Resolved — MVP ranking/conflict handling uses freshness only**:
+   admin-uploaded shared KB documents are official by definition, priority is
+   not a user-facing MVP ranking control, and backend retrieval ranks
+   near-similar chunks by `source_date`.
 9. **OCR is stubbed**: future OCR should use a LiteLLM-routed vision model, not
    AWS Textract. Implement the `vlm` provider path and avoid adding Textract
    dependencies.
-10. **Env names differ across services**: reconcile KB-service names with
+10. **Resolved — Env names differ across services**: reconcile KB-service names with
     backend names for LiteLLM and S3/MinIO, or support aliases with documented
     precedence.
 
@@ -64,8 +71,8 @@ Key code areas:
   `visibility_policy.scope`.
 - Filter KB search by successful/ready document status before returning chunks.
 - Return citation-ready search metadata: Playbook document ID, KB-service
-  document ID, chunk ID/index, text, score, source title/date, official flag,
-  priority, and visibility policy.
+  document ID, chunk ID/index, text, score, source title/date, and visibility
+  policy.
 - Implement OCR/VLM through LiteLLM model aliases and LiteLLM credentials. Do
   not implement Textract for this product path.
 - Reconcile env naming around:

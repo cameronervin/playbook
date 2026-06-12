@@ -1,4 +1,4 @@
-"""Pydantic schemas for POST /api/kb/embed/search."""
+"""Pydantic schemas for POST /api/kb/search."""
 from __future__ import annotations
 
 import uuid
@@ -12,13 +12,12 @@ from app.core.config import settings
 class SearchRequest(BaseModel):
     query: str
     organization_id: uuid.UUID
-    configuration_id: uuid.UUID
-    max_docs: int = Field(settings.KB_SEARCH_MAX_DOCS, ge=1, le=100)
+    visibility_context: dict[str, Any] = Field(default_factory=dict)
+    limit: int = Field(settings.KB_SEARCH_MAX_DOCS, ge=1, le=100)
     score_threshold: float = Field(settings.KB_SEARCH_SCORE_THRESHOLD, ge=0.0, le=1.0)
-    metadata_filter: dict[str, Any] | None = None
 
 
-class SearchChunk(BaseModel):
+class SearchResult(BaseModel):
     document_id: uuid.UUID
     kb_service_document_id: uuid.UUID
     chunk_id: uuid.UUID | None = None
@@ -29,6 +28,6 @@ class SearchChunk(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    chunks: list[SearchChunk]
+    results: list[SearchResult]
     query: str
     total: int

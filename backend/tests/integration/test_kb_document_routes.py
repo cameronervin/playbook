@@ -58,6 +58,7 @@ class FakeKnowledgebaseProvider:
     def __init__(self) -> None:
         self.ingest_requests: list[KBDocumentIngestRequest] = []
         self.deleted_document_ids: list[str] = []
+        self.retried_document_ids: list[str] = []
 
     @property
     def provider_name(self) -> str:
@@ -97,8 +98,19 @@ class FakeKnowledgebaseProvider:
             task_id=f"task-{len(self.ingest_requests)}",
         )
 
-    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
-        return KBDocumentStatusResponse(task_id=task_id, status="pending")
+    async def get_document_status(self, document_id: str) -> KBDocumentStatusResponse:
+        return KBDocumentStatusResponse(task_id=document_id, status="pending")
+
+    async def retry_document(
+        self,
+        kb_service_document_id: str,
+    ) -> KBDocumentIngestResponse:
+        self.retried_document_ids.append(kb_service_document_id)
+        return KBDocumentIngestResponse(
+            kb_service_document_id=UUID(kb_service_document_id),
+            playbook_document_id=self.ingest_requests[0].playbook_document_id,
+            task_id=f"retry-task-{len(self.retried_document_ids)}",
+        )
 
     async def delete_document(self, kb_service_document_id: str) -> None:
         self.deleted_document_ids.append(kb_service_document_id)
@@ -143,8 +155,6 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
             "title": "NIL Handbook",
             "metadata_tags": '{"topic":"nil","source_type":"policy"}',
             "source_date": "2026-01-15",
-            "is_official": "true",
-            "priority": "10",
         },
         files={"file": ("nil-handbook.pdf", b"NIL policy", "application/pdf")},
     )
@@ -153,14 +163,16 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     uploaded = upload.json()
     document_id = UUID(uploaded["id"])
     assert uploaded["metadata_tags"] == {"topic": "nil", "source_type": "policy"}
-    assert uploaded["is_official"] is True
-    assert uploaded["priority"] == 10
+    assert "is_official" not in uploaded
+    assert "priority" not in uploaded
     assert storage.uploads[0][1] == "application/pdf"
     assert kb_provider.ingest_requests[0].metadata_tags == {
         "topic": "nil",
         "source_type": "policy",
     }
     assert kb_provider.ingest_requests[0].organization_id == admin.organization_id
+    assert kb_provider.ingest_requests[0].is_official is True
+    assert kb_provider.ingest_requests[0].priority == 0
 
     list_response = await route_client.client.get("/api/v1/admin/kb/documents")
     get_response = await route_client.client.get(
@@ -168,7 +180,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     )
     update_response = await route_client.client.patch(
         f"/api/v1/admin/kb/documents/{document_id}/metadata",
-        json={"metadata_tags": {"topic": "compliance"}, "priority": 3},
+        json={"metadata_tags": {"topic": "compliance"}},
     )
     retry_response = await route_client.client.post(
         f"/api/v1/admin/kb/documents/{document_id}/retry"
@@ -178,13 +190,18 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     assert [row["id"] for row in list_response.json()] == [str(document_id)]
     assert get_response.status_code == 200
     assert get_response.json()["id"] == str(document_id)
+    assert "is_official" not in get_response.json()
+    assert "priority" not in get_response.json()
     assert update_response.status_code == 200
     assert update_response.json()["metadata_tags"] == {"topic": "compliance"}
-    assert update_response.json()["priority"] == 3
+    assert "is_official" not in update_response.json()
+    assert "priority" not in update_response.json()
     assert retry_response.status_code == 200
     assert retry_response.json()["processing_status"] == "uploaded"
-    assert len(kb_provider.ingest_requests) == 2
-    assert kb_provider.ingest_requests[1].organization_id == admin.organization_id
+    assert len(kb_provider.ingest_requests) == 1
+    assert kb_provider.retried_document_ids == [
+        str(uploaded["kb_service_document_id"])
+    ]
 
     events = list(
         (
@@ -202,6 +219,8 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
 
     persisted = await db_session.get(KBDocument, document_id)
     assert persisted is not None
+    assert persisted.is_official is True
+    assert persisted.priority == 0
     linked_id = persisted.kb_service_document_id
 
     delete_response = await route_client.client.delete(
@@ -279,11 +298,20 @@ async def test_kb_upload_openapi_documents_metadata_tags_json_string(
     response = await route_client.client.get("/openapi.json")
 
     assert response.status_code == 200
-    metadata_tags = response.json()["components"]["schemas"][
+    upload_properties = response.json()["components"]["schemas"][
         "Body_upload_document_api_v1_admin_kb_documents_post"
-    ]["properties"]["metadata_tags"]
+    ]["properties"]
+    metadata_tags = upload_properties["metadata_tags"]
     assert "JSON object encoded as a string" in metadata_tags["description"]
     assert metadata_tags["examples"] == ['{"topic":"nil","source_type":"policy"}']
+    assert "is_official" not in upload_properties
+    assert "priority" not in upload_properties
+
+    document_properties = response.json()["components"]["schemas"][
+        "KBDocumentResponse"
+    ]["properties"]
+    assert "is_official" not in document_properties
+    assert "priority" not in document_properties
 
 
 @pytest.mark.asyncio

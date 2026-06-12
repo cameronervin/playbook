@@ -53,7 +53,7 @@ Example error response:
 | GET | `/admin/kb/documents` | List KB documents and status |
 | POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
 | GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
-| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags, official flag, priority, and source date |
+| PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags and source date |
 | POST | `/admin/kb/documents/{document_id}/retry` | Retry document ingestion |
 | DELETE | `/admin/kb/documents/{document_id}` | Delete backend document record, original file, and searchable KB vectors |
 | POST | `/kb/webhook` | Receive signed KB-service status callbacks |

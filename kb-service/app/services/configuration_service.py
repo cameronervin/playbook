@@ -8,10 +8,15 @@ from __future__ import annotations
 import uuid
 
 import structlog
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.configuration_repo import ConfigurationRepository
-from app.schemas.configuration import ConfigurationCreate, ConfigurationResponse
+from app.schemas.configuration import (
+    ConfigurationCreate,
+    ConfigurationResolveRequest,
+    ConfigurationResponse,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -26,10 +31,17 @@ _DEFAULT_CHUNK_CONFIG: dict = {
 }
 _DEFAULT_EMBED_CONFIG: dict = {"dimensions": 1536, "model": "playbook-embed"}
 _DEFAULT_VECTORSTORE_CONFIG: dict = {"index_type": "hnsw", "m": 16, "ef_construction": 64}
+DEFAULT_CONFIGURATION_NAME = "Playbook KB Pipeline"
+DEFAULT_COLLECTION_NAME = "playbook-kb"
+
+
+class ConfigurationConflictError(Exception):
+    """Raised when the singleton default configuration conflicts with DB state."""
 
 
 class ConfigurationService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = ConfigurationRepository(session)
 
     async def create(self, data: ConfigurationCreate) -> ConfigurationResponse:
@@ -45,6 +57,51 @@ class ConfigurationService:
         logger.info("kb_configuration_created", config_id=str(config.id), name=config.name)
         return ConfigurationResponse.model_validate(config)
 
+    async def resolve(
+        self,
+        data: ConfigurationResolveRequest | None = None,
+    ) -> ConfigurationResponse:
+        """Return the singleton default configuration, creating it if missing."""
+        _ = data
+        resolved_name = DEFAULT_CONFIGURATION_NAME
+        resolved_collection_name = DEFAULT_COLLECTION_NAME
+        existing = await self._repo.get_by_name(resolved_name)
+        if existing is not None:
+            self._ensure_expected_collection(existing, resolved_collection_name)
+            return ConfigurationResponse.model_validate(existing)
+
+        await self._raise_if_collection_claimed(
+            collection_name=resolved_collection_name,
+            expected_name=resolved_name,
+        )
+
+        try:
+            return await self.create(
+                ConfigurationCreate(
+                    name=resolved_name,
+                    collection_name=resolved_collection_name,
+                )
+            )
+        except IntegrityError:
+            await self._session.rollback()
+            logger.info(
+                "kb_configuration_resolve_conflict_retry",
+                name=resolved_name,
+                collection_name=resolved_collection_name,
+            )
+            raced_existing = await self._repo.get_by_name(resolved_name)
+            if raced_existing is not None:
+                self._ensure_expected_collection(
+                    raced_existing,
+                    resolved_collection_name,
+                )
+                return ConfigurationResponse.model_validate(raced_existing)
+            await self._raise_if_collection_claimed(
+                collection_name=resolved_collection_name,
+                expected_name=resolved_name,
+            )
+            raise
+
     async def get(self, config_id: uuid.UUID) -> ConfigurationResponse | None:
         config = await self._repo.get(config_id)
         if config is None:
@@ -58,3 +115,25 @@ class ConfigurationService:
     async def delete(self, config_id: uuid.UUID) -> None:
         await self._repo.delete(config_id)  # idempotent — no-op if not found
         logger.info("kb_configuration_deleted", config_id=str(config_id))
+
+    @staticmethod
+    def _ensure_expected_collection(
+        config: object,
+        expected_collection_name: str,
+    ) -> None:
+        if getattr(config, "collection_name", None) != expected_collection_name:
+            raise ConfigurationConflictError(
+                "Default KB configuration has an unexpected collection name"
+            )
+
+    async def _raise_if_collection_claimed(
+        self,
+        *,
+        collection_name: str,
+        expected_name: str,
+    ) -> None:
+        existing = await self._repo.get_by_collection_name(collection_name)
+        if existing is not None and getattr(existing, "name", None) != expected_name:
+            raise ConfigurationConflictError(
+                "Default KB collection name is already used by another configuration"
+            )

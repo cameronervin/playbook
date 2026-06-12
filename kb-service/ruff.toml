@@ -51,6 +51,7 @@ combine-as-imports = true
 "app/services/*.py" = ["PLC0415", "BLE001"]
 # Worker tasks: heavy lazy imports inside tasks + broad excepts for resilience.
 "app/workers/*.py" = ["PLC0415", "BLE001", "TRY"]
+"app/workers/**/*.py" = ["PLC0415", "BLE001", "TRY"]
 # Main module uses deferred imports in lifespan + module-level E402 for logging init.
 "app/main.py" = ["PLC0415", "E402"]
 # Alembic migrations are generated; relax import + style rules.

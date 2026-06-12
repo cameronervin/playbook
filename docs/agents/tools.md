@@ -51,8 +51,9 @@ from trusted graph/runtime context and passed to the KB provider separately from
 model-visible tool arguments, so the model cannot choose or override tenant
 scope. Local KB results are normalized into citation-ready metadata including
 Playbook `document_id`, `kb_service_document_id`, stable `chunk_id`,
-`chunk_index`, score, source title/date, official flag, priority, visibility
-policy, and metadata tags; `message_citations` stores the Playbook document and
+`chunk_index`, score, source title/date, visibility policy, and metadata tags.
+All admin-uploaded shared KB documents are treated as official for MVP, and
+retrieval does not use priority ranking. `message_citations` stores the Playbook document and
 chunk IDs in columns and keeps the rest in `source_metadata`.
 
 ## Adding a Tool

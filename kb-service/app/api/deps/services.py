@@ -7,7 +7,6 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
-from app.repositories.configuration_repo import ConfigurationRepository
 from app.repositories.vector_repo import AsyncVectorRepository
 from app.services.configuration_service import ConfigurationService
 from app.services.ingestion_service import IngestionService
@@ -26,7 +25,7 @@ def get_embed_provider_dependency(request: Request) -> "BaseEmbedProvider":
     """
     provider = getattr(request.app.state, "embed_provider", None)
     if provider is None:
-        from app.infrastructure.embedders.factory import get_embed_provider
+        from app.infrastructure.embedders.factory import get_embed_provider  # noqa: I001, PLC0415
 
         request.app.state.embed_provider = get_embed_provider()
         provider = request.app.state.embed_provider
@@ -38,8 +37,7 @@ def get_search_service(
     embed_provider: "BaseEmbedProvider" = Depends(get_embed_provider_dependency),
 ) -> SearchService:
     return SearchService(
-        session=db,
-        config_repo=ConfigurationRepository(db),
+        configuration_service=ConfigurationService(db),
         vector_repo=AsyncVectorRepository(db),
         embed_provider=embed_provider,
     )

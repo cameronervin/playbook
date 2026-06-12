@@ -26,8 +26,6 @@ class KBDocumentResponse(BaseModel):
     visibility_policy: dict[str, Any]
     metadata_tags: dict[str, Any]
     source_date: date | None = None
-    is_official: bool
-    priority: int
     kb_service_document_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
@@ -40,8 +38,6 @@ class KBDocumentMetadataUpdateRequest(BaseModel):
 
     metadata_tags: dict[str, Any] | None = None
     source_date: date | None = None
-    is_official: bool | None = None
-    priority: int | None = Field(default=None, ge=0)
 
 
 class KBDocumentEventResponse(BaseModel):

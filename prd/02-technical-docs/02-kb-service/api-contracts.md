@@ -18,9 +18,20 @@ All non-health endpoints require service-to-service bearer authentication.
 | DELETE | `/documents/{document_id}` | Delete/archive a KB-service document and its vectors |
 | POST | `/search` | Search ready shared KB chunks |
 
-Existing scaffold endpoints may use different names. Implementation should either
-adapt them to this contract or provide backend adapter methods that expose this
-semantic interface.
+The KB service exposes these semantic endpoints directly. Older scaffold route
+names are not part of the supported contract.
+
+## Resolve Default Configuration
+
+```json
+POST /api/kb/configuration/resolve
+{}
+```
+
+The KB service owns one MVP default configuration. The endpoint creates
+`Playbook KB Pipeline` with collection `playbook-kb` when missing, returns the
+same row on repeated calls, and is safe for fresh local databases. Callers do
+not need to provide a name or collection name.
 
 ## Start Ingestion
 
@@ -36,8 +47,6 @@ POST /api/kb/ingest/document
   "size_bytes": 123456,
   "source_title": "NIL Handbook",
   "source_date": "2026-01-15",
-  "is_official": true,
-  "priority": 10,
   "visibility_policy": { "scope": "all_athletes" },
   "metadata_tags": {
     "topic": "nil",
@@ -53,6 +62,7 @@ Response:
 {
   "kb_service_document_id": "uuid",
   "playbook_document_id": "uuid",
+  "task_id": "celery-task-id",
   "status": "pending"
 }
 ```
@@ -119,8 +129,6 @@ Response:
       "metadata": {
         "source_title": "NIL Handbook",
         "source_date": "2026-01-15",
-        "is_official": true,
-        "priority": 10,
         "organization_id": "uuid",
         "visibility_policy": { "scope": "all_athletes" }
       }
