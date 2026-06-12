@@ -26,7 +26,13 @@ defaults, set:
 
 ```env
 OPENAI_API_KEY=...
+OPENAI_API_BASE=https://us.api.openai.com/v1
 ```
+
+`OPENAI_API_BASE` must match the OpenAI regional hostname for the project that
+owns the key. If OpenAI returns an incorrect regional hostname error, update this
+value and rebuild or restart the LiteLLM container so `deploy/litellm/config.yaml`
+is reloaded.
 
 Add other provider keys, such as `ANTHROPIC_API_KEY`, only if you intentionally
 configure aliases for those providers.

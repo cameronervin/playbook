@@ -33,9 +33,10 @@ cp deploy/envs/.env.litellm.local.example deploy/envs/.env.litellm.local
 
 Edit `deploy/envs/.env.litellm.local` before making real model calls. Provider
 API keys, such as `OPENAI_API_KEY`, belong in that LiteLLM-only env file, not in
-backend or KB-service env files. For first local boot, the backend and
-KB-service examples use `sk-local-litellm-master-key` as their LiteLLM service
-key; after LiteLLM starts, generate a scoped key from
+backend or KB-service env files. OpenAI regional projects also need
+`OPENAI_API_BASE`, for example `https://us.api.openai.com/v1`. For first local
+boot, the backend and KB-service examples use `sk-local-litellm-master-key` as
+their LiteLLM service key; after LiteLLM starts, generate a scoped key from
 `http://localhost:4000/ui` and replace `LITELLM_API_KEY` /
 `LLM_GATEWAY_API_KEY`.
 
