@@ -11,6 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.builders.graphs_builder import compile_athlete_chat_graph
+from app.agents.tools.knowledgebase import knowledgebase_organization_context
 from app.core.config import Settings
 from app.core.error_codes import ErrorCode
 from app.core.exceptions import AppError
@@ -83,6 +84,7 @@ class AthleteChatExecutor:
             extra_configurable={
                 "task_id": task_id,
                 "assistant_message_id": str(assistant_message_id),
+                "organization_id": str(organization_id),
                 "attached_file_ids": [str(file_id) for file_id in attached_file_ids],
             },
         )
@@ -97,19 +99,20 @@ class AthleteChatExecutor:
         }
 
         completion_result: dict[str, Any] | None = None
-        async for part in graph.astream(
-            initial_state,
-            config=config,
-            stream_mode=["updates", "custom"],
-            version="v2",
-        ):
-            normalized = _normalize_stream_part(part)
-            current_completion = _completion_from_part(normalized)
-            if current_completion is not None:
-                completion_result = current_completion
-                continue
-            if normalized["type"] in {"updates", "custom"}:
-                await self.stream_service.publish_langgraph_part(task_id, normalized)
+        with knowledgebase_organization_context(str(organization_id)):
+            async for part in graph.astream(
+                initial_state,
+                config=config,
+                stream_mode=["updates", "custom"],
+                version="v2",
+            ):
+                normalized = _normalize_stream_part(part)
+                current_completion = _completion_from_part(normalized)
+                if current_completion is not None:
+                    completion_result = current_completion
+                    continue
+                if normalized["type"] in {"updates", "custom"}:
+                    await self.stream_service.publish_langgraph_part(task_id, normalized)
 
         if completion_result is None:
             raise AppError(

@@ -11,6 +11,7 @@ class IngestURLRequest(BaseModel):
         None,
         description="Caller-supplied UUID. When omitted, KB generates one.",
     )
+    organization_id: uuid.UUID
     configuration_id: uuid.UUID
     url: str = Field(..., description="Presigned S3 URL for the document.")
     filename: str

@@ -1,4 +1,4 @@
-"""Gateway (LiteLLM) embedding provider."""
+"""LiteLLM embedding provider."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -10,12 +10,12 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
 
-class GatewayEmbedProvider(BaseEmbedProvider):
-    """Calls the LiteLLM gateway for embeddings with an injected sync OpenAI client."""
+class LiteLLMEmbedProvider(BaseEmbedProvider):
+    """Calls LiteLLM for embeddings with an injected sync OpenAI client."""
 
     def __init__(self, client: "OpenAI") -> None:
-        super().__init__(client, settings.LLM_GATEWAY_EMBED_MODEL)
+        super().__init__(client, settings.LITELLM_EMBED_MODEL)
 
     @property
     def provider_name(self) -> str:
-        return "gateway"
+        return "litellm"

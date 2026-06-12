@@ -14,7 +14,7 @@ class DirectEmbedProvider(BaseEmbedProvider):
     """Calls OpenAI /v1/embeddings directly with an injected sync OpenAI client."""
 
     def __init__(self, client: "OpenAI") -> None:
-        super().__init__(client, settings.OPENAI_EMBED_MODEL)
+        super().__init__(client, settings.DIRECT_EMBED_MODEL)
 
     @property
     def provider_name(self) -> str:

@@ -24,7 +24,7 @@ _DEFAULT_CHUNK_CONFIG: dict = {
     "chunk_overlap_tokens": 40,
     "tokenizer": "cl100k_base",
 }
-_DEFAULT_EMBED_CONFIG: dict = {"dimensions": 1536, "model": "text-embedding-3-small"}
+_DEFAULT_EMBED_CONFIG: dict = {"dimensions": 1536, "model": "playbook-embed"}
 _DEFAULT_VECTORSTORE_CONFIG: dict = {"index_type": "hnsw", "m": 16, "ef_construction": 64}
 
 

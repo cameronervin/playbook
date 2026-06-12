@@ -7,6 +7,7 @@ documents.
 
 Search includes only admin-uploaded KB documents that are:
 - successfully ingested,
+- owned by the requested `organization_id`,
 - not deleted or archived,
 - visible to the requesting audience,
 - in the configured Playbook collection.
@@ -17,7 +18,7 @@ Athlete conversation files are not searched by the KB service in MVP.
 
 1. Main backend receives an athlete chat message.
 2. Chat orchestration decides whether KB retrieval is required.
-3. Main backend calls KB service search with query, limit, threshold, and visibility context.
+3. Main backend calls KB service search with query, organization ID, limit, threshold, and visibility context.
 4. KB service embeds the query.
 5. KB service runs cosine similarity search against ready vectors.
 6. KB service returns chunk text, score, document IDs, and metadata.
@@ -34,6 +35,10 @@ MVP visibility policy defaults to:
 
 Search must still carry a visibility context so future team/sport audience
 filtering can be added without changing the API shape.
+
+Search must also carry a top-level trusted `organization_id`. KB service search
+filters vector metadata with this organization scope before returning chunks;
+vectors without organization metadata are not eligible for retrieval.
 
 ## Ranking Signals
 
@@ -62,6 +67,7 @@ Each result must include:
 - `metadata.source_date`,
 - `metadata.is_official`,
 - `metadata.priority`,
+- `metadata.organization_id`,
 - `metadata.visibility_policy`.
 
 ## Citation Support

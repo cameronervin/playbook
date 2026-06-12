@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.core.config import Settings
 from app.infrastructure.knowledgebase.context import assemble_context
@@ -58,6 +58,7 @@ class MockProvider(BaseKnowledgebaseProvider):
     async def search(
         self,
         query: str,
+        organization_id: UUID | str,
         max_docs: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict | None = None,

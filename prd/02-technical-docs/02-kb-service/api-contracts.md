@@ -27,6 +27,7 @@ semantic interface.
 ```json
 POST /api/kb/ingest/document
 {
+  "organization_id": "uuid",
   "playbook_document_id": "uuid",
   "configuration_id": "uuid",
   "source_uri": "https://signed-url.example/doc.pdf",
@@ -120,6 +121,7 @@ Response:
         "source_date": "2026-01-15",
         "is_official": true,
         "priority": 10,
+        "organization_id": "uuid",
         "visibility_policy": { "scope": "all_athletes" }
       }
     }

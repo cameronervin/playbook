@@ -74,7 +74,7 @@ def _save_pages_to_s3(document_id: str, pages) -> str:
         buf.seek(0)
         build_s3_client().upload_fileobj(
             buf,
-            Bucket=settings.AWS_S3_BUCKET,
+            Bucket=settings.S3_BUCKET_NAME,
             Key=key,
             ExtraArgs={"ContentType": "application/x-ndjson"},
         )
@@ -94,7 +94,7 @@ def _iter_pages_from_s3(document_id: str):
     from app.infrastructure.io.s3_client import build_s3_client
 
     response = build_s3_client().get_object(
-        Bucket=settings.AWS_S3_BUCKET, Key=_pages_staging_key(document_id)
+        Bucket=settings.S3_BUCKET_NAME, Key=_pages_staging_key(document_id)
     )
     body = response["Body"]
     try:
@@ -112,7 +112,7 @@ def _delete_pages_staging(document_id: str) -> None:
 
     try:
         build_s3_client().delete_object(
-            Bucket=settings.AWS_S3_BUCKET, Key=_pages_staging_key(document_id)
+            Bucket=settings.S3_BUCKET_NAME, Key=_pages_staging_key(document_id)
         )
     except Exception as exc:
         logger.warning("kb_pages_delete_failed", document_id=document_id, error=str(exc))
@@ -144,7 +144,7 @@ def _save_chunks_to_s3(document_id: str, chunks) -> str:
         buf.seek(0)
         build_s3_client().upload_fileobj(
             buf,
-            Bucket=settings.AWS_S3_BUCKET,
+            Bucket=settings.S3_BUCKET_NAME,
             Key=key,
             ExtraArgs={"ContentType": "application/x-ndjson"},
         )
@@ -160,7 +160,7 @@ def _load_chunks_from_s3(document_id: str) -> list[dict]:
     from app.infrastructure.io.s3_client import build_s3_client
 
     response = build_s3_client().get_object(
-        Bucket=settings.AWS_S3_BUCKET, Key=_staging_key(document_id)
+        Bucket=settings.S3_BUCKET_NAME, Key=_staging_key(document_id)
     )
     chunks: list[dict] = []
     body = response["Body"]
@@ -187,7 +187,7 @@ def _load_chunk_slice_from_s3(document_id: str, chunk_start: int, chunk_end: int
     from app.infrastructure.io.s3_client import build_s3_client
 
     response = build_s3_client().get_object(
-        Bucket=settings.AWS_S3_BUCKET, Key=_staging_key(document_id)
+        Bucket=settings.S3_BUCKET_NAME, Key=_staging_key(document_id)
     )
     body = response["Body"]
     out: list[dict] = []
@@ -212,7 +212,7 @@ def _count_chunks_in_s3(document_id: str) -> int:
     from app.infrastructure.io.s3_client import build_s3_client
 
     response = build_s3_client().get_object(
-        Bucket=settings.AWS_S3_BUCKET, Key=_staging_key(document_id)
+        Bucket=settings.S3_BUCKET_NAME, Key=_staging_key(document_id)
     )
     body = response["Body"]
     count = 0
@@ -231,7 +231,7 @@ def _delete_staging_file(document_id: str) -> None:
 
     try:
         build_s3_client().delete_object(
-            Bucket=settings.AWS_S3_BUCKET, Key=_staging_key(document_id)
+            Bucket=settings.S3_BUCKET_NAME, Key=_staging_key(document_id)
         )
     except Exception as exc:
         logger.warning("kb_staging_delete_failed", document_id=document_id, error=str(exc))
@@ -322,14 +322,14 @@ def parse_task(
                     worker_state.parser_router = ParserRouter()
                     router = worker_state.parser_router
                 async with stream_s3_object_to_tempfile(
-                    bucket=settings.AWS_S3_BUCKET,
+                    bucket=settings.S3_BUCKET_NAME,
                     s3_key=s3_key,
                     suffix=f".{filename.split('.')[-1].lower()}" if "." in filename else "",
                 ) as tmp_path:
                     outcome = await router.route_path(
                         path=tmp_path,
                         filename=filename,
-                        s3_bucket=settings.AWS_S3_BUCKET,
+                        s3_bucket=settings.S3_BUCKET_NAME,
                         s3_key=s3_key,
                     )
             except (OCRTimeoutError, TimeoutError, SoftTimeLimitExceeded) as exc:
@@ -743,7 +743,7 @@ def embed_batch_task(
 
     Each batch is fully self-contained:
       1. Read its chunk window [chunk_start, chunk_end) from the staged NDJSON.
-      2. Embed those chunks via the gateway (guarded by the distributed limiter,
+      2. Embed those chunks via LiteLLM (guarded by the distributed limiter,
          retry on 429/5xx with exp backoff honouring retry-after).
       3. INSERT this batch's vectors directly into kb.langchain_pg_embedding
          (idempotent — the batch's own chunk_index range is wiped before insert
@@ -806,7 +806,7 @@ def embed_batch_task(
                 )
                 _notify(document_id, "embed", "STARTED")
 
-            # Distributed throttle: blocks until the embedding-gateway RPM and
+            # Distributed throttle: blocks until the embedding upstream RPM and
             # concurrent gates both have a slot. Prevents the burst-storm that
             # occurs when group().apply_async() fans out many batches.
             await asyncio.to_thread(acquire_embed_slot)
@@ -972,7 +972,7 @@ def embed_batch_task(
 
 # ---------------------------------------------------------------------------
 # Reissue-missing-batches recovery — for the case where some embed_batch_task
-# instances exhausted retries (e.g. extended gateway outage). load_vector_task
+# instances exhausted retries (e.g. extended LiteLLM outage). load_vector_task
 # detects a vec-count mismatch, identifies missing chunk indices via DB query,
 # and re-dispatches them as fresh batches. Bounded by MAX_REISSUE_ATTEMPTS.
 # ---------------------------------------------------------------------------
@@ -1010,7 +1010,7 @@ def _reissue_missing_chunks(document_id: str, config_id: str) -> int:
     Returns the number of chunks reissued (0 if nothing missing).
 
     Batched (not 1-chunk-per-task) so we don't 460× amplify the queue and
-    saturate the gateway with 429s during recovery. Reissued batches are sent
+    saturate LiteLLM with 429s during recovery. Reissued batches are sent
     with ``total_batches=0`` so their counter increment does NOT trigger another
     load_vector dispatch — load_vector reschedules itself via ``self.retry()``.
     """
@@ -1142,7 +1142,7 @@ def load_vector_task(
 
     # ---- Smart-defer gate (only the safety-net dispatch path) ----
     # If the safety-net countdown fires WHILE batches are still embedding, defer
-    # via self.retry() rather than reissuing (which would duplicate gateway
+    # via self.retry() rather than reissuing (which would duplicate upstream
     # calls). Bounded by _MAX_DEFER_ATTEMPTS; after that we assume some batches
     # died and fall through to verify+reissue (itself idempotent).
     if expected_total_batches > 0:

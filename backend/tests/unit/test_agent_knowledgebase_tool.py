@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.agents.tools.knowledgebase import (
+    ATHLETE_KB_TOOL_PROFILE,
     KnowledgebaseToolProfile,
     create_knowledgebase_search_tool,
 )
+from app.infrastructure.knowledgebase.providers.local_kb import LocalKBProvider
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
+
+ORG_ID = UUID("00000000-0000-0000-0000-000000000099")
 
 
 class FakeKnowledgebaseProvider:
@@ -17,6 +23,7 @@ class FakeKnowledgebaseProvider:
     async def search(
         self,
         query: str,
+        organization_id: UUID | str,
         max_docs: int = 10,
         score_threshold: float = 0.7,
         metadata_filter: dict | None = None,
@@ -25,6 +32,7 @@ class FakeKnowledgebaseProvider:
         self.requests.append(
             {
                 "query": query,
+                "organization_id": str(organization_id),
                 "max_docs": max_docs,
                 "score_threshold": score_threshold,
                 "metadata_filter": metadata_filter,
@@ -44,6 +52,27 @@ class FakeKnowledgebaseProvider:
 
     async def resolve_configuration(self) -> str:
         return "fake-config"
+
+
+class _FakeLocalKBProvider(LocalKBProvider):
+    def __init__(self, settings, payload: dict) -> None:
+        super().__init__(settings)
+        self.payload = payload
+        self.posts: list[tuple[str, dict]] = []
+
+    async def resolve_configuration(self) -> str:
+        return "fake-config"
+
+    async def _post(self, path: str, json_body: dict) -> dict:
+        self.posts.append((path, json_body))
+        return self.payload
+
+
+async def _invoke_tool(tool, query: str):
+    return await tool.ainvoke(
+        {"query": query},
+        config={"configurable": {"organization_id": str(ORG_ID)}},
+    )
 
 
 def _profile(**overrides: object) -> KnowledgebaseToolProfile:
@@ -89,13 +118,14 @@ async def test_knowledgebase_tool_uses_profile_name_description_and_filters() ->
         source_registry=source_registry,
     )
 
-    result = await tool.ainvoke({"query": "nil disclosure"})
+    result = await _invoke_tool(tool, "nil disclosure")
 
     assert tool.name == "search_playbook_knowledgebase"
     assert "athlete answers" in tool.description
     assert provider.requests == [
         {
             "query": "nil disclosure",
+            "organization_id": str(ORG_ID),
             "max_docs": 3,
             "score_threshold": 0.65,
             "metadata_filter": {"visibility": "athlete"},
@@ -105,6 +135,132 @@ async def test_knowledgebase_tool_uses_profile_name_description_and_filters() ->
     assert "[S-" in result
     assert "NIL Handbook" in result
     assert list(source_registry.values())[0].source_title == "NIL Handbook"
+
+
+async def test_knowledgebase_tool_formats_citation_ready_metadata() -> None:
+    provider = FakeKnowledgebaseProvider(
+        KnowledgebaseResult(
+            query="nil",
+            context="context",
+            sources=[
+                RetrievedChunk(
+                    text="Athletes must disclose NIL deals before participation.",
+                    similarity_score=0.93,
+                    metadata={
+                        "document_id": "00000000-0000-0000-0000-000000000011",
+                        "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                        "chunk_id": "00000000-0000-0000-0000-000000000012",
+                        "chunk_index": 4,
+                        "source_title": "NIL Handbook",
+                    },
+                )
+            ],
+            confidence=0.93,
+            zero_hit=False,
+            latency_ms=12,
+        )
+    )
+    tool = create_knowledgebase_search_tool(_profile(), provider=provider)
+
+    result = await _invoke_tool(tool, "nil disclosure")
+
+    assert "Document ID: 00000000-0000-0000-0000-000000000011" in result
+    assert "KB Service Document ID: 00000000-0000-0000-0000-000000000021" in result
+    assert "Chunk ID: 00000000-0000-0000-0000-000000000012" in result
+    assert "Chunk index: 4" in result
+
+
+async def test_local_kb_provider_accepts_enriched_chunks_payload(test_settings) -> None:
+    provider = _FakeLocalKBProvider(
+        test_settings,
+        {
+            "chunks": [
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000011",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                    "chunk_id": "00000000-0000-0000-0000-000000000012",
+                    "chunk_index": 3,
+                    "text": "NIL deals must be disclosed.",
+                    "score": 0.91,
+                    "metadata": {"source_title": "NIL Handbook"},
+                }
+            ],
+            "query": "nil disclosure",
+            "total": 1,
+        },
+    )
+
+    result = await provider.search("nil disclosure", organization_id=ORG_ID)
+    await provider.close()
+
+    assert provider.posts[0][1]["organization_id"] == str(ORG_ID)
+    assert result.zero_hit is False
+    assert result.sources[0].metadata["document_id"] == (
+        "00000000-0000-0000-0000-000000000011"
+    )
+    assert result.sources[0].metadata["kb_service_document_id"] == (
+        "00000000-0000-0000-0000-000000000021"
+    )
+    assert result.sources[0].metadata["chunk_id"] == (
+        "00000000-0000-0000-0000-000000000012"
+    )
+    assert result.sources[0].metadata["chunk_index"] == 3
+    assert result.sources[0].metadata["source_title"] == "NIL Handbook"
+    assert result.sources[0].metadata["score"] == 0.91
+
+
+async def test_local_kb_provider_accepts_future_results_payload(test_settings) -> None:
+    provider = _FakeLocalKBProvider(
+        test_settings,
+        {
+            "results": [
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000031",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000041",
+                    "chunk_id": "00000000-0000-0000-0000-000000000032",
+                    "chunk_index": 9,
+                    "text": "Compliance text.",
+                    "score": 0.88,
+                    "metadata": {
+                        "source_title": "Compliance Manual",
+                        "source_date": "2026-02-01",
+                    },
+                }
+            ],
+            "query": "compliance",
+            "total": 1,
+        },
+    )
+
+    result = await provider.search("compliance", organization_id=ORG_ID)
+    await provider.close()
+
+    assert provider.posts[0][1]["organization_id"] == str(ORG_ID)
+    assert result.sources[0].text == "Compliance text."
+    assert result.sources[0].metadata["source_title"] == "Compliance Manual"
+    assert result.sources[0].metadata["source_date"] == "2026-02-01"
+    assert result.sources[0].metadata["chunk_index"] == 9
+
+
+async def test_athlete_kb_tool_filters_by_visibility_policy_scope() -> None:
+    provider = FakeKnowledgebaseProvider()
+    tool = create_knowledgebase_search_tool(
+        ATHLETE_KB_TOOL_PROFILE,
+        provider=provider,
+    )
+
+    await _invoke_tool(tool, "nil disclosure")
+
+    assert provider.requests == [
+        {
+            "query": "nil disclosure",
+            "organization_id": str(ORG_ID),
+            "max_docs": 10,
+            "score_threshold": 0.7,
+            "metadata_filter": {"visibility_policy": {"scope": "all_athletes"}},
+            "configuration_id": None,
+        }
+    ]
 
 
 async def test_knowledgebase_tool_profiles_can_be_reused_for_distinct_agents() -> None:
@@ -125,6 +281,7 @@ async def test_knowledgebase_tool_profiles_can_be_reused_for_distinct_agents() -
     assert athlete_tool.name == "search_playbook_knowledgebase"
     assert admin_tool.name == "search_compliance_knowledgebase"
     assert "admin analysis" in admin_tool.description
+    assert "organization_id" not in athlete_tool.args
 
 
 async def test_knowledgebase_tool_returns_zero_hit_message() -> None:
@@ -133,7 +290,7 @@ async def test_knowledgebase_tool_returns_zero_hit_message() -> None:
         provider=FakeKnowledgebaseProvider(),
     )
 
-    result = await tool.ainvoke({"query": "unknown"})
+    result = await _invoke_tool(tool, "unknown")
 
     assert result == "No athlete-visible sources found."
 
@@ -148,7 +305,7 @@ async def test_knowledgebase_tool_handles_provider_errors_without_leaking_detail
         provider=BrokenProvider(),
     )
 
-    result = await tool.ainvoke({"query": "nil"})
+    result = await _invoke_tool(tool, "nil")
 
     assert result == "Knowledge base unavailable."
     assert "secret" not in result

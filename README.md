@@ -34,7 +34,7 @@ and insight generation for department operators.
 | Frontend | Next.js App Router, TypeScript, Tailwind CSS v4, Zustand, TanStack Query |
 | Backend | FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2 |
 | Agents | LangGraph + LangChain, Anthropic-first LLM orchestration |
-| LLM gateway | LiteLLM gateway mode, with direct provider mode for local or break-glass use |
+| LLM gateway | LiteLLM mode, with direct provider mode for local or break-glass use |
 | Knowledge base | Standalone `kb-service` for ingestion, chunking, embeddings, and retrieval |
 | Retrieval | Docling, tiktoken chunking, OpenAI/LiteLLM embeddings, pgvector similarity search |
 | Data and storage | PostgreSQL, pgvector, S3-compatible storage (MinIO locally) |

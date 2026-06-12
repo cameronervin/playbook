@@ -37,7 +37,7 @@ POST /api/kb/embed/search ─▶ SearchService ─▶ embed query ─▶ pgvecto
 | Parsing | Docling (PDF/DOCX/PPTX) + native (python-docx / openpyxl / python-pptx); complexity router |
 | OCR | **stub** (`NullOCRProvider`) — plug Textract/VLM back in (see `app/infrastructure/STUBS.md`) |
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
-| Embeddings | OpenAI direct or LiteLLM gateway (`EmbedProviderMode`), `text-embedding-3-small`, 1536-dim |
+| Embeddings | OpenAI direct or LiteLLM mode (`EmbedProviderMode`), 1536-dim |
 | Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
 | Storage | S3-compatible storage / MinIO locally (boto3), streamed to tempfiles |
 
@@ -57,7 +57,7 @@ app/
     db/session.py          thread-local async engine + NullPool (Celery-thread safe)
     parsers/               contracts + extractors + complexity routing + OCR stub
     chunkers/              token-based recursive splitter
-    embedders/             ABC + direct + gateway + factory
+    embedders/             ABC + direct + litellm + factory
     vectorstore/           pgvector cosine search / bulk insert wrappers
     llm/                   embed client builders (lru_cache)
     io/                    S3 streaming tempfile helpers

@@ -44,7 +44,16 @@ Use profile-specific tool names and descriptions for each agent. Keep the
 provider call, result normalization, source-key formatting, and citation
 metadata mapping in the reusable factory. Athlete chat records cited source keys
 in structured output; `save_state` persists citations only when those keys match
-tool-returned sources.
+tool-returned sources. The athlete KB profile filters retrieval with
+`metadata_filter={"visibility_policy": {"scope": "all_athletes"}}`, matching the
+visibility policy metadata stored during ingestion. Organization scope is bound
+from trusted graph/runtime context and passed to the KB provider separately from
+model-visible tool arguments, so the model cannot choose or override tenant
+scope. Local KB results are normalized into citation-ready metadata including
+Playbook `document_id`, `kb_service_document_id`, stable `chunk_id`,
+`chunk_index`, score, source title/date, official flag, priority, visibility
+policy, and metadata tags; `message_citations` stores the Playbook document and
+chunk IDs in columns and keeps the rest in `source_metadata`.
 
 ## Adding a Tool
 

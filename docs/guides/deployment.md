@@ -95,7 +95,7 @@ Recommended deployment shape:
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, and `playbook-embed` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
 | Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat` |
-| KB-service env | `KB_LLM_PROVIDER_MODE=gateway`, LiteLLM base URL/key, and `LLM_GATEWAY_EMBED_MODEL=playbook-embed` |
+| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, and `LITELLM_EMBED_MODEL=playbook-embed` |
 | LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, and `LITELLM_DATABASE_URL` |
 
 Use a separate LiteLLM database or at least a separate database/user in the

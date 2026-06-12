@@ -43,11 +43,11 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://kb-valkey:6379/1"
 
     # -------------------------------------------------------------------------
-    # Embedding provider mode — gateway | direct
-    #   gateway: routes through a LiteLLM endpoint (production)
+    # Embedding provider mode — litellm | direct
+    #   litellm: routes through a LiteLLM endpoint (production)
     #   direct:  calls the OpenAI API directly with OPENAI_API_KEY (dev/test)
     # -------------------------------------------------------------------------
-    KB_LLM_PROVIDER_MODE: str = "direct"
+    LLM_PROVIDER_MODE: Literal["direct", "litellm"] = "litellm"
 
     # Shared embedding tuning (applies to both modes)
     KB_EMBED_DIMENSIONS: int = 1536
@@ -60,23 +60,24 @@ class Settings(BaseSettings):
     KB_EMBED_BACKOFF_MAX_SECONDS: int = 120
     KB_EMBED_RETRY_JITTER: bool = True
 
-    # direct mode — OPENAI_API_KEY required
+    # direct mode — OPENAI_API_KEY required. The direct model is fixed because
+    # normal deployments should configure provider model IDs only in LiteLLM.
     OPENAI_API_KEY: str = ""
-    OPENAI_EMBED_MODEL: str = "text-embedding-3-small"
+    DIRECT_EMBED_MODEL: str = "text-embedding-3-small"
 
-    # gateway mode — LLM_GATEWAY_BASE_URL + LLM_GATEWAY_API_KEY required
-    LLM_GATEWAY_BASE_URL: str = ""
-    LLM_GATEWAY_API_KEY: str = ""
-    LLM_GATEWAY_EMBED_MODEL: str = "text-embedding-3-small"
+    # litellm mode — LITELLM_BASE_URL + LITELLM_API_KEY required
+    LITELLM_BASE_URL: str = ""
+    LITELLM_API_KEY: str = ""
+    LITELLM_EMBED_MODEL: str = "playbook-embed"
 
     # -------------------------------------------------------------------------
     # S3-compatible storage — where original uploads + staged NDJSON live
     # -------------------------------------------------------------------------
-    AWS_S3_BUCKET: str = "kb-documents"
-    AWS_S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
-    AWS_REGION: str = "us-east-1"
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
+    S3_BUCKET_NAME: str = "playbook-bucket"
+    S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
+    S3_REGION: str = "us-east-1"
+    S3_ACCESS_KEY_ID: str = ""
+    S3_SECRET_ACCESS_KEY: str = ""
     AWS_PROFILE: str = ""  # named profile; used when explicit keys are not set
 
     # -------------------------------------------------------------------------
@@ -175,15 +176,15 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_provider_config(self) -> "Settings":
         errors: list[str] = []
-        if self.KB_LLM_PROVIDER_MODE == "direct" and not self.OPENAI_API_KEY:
-            errors.append("OPENAI_API_KEY is required when KB_LLM_PROVIDER_MODE=direct")
-        if self.KB_LLM_PROVIDER_MODE == "gateway" and not self.LLM_GATEWAY_BASE_URL:
+        if self.LLM_PROVIDER_MODE == "direct" and not self.OPENAI_API_KEY:
+            errors.append("OPENAI_API_KEY is required when LLM_PROVIDER_MODE=direct")
+        if self.LLM_PROVIDER_MODE == "litellm" and not self.LITELLM_BASE_URL:
             errors.append(
-                "LLM_GATEWAY_BASE_URL is required when KB_LLM_PROVIDER_MODE=gateway"
+                "LITELLM_BASE_URL is required when LLM_PROVIDER_MODE=litellm"
             )
-        if self.KB_LLM_PROVIDER_MODE == "gateway" and not self.LLM_GATEWAY_API_KEY:
+        if self.LLM_PROVIDER_MODE == "litellm" and not self.LITELLM_API_KEY:
             errors.append(
-                "LLM_GATEWAY_API_KEY is required when KB_LLM_PROVIDER_MODE=gateway"
+                "LITELLM_API_KEY is required when LLM_PROVIDER_MODE=litellm"
             )
         if _is_production_environment(self.ENVIRONMENT):
             _require_min_secret_length(

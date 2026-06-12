@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
@@ -19,6 +23,10 @@ from app.infrastructure.knowledgebase import (
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
 
 logger = structlog.get_logger(__name__)
+_KB_ORGANIZATION_ID: ContextVar[str | None] = ContextVar(
+    "kb_organization_id",
+    default=None,
+)
 
 
 class KnowledgebaseSearchInput(BaseModel):
@@ -73,8 +81,18 @@ ATHLETE_KB_TOOL_PROFILE = KnowledgebaseToolProfile(
         "athlete NIL, compliance, recruiting, reporting, and process guidance. "
         "Use this before making policy or process claims."
     ),
-    metadata_filter={"visibility_scope": "all_athletes"},
+    metadata_filter={"visibility_policy": {"scope": "all_athletes"}},
 )
+
+
+@contextmanager
+def knowledgebase_organization_context(organization_id: str) -> Iterator[None]:
+    """Bind organization scope for KB tools invoked without LangChain config."""
+    token = _KB_ORGANIZATION_ID.set(organization_id)
+    try:
+        yield
+    finally:
+        _KB_ORGANIZATION_ID.reset(token)
 
 
 def create_knowledgebase_search_tool(
@@ -92,8 +110,17 @@ def create_knowledgebase_search_tool(
         query: str,
         max_docs: int | None = None,
         score_threshold: float | None = None,
+        # LangChain injects runtime config only when the annotation is exactly RunnableConfig.
+        config: RunnableConfig = None,
     ) -> str:
         kb_provider = provider or get_kb_provider(app_settings=settings)
+        organization_id = _organization_id_from_config(config) or _KB_ORGANIZATION_ID.get()
+        if not organization_id:
+            logger.warning(
+                "agent_kb_tool_missing_organization",
+                tool_name=profile.tool_name,
+            )
+            return profile.unavailable_message
         resolved_max_docs = max_docs or profile.default_max_docs
         resolved_score_threshold = (
             score_threshold
@@ -111,6 +138,7 @@ def create_knowledgebase_search_tool(
         try:
             result = await kb_provider.search(
                 query=query,
+                organization_id=organization_id,
                 max_docs=resolved_max_docs,
                 score_threshold=resolved_score_threshold,
                 metadata_filter=profile.metadata_filter,
@@ -140,6 +168,16 @@ def create_knowledgebase_search_tool(
         description=profile.description,
         args_schema=KnowledgebaseSearchInput,
     )
+
+
+def _organization_id_from_config(config: RunnableConfig | None) -> str | None:
+    configurable: Mapping[str, Any] | None = None
+    if isinstance(config, Mapping):
+        raw_configurable = config.get("configurable")
+        if isinstance(raw_configurable, Mapping):
+            configurable = raw_configurable
+    value = configurable.get("organization_id") if configurable else None
+    return str(value) if value else None
 
 
 def _format_search_result(
@@ -193,7 +231,9 @@ def _format_source(source: KnowledgebaseSource, *, rank: int) -> str:
     ]
     for key, label in (
         ("document_id", "Document ID"),
+        ("kb_service_document_id", "KB Service Document ID"),
         ("chunk_id", "Chunk ID"),
+        ("chunk_index", "Chunk index"),
         ("source_date", "Source date"),
         ("is_official", "Official"),
         ("priority", "Priority"),

@@ -37,8 +37,8 @@ backend or KB-service env files. OpenAI regional projects also need
 `OPENAI_API_BASE`, for example `https://us.api.openai.com/v1`. For first local
 boot, the backend and KB-service examples use `sk-local-litellm-master-key` as
 their LiteLLM service key; after LiteLLM starts, generate a scoped key from
-`http://localhost:4000/ui` and replace `LITELLM_API_KEY` /
-`LLM_GATEWAY_API_KEY`.
+`http://localhost:4000/ui` and replace `LITELLM_API_KEY` in the backend and
+KB-service env files.
 
 Verify LiteLLM:
 
@@ -180,7 +180,7 @@ uv run python run_dev.py             # uvicorn on http://localhost:8001
 ```
 
 If running KB-service directly on the host while LiteLLM runs in Docker, set
-`LLM_GATEWAY_BASE_URL=http://localhost:4000` in `kb-service/.env`.
+`LITELLM_BASE_URL=http://localhost:4000` in `kb-service/.env`.
 
 ## 6. Verify End to End
 

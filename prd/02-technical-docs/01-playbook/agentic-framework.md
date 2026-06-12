@@ -6,7 +6,7 @@ This document defines Playbook MVP agent workflows, context contracts, safety be
 
 The scaffold already includes:
 - LangGraph-style agent chains, nodes, graphs, executors, prompts, states, tools, retry, and guardrails.
-- LLM provider abstraction for LiteLLM gateway mode, with direct provider mode kept only as a local-development or emergency fallback.
+- LLM provider abstraction for LiteLLM mode, with direct provider mode kept only as a local-development or emergency fallback.
 - Knowledgebase provider abstraction that can call the local KB service.
 - Observability hooks and token-budgeting utilities.
 

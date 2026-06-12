@@ -1,6 +1,6 @@
-"""Distributed embedding-gateway rate limiter — sliding-window RPM + concurrent cap.
+"""Distributed embedding upstream rate limiter — sliding-window RPM + concurrent cap.
 
-Embedding gateways (LiteLLM proxy, OpenAI direct, etc.) enforce per-key caps:
+Embedding upstreams (LiteLLM proxy, OpenAI direct, etc.) enforce per-key caps:
   • an RPM ceiling on the embedding endpoint
   • a small number of concurrent requests per API key
 Exceeding either triggers 429s, which cascade into retries → reissues → queue
@@ -33,7 +33,7 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 # --- Config ---------------------------------------------------------------
-# Conservative throughput defaults — tune to your gateway's confirmed caps.
+# Conservative throughput defaults — tune to your upstream's confirmed caps.
 #
 # Three gates layered together (all must pass before an embed call):
 #   1. Min-spacing tick   — 1 sec between successive call STARTS (anti-burst)
@@ -43,7 +43,7 @@ logger = structlog.get_logger(__name__)
 # Throughput is usually latency-bound; the RPM cap is rarely the bottleneck on
 # the hot path — but still enforced as a hard ceiling for safety.
 _TICK_SECONDS = 1                  # 1-sec min spacing between call starts
-_MAX_RPM = 70                      # rolling-window ceiling (set under gateway cap)
+_MAX_RPM = 70                      # rolling-window ceiling (set under upstream cap)
 _MAX_CONCURRENT = 3                # matches kb-io worker concurrency
 _WINDOW_SECONDS = 60
 _INFLIGHT_TTL_SECONDS = 60         # crashed-worker recovery
@@ -133,7 +133,7 @@ def acquire_embed_slot() -> None:
         if not _wait_for_rpm_slot(client):
             continue
 
-        # Gate 3: in-flight concurrent cap (matches gateway hard limit).
+        # Gate 3: in-flight concurrent cap (matches upstream hard limit).
         if not _try_acquire_concurrent_slot(client):
             time.sleep(0.2)
             continue

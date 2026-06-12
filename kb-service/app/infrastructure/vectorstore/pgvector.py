@@ -14,7 +14,7 @@ land; the whole tree is compiled together at verification time.
 from __future__ import annotations
 
 import uuid
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import delete, insert
@@ -60,6 +60,7 @@ def bulk_insert_embeddings(
 def cosine_search(
     pg_engine,
     collection_id: uuid.UUID,
+    organization_id: uuid.UUID,
     query_vector: list[float],
     max_docs: int,
     score_threshold: float,
@@ -74,6 +75,7 @@ def cosine_search(
         query_vector=query_vector,
         max_docs=max_docs,
         score_threshold=score_threshold,
+        organization_id=organization_id,
         metadata_filter=metadata_filter,
     )
 
@@ -91,6 +93,7 @@ def cosine_search(
 async def async_cosine_search(
     session: "AsyncSession",
     collection_id: uuid.UUID,
+    organization_id: uuid.UUID,
     query_vector: list[float],
     max_docs: int,
     score_threshold: float,
@@ -105,6 +108,7 @@ async def async_cosine_search(
         query_vector=query_vector,
         max_docs=max_docs,
         score_threshold=score_threshold,
+        organization_id=organization_id,
         metadata_filter=metadata_filter,
     )
 

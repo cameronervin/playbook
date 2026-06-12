@@ -21,14 +21,28 @@ from app.services.agent_stream_service import AgentStreamService
 class FakeKnowledgebaseProvider:
     provider_name = "fake"
 
+    def __init__(self) -> None:
+        self.requests: list[dict[str, object]] = []
+
     async def search(
         self,
         query: str,
+        organization_id: UUID | str,
         max_docs: int = 10,
         score_threshold: float = 0.7,
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
+        self.requests.append(
+            {
+                "query": query,
+                "organization_id": str(organization_id),
+                "max_docs": max_docs,
+                "score_threshold": score_threshold,
+                "metadata_filter": metadata_filter,
+                "configuration_id": configuration_id,
+            }
+        )
         return KnowledgebaseResult(
             query=query,
             context="context",
@@ -38,10 +52,13 @@ class FakeKnowledgebaseProvider:
                     similarity_score=0.93,
                     metadata={
                         "document_id": "00000000-0000-0000-0000-000000000011",
+                        "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
                         "chunk_id": "00000000-0000-0000-0000-000000000012",
+                        "chunk_index": 5,
                         "source_title": "NIL Handbook",
                         "source_date": "2026-01-15",
                         "is_official": True,
+                        "priority": 10,
                     },
                 )
             ],
@@ -154,10 +171,12 @@ async def test_athlete_chat_executor_persists_grounded_answer_and_citations(
     )
     provider = InMemoryAgentStreamProvider()
 
+    kb_provider = FakeKnowledgebaseProvider()
+
     result = await AthleteChatExecutor(
         session=db_session,
         chat_model=object(),
-        knowledgebase_provider=FakeKnowledgebaseProvider(),
+        knowledgebase_provider=kb_provider,
         stream_service=AgentStreamService(provider),
         settings=test_settings,
     ).execute(
@@ -187,6 +206,12 @@ async def test_athlete_chat_executor_persists_grounded_answer_and_citations(
     assert citations[0].document_id == UUID("00000000-0000-0000-0000-000000000011")
     assert citations[0].chunk_id == UUID("00000000-0000-0000-0000-000000000012")
     assert citations[0].source_title == "NIL Handbook"
+    assert citations[0].source_metadata["kb_service_document_id"] == (
+        "00000000-0000-0000-0000-000000000021"
+    )
+    assert citations[0].source_metadata["chunk_index"] == 5
+    assert citations[0].source_metadata["priority"] == 10
+    assert kb_provider.requests[0]["organization_id"] == str(organization.id)
     assert records[-1].event.event_type == "complete"
     assert records[-1].event.data["citation_count"] == 1
 

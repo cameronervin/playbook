@@ -48,7 +48,7 @@ ingest request
 ### Embed
 
 - Embed each chunk with the configured embedding provider.
-- Default embedding model is `text-embedding-3-small`.
+- Default embedding alias is `playbook-embed`; LiteLLM owns the provider model mapping.
 - Vector dimension is 1536 and changing it requires migration planning.
 - Embedding failures should be retryable where provider errors are transient.
 

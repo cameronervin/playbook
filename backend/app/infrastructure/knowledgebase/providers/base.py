@@ -11,6 +11,7 @@ simple and focused on retrieval.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 import structlog
 
@@ -44,6 +45,7 @@ class BaseKnowledgebaseProvider(ABC):
     async def search(
         self,
         query: str,
+        organization_id: UUID | str,
         max_docs: int = DEFAULT_KB_MAX_DOCS,
         score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
         metadata_filter: dict | None = None,
@@ -53,6 +55,7 @@ class BaseKnowledgebaseProvider(ABC):
 
         Args:
             query: Natural language query string.
+            organization_id: Tenant scope for retrieval isolation.
             max_docs: Maximum number of chunks to return.
             score_threshold: Minimum similarity score; results below are excluded.
             metadata_filter: Optional metadata filter dict.

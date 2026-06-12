@@ -16,7 +16,11 @@ from app.agents.states.athlete_chat_state import (
     AthleteChatState,
     AthleteChatStructuredResponse,
 )
-from app.agents.tools.knowledgebase import KnowledgebaseSource, SourceRegistry
+from app.agents.tools.knowledgebase import (
+    KnowledgebaseSource,
+    SourceRegistry,
+    knowledgebase_organization_context,
+)
 from app.core.config import Settings
 from app.core.exceptions import NotFoundError
 from app.repositories.conversations import (
@@ -148,18 +152,19 @@ def create_athlete_chat_nodes(
         """Invoke the structured athlete chat agent."""
         task_id = state["task_id"]
         await stream_service.publish_progress(task_id, status="running_agent")
-        result = await chains["athlete_chat"].ainvoke(
-            {
-                "messages": state["messages"],
-                "task_id": task_id,
-                "conversation_id": state["conversation_id"],
-                "user_message_content": state.get("user_message_content", ""),
-                "attached_file_ids": state.get("attached_file_ids", []),
-                "requires_kb_support": state.get("requires_kb_support", False),
-                "topic_labels": state.get("topic_labels", []),
-                "risk_labels": state.get("risk_labels", []),
-            }
-        )
+        with knowledgebase_organization_context(state["organization_id"]):
+            result = await chains["athlete_chat"].ainvoke(
+                {
+                    "messages": state["messages"],
+                    "task_id": task_id,
+                    "conversation_id": state["conversation_id"],
+                    "user_message_content": state.get("user_message_content", ""),
+                    "attached_file_ids": state.get("attached_file_ids", []),
+                    "requires_kb_support": state.get("requires_kb_support", False),
+                    "topic_labels": state.get("topic_labels", []),
+                    "risk_labels": state.get("risk_labels", []),
+                }
+            )
         structured = _structured_response(result)
         return {
             "answer": structured.answer.strip(),

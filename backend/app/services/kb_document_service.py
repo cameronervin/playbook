@@ -169,6 +169,7 @@ class KBDocumentService:
         )
         ingest_response = await self.kb_provider.ingest_document(
             KBDocumentIngestRequest(
+                organization_id=actor.organization_id,
                 playbook_document_id=document.id,
                 source_uri=signed_url,
                 filename=document.filename,
@@ -279,6 +280,7 @@ class KBDocumentService:
         )
         ingest_response = await self.kb_provider.ingest_document(
             KBDocumentIngestRequest(
+                organization_id=actor.organization_id,
                 playbook_document_id=document.id,
                 source_uri=signed_url,
                 filename=document.filename,

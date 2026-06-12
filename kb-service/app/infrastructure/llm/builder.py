@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
 _ERR_DIRECT_KEY_REQUIRED = "OPENAI_API_KEY must be set when using direct provider mode"
-_ERR_GATEWAY_URL_REQUIRED = "LLM_GATEWAY_BASE_URL must be set when using gateway provider mode"
-_ERR_GATEWAY_KEY_REQUIRED = "LLM_GATEWAY_API_KEY must be set when using gateway provider mode"
+_ERR_LITELLM_URL_REQUIRED = "LITELLM_BASE_URL must be set when using LiteLLM mode"
+_ERR_LITELLM_KEY_REQUIRED = "LITELLM_API_KEY must be set when using LiteLLM mode"
 
 
 @lru_cache
@@ -42,16 +42,16 @@ def get_direct_embed_client() -> "OpenAI":
 
 
 @lru_cache
-def get_gateway_embed_client() -> "OpenAI":
+def get_litellm_embed_client() -> "OpenAI":
     from openai import OpenAI
 
-    if not settings.LLM_GATEWAY_BASE_URL:
-        raise ValueError(_ERR_GATEWAY_URL_REQUIRED)
-    if not settings.LLM_GATEWAY_API_KEY:
-        raise ValueError(_ERR_GATEWAY_KEY_REQUIRED)
+    if not settings.LITELLM_BASE_URL:
+        raise ValueError(_ERR_LITELLM_URL_REQUIRED)
+    if not settings.LITELLM_API_KEY:
+        raise ValueError(_ERR_LITELLM_KEY_REQUIRED)
     return OpenAI(
-        base_url=settings.LLM_GATEWAY_BASE_URL,
-        api_key=settings.LLM_GATEWAY_API_KEY,
+        base_url=settings.LITELLM_BASE_URL,
+        api_key=settings.LITELLM_API_KEY,
         timeout=settings.KB_EMBED_REQUEST_TIMEOUT_SECONDS,
         max_retries=0,
     )
@@ -59,4 +59,4 @@ def get_gateway_embed_client() -> "OpenAI":
 
 def clear_client_caches() -> None:
     get_direct_embed_client.cache_clear()
-    get_gateway_embed_client.cache_clear()
+    get_litellm_embed_client.cache_clear()

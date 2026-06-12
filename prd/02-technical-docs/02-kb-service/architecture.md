@@ -47,7 +47,7 @@ Stack:
 - Celery + Valkey workers.
 - Docling and native Office/PDF parsers.
 - S3-compatible staging.
-- LiteLLM gateway embeddings by default, with direct provider mode only for local or break-glass use.
+- LiteLLM embeddings by default, with direct provider mode only for local or break-glass use.
 - PostgreSQL + pgvector.
 
 <!-- V2 CHANGE: Use the existing KB service as the retrieval layer for Playbook athlete chat and admin document ingestion. -->

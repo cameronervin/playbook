@@ -12,13 +12,13 @@ helpers so the cosine-distance similarity query is defined exactly once.
 from __future__ import annotations
 
 import uuid
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Integer, cast, delete, func, insert, select
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import Integer, cast, delete, func, insert, or_, select
+from sqlalchemy.dialects.postgresql import UUID, insert as pg_insert
 
 from app.models.configuration import Configuration
+from app.models.document import Document
 from app.models.vector_collection import VectorCollection
 from app.models.vector_embedding import VectorEmbedding
 
@@ -27,22 +27,91 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+SEARCHABLE_DOCUMENT_STATUS = "success"
+_CHUNK_ID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "playbook.kb-service.chunk")
+
+
 def _build_chunk_records(
     *,
     document_id: uuid.UUID,
     collection_id: uuid.UUID,
     chunks: list[dict],
     embeddings: list[list[float]],
+    chunk_index_offset: int = 0,
 ) -> list[dict[str, Any]]:
     """Eager list builder retained for non-streaming callers (search path, tests)."""
     if len(chunks) != len(embeddings):
         raise ValueError("chunks and embeddings must have the same length")
-    return list(_iter_chunk_records(
-        document_id=document_id,
-        collection_id=collection_id,
-        chunks=chunks,
-        embeddings=embeddings,
-    ))
+    return list(
+        _iter_chunk_records(
+            document_id=document_id,
+            collection_id=collection_id,
+            chunks=chunks,
+            embeddings=embeddings,
+            chunk_index_offset=chunk_index_offset,
+        )
+    )
+
+
+def _deterministic_chunk_id(document_id: uuid.UUID, chunk_index: int) -> uuid.UUID:
+    """Return a stable chunk UUID for a document/index pair."""
+    return uuid.uuid5(_CHUNK_ID_NAMESPACE, f"{document_id}:{chunk_index}")
+
+
+def _uuid_or_none(value: Any) -> uuid.UUID | None:
+    if value in (None, ""):
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_chunk_metadata(
+    *,
+    document_id: uuid.UUID,
+    chunk_metadata: dict[str, Any],
+    chunk_index: int,
+) -> dict[str, Any]:
+    kb_service_document_id = (
+        _uuid_or_none(chunk_metadata.get("kb_service_document_id"))
+        or _uuid_or_none(chunk_metadata.get("kb_document_id"))
+        or document_id
+    )
+    playbook_document_id = (
+        _uuid_or_none(chunk_metadata.get("playbook_document_id"))
+        or _uuid_or_none(chunk_metadata.get("document_id"))
+        or kb_service_document_id
+    )
+    chunk_id = _deterministic_chunk_id(kb_service_document_id, chunk_index)
+
+    return {
+        **chunk_metadata,
+        "document_id": str(playbook_document_id),
+        "playbook_document_id": str(playbook_document_id),
+        "kb_service_document_id": str(kb_service_document_id),
+        "kb_document_id": str(kb_service_document_id),
+        "chunk_id": str(chunk_id),
+        "chunk_index": chunk_index,
+    }
+
+
+def _document_metadata_match(document_id: uuid.UUID):
+    document_id_value = str(document_id)
+    return or_(
+        VectorEmbedding.cmetadata["kb_service_document_id"].astext == document_id_value,
+        VectorEmbedding.cmetadata["kb_document_id"].astext == document_id_value,
+        VectorEmbedding.cmetadata["document_id"].astext == document_id_value,
+    )
 
 
 def _iter_chunk_records(
@@ -51,6 +120,7 @@ def _iter_chunk_records(
     collection_id: uuid.UUID,
     chunks,
     embeddings,
+    chunk_index_offset: int = 0,
 ):
     """Yield insertable record dicts one-at-a-time.
 
@@ -69,10 +139,10 @@ def _iter_chunk_records(
     for chunk in chunks_iter:
         try:
             embedding = next(embeds_iter)
-        except StopIteration:
+        except StopIteration as exc:
             raise ValueError(
                 f"chunks/embeddings length mismatch — exhausted embeddings at chunk index {index}"
-            )
+            ) from exc
 
         chunk_text = chunk.get("text")
         chunk_metadata = chunk.get("metadata", {})
@@ -81,11 +151,12 @@ def _iter_chunk_records(
         if not isinstance(chunk_metadata, dict):
             raise TypeError("Each chunk metadata field must be a dict")
 
-        metadata = {
-            **chunk_metadata,
-            "document_id": str(document_id),
-            "chunk_index": index,
-        }
+        global_chunk_index = chunk_index_offset + index
+        metadata = _normalize_chunk_metadata(
+            document_id=document_id,
+            chunk_metadata=chunk_metadata,
+            chunk_index=global_chunk_index,
+        )
         yield {
             "collection_id": collection_id,
             "embedding": embedding,
@@ -127,14 +198,46 @@ def _map_search_row(row: dict[str, Any]) -> dict[str, Any] | None:
     Renames the storage columns to the API contract: document -> text,
     cmetadata -> metadata. Returns None for rows without a document_id.
     """
-    doc_id = row.get("document_id")
+    raw_metadata = dict(row.get("cmetadata") or {})
+    doc_id = _uuid_or_none(row.get("document_id") or raw_metadata.get("document_id"))
     if doc_id is None:
         return None
+    kb_service_document_id = (
+        _uuid_or_none(row.get("kb_service_document_id"))
+        or _uuid_or_none(raw_metadata.get("kb_service_document_id"))
+        or _uuid_or_none(raw_metadata.get("kb_document_id"))
+        or doc_id
+    )
+    chunk_index = _int_or_none(row.get("chunk_index") or raw_metadata.get("chunk_index"))
+    chunk_id = (
+        _uuid_or_none(row.get("chunk_id"))
+        or _uuid_or_none(raw_metadata.get("chunk_id"))
+        or _uuid_or_none(row.get("embedding_id"))
+    )
+    if chunk_id is None and chunk_index is not None:
+        chunk_id = _deterministic_chunk_id(kb_service_document_id, chunk_index)
+
+    score = float(row.get("score", 0.0))
+    metadata = {
+        **raw_metadata,
+        "document_id": str(doc_id),
+        "kb_service_document_id": str(kb_service_document_id),
+        "kb_document_id": str(kb_service_document_id),
+        "score": score,
+    }
+    if chunk_id is not None:
+        metadata["chunk_id"] = str(chunk_id)
+    if chunk_index is not None:
+        metadata["chunk_index"] = chunk_index
+
     return {
-        "document_id": uuid.UUID(str(doc_id)),
+        "document_id": doc_id,
+        "kb_service_document_id": kb_service_document_id,
+        "chunk_id": chunk_id,
+        "chunk_index": chunk_index,
         "text": row.get("document", ""),
-        "score": float(row.get("score", 0.0)),
-        "metadata": row.get("cmetadata") or {},
+        "score": score,
+        "metadata": metadata,
     }
 
 
@@ -144,6 +247,7 @@ def _build_search_statement(
     query_vector: list[float],
     max_docs: int,
     score_threshold: float,
+    organization_id: uuid.UUID | str,
     metadata_filter: dict[str, Any] | None,
 ):
     """Build the cosine-distance similarity SELECT shared by both repos.
@@ -153,25 +257,53 @@ def _build_search_statement(
     distance (most similar first) and capped at max_docs.
     """
     distance_expr = VectorEmbedding.embedding.cosine_distance(query_vector)
+    metadata = VectorEmbedding.cmetadata
+    document_id_expr = func.cast(
+        metadata["document_id"].astext,
+        UUID(as_uuid=True),
+    )
+    kb_service_document_id_expr = func.cast(
+        func.coalesce(
+            metadata["kb_service_document_id"].astext,
+            metadata["kb_document_id"].astext,
+            metadata["document_id"].astext,
+        ),
+        UUID(as_uuid=True),
+    )
+    chunk_id_expr = func.cast(
+        metadata["chunk_id"].astext,
+        UUID(as_uuid=True),
+    )
+    chunk_index_expr = cast(metadata["chunk_index"].astext, Integer)
     distance_threshold = max(0.0, 1.0 - score_threshold)
 
     conditions = [
         VectorEmbedding.collection_id == collection_id,
+        Document.status == SEARCHABLE_DOCUMENT_STATUS,
         distance_expr <= distance_threshold,
     ]
+    conditions.append(
+        VectorEmbedding.cmetadata.contains(
+            {"organization_id": str(organization_id)}
+        )
+    )
     if metadata_filter:
         conditions.append(VectorEmbedding.cmetadata.contains(metadata_filter))
 
     score_expr = (1.0 - distance_expr).label("score")
     return (
         select(
-            func.cast(VectorEmbedding.cmetadata["document_id"].astext, UUID(as_uuid=True)).label(
-                "document_id"
-            ),
+            VectorEmbedding.id.label("embedding_id"),
+            document_id_expr.label("document_id"),
+            kb_service_document_id_expr.label("kb_service_document_id"),
+            chunk_id_expr.label("chunk_id"),
+            chunk_index_expr.label("chunk_index"),
             VectorEmbedding.document.label("document"),
             VectorEmbedding.cmetadata.label("cmetadata"),
             score_expr,
         )
+        .select_from(VectorEmbedding)
+        .join(Document, Document.id == kb_service_document_id_expr)
         .where(*conditions)
         .order_by(distance_expr)
         .limit(max_docs)
@@ -229,7 +361,7 @@ class VectorRepository:
         Uses a streaming generator + sliced sub-batches so peak memory is
         bounded by KB_VECTOR_INSERT_BATCH_SIZE records, not the full chunks list.
         """
-        from app.core.config import settings
+        from app.core.config import settings  # noqa: PLC0415
 
         collection_id = self.resolve_collection_id_for_configuration(configuration_id)
         records_iter = _iter_chunk_records(
@@ -237,13 +369,14 @@ class VectorRepository:
             collection_id=collection_id,
             chunks=chunks,
             embeddings=embeddings,
+            chunk_index_offset=0,
         )
         batch_size = settings.KB_VECTOR_INSERT_BATCH_SIZE
         inserted = 0
         with self._pg_engine.begin() as conn:
             conn.execute(
                 delete(VectorEmbedding).where(
-                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                    _document_metadata_match(document_id)
                 )
             )
             for sub_batch in _slice_iter(records_iter, batch_size):
@@ -268,24 +401,8 @@ class VectorRepository:
         chunk_index_offset is the global index of the first chunk in `chunks` —
         the embed stage assigns these so that batches don't overlap.
         """
-        from app.core.config import settings
+        from app.core.config import settings  # noqa: PLC0415
 
-        collection_id = self.resolve_collection_id_for_configuration(configuration_id)
-        # Stream records lazily — generator yields one record at a time.
-        records_iter = _iter_chunk_records(
-            document_id=document_id,
-            collection_id=collection_id,
-            chunks=chunks,
-            embeddings=embeddings,
-        )
-
-        def _with_global_chunk_index():
-            # Shift chunk_index from per-batch local index to global index as records flow by.
-            for offset_within_batch, record in enumerate(records_iter):
-                record["cmetadata"]["chunk_index"] = chunk_index_offset + offset_within_batch
-                yield record
-
-        batch_size = settings.KB_VECTOR_INSERT_BATCH_SIZE
         # We must know the range to clear before inserting → use chunk count.
         # `chunks` is a small per-batch list (≤ KB_EMBED_BATCH_SIZE), so len() is cheap.
         chunk_count = len(chunks) if hasattr(chunks, "__len__") else None
@@ -294,26 +411,30 @@ class VectorRepository:
             # Per-batch chunks are bounded (~100) so this is fine.
             chunks = list(chunks)
             chunk_count = len(chunks)
-            records_iter = _iter_chunk_records(
-                document_id=document_id,
-                collection_id=collection_id,
-                chunks=chunks,
-                embeddings=embeddings,
-            )
 
+        collection_id = self.resolve_collection_id_for_configuration(configuration_id)
+        records_iter = _iter_chunk_records(
+            document_id=document_id,
+            collection_id=collection_id,
+            chunks=chunks,
+            embeddings=embeddings,
+            chunk_index_offset=chunk_index_offset,
+        )
+
+        batch_size = settings.KB_VECTOR_INSERT_BATCH_SIZE
         batch_end_exclusive = chunk_index_offset + chunk_count
         inserted = 0
         with self._pg_engine.begin() as conn:
             # Idempotency: clear our own slice before re-inserting.
             conn.execute(
                 delete(VectorEmbedding).where(
-                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id),
+                    _document_metadata_match(document_id),
                     cast(
                         VectorEmbedding.cmetadata["chunk_index"].astext, Integer
                     ).between(chunk_index_offset, batch_end_exclusive - 1),
                 )
             )
-            for sub_batch in _slice_iter(_with_global_chunk_index(), batch_size):
+            for sub_batch in _slice_iter(records_iter, batch_size):
                 conn.execute(insert(VectorEmbedding), sub_batch)
                 inserted += len(sub_batch)
         return inserted
@@ -325,7 +446,7 @@ class VectorRepository:
                 select(func.count())
                 .select_from(VectorEmbedding)
                 .where(
-                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                    _document_metadata_match(document_id)
                 )
             ).scalar_one()
             return int(row or 0)
@@ -343,7 +464,7 @@ class VectorRepository:
                 select(
                     cast(VectorEmbedding.cmetadata["chunk_index"].astext, Integer)
                 ).where(
-                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                    _document_metadata_match(document_id)
                 )
             )
             return {row[0] for row in result if row[0] is not None}
@@ -355,6 +476,7 @@ class VectorRepository:
         query_vector: list[float],
         max_docs: int,
         score_threshold: float,
+        organization_id: uuid.UUID | str,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[dict]:
         if max_docs <= 0:
@@ -365,6 +487,7 @@ class VectorRepository:
             query_vector=query_vector,
             max_docs=max_docs,
             score_threshold=score_threshold,
+            organization_id=organization_id,
             metadata_filter=metadata_filter,
         )
         with self._pg_engine.begin() as conn:
@@ -382,7 +505,7 @@ class VectorRepository:
         with self._pg_engine.begin() as conn:
             result = conn.execute(
                 delete(VectorEmbedding).where(
-                    VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                    _document_metadata_match(document_id)
                 )
             )
             return result.rowcount or 0
@@ -433,6 +556,7 @@ class AsyncVectorRepository:
         query_vector: list[float],
         max_docs: int,
         score_threshold: float,
+        organization_id: uuid.UUID | str,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[dict]:
         if max_docs <= 0:
@@ -445,6 +569,7 @@ class AsyncVectorRepository:
             query_vector=query_vector,
             max_docs=max_docs,
             score_threshold=score_threshold,
+            organization_id=organization_id,
             metadata_filter=metadata_filter,
         )
         result = await self._session.execute(statement)
@@ -459,7 +584,7 @@ class AsyncVectorRepository:
     async def delete_document_embeddings(self, document_id: uuid.UUID) -> int:
         result = await self._session.execute(
             delete(VectorEmbedding).where(
-                VectorEmbedding.cmetadata["document_id"].astext == str(document_id)
+                _document_metadata_match(document_id)
             )
         )
         await self._session.commit()

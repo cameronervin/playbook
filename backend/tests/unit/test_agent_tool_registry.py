@@ -8,8 +8,8 @@ from app.agents.tools.tool_assignment import (
 from app.agents.tools.tool_prompts import ToolPromptKey
 from app.agents.tools.tool_registry import (
     TOOL_REGISTRY,
-    ToolBuildContext,
     WORKFLOW_CHAIN_NAMES,
+    ToolBuildContext,
 )
 from app.schemas.knowledgebase import KnowledgebaseResult
 
@@ -20,6 +20,7 @@ class FakeKnowledgebaseProvider:
     async def search(
         self,
         query: str,
+        organization_id: str,
         max_docs: int = 10,
         score_threshold: float = 0.7,
         metadata_filter: dict | None = None,

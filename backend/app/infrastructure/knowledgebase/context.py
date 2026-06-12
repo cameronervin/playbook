@@ -31,13 +31,29 @@ def _estimate_tokens(text: str) -> int:
 def _chunk_citation(chunk: RetrievedChunk) -> str:
     """Format a single chunk as a markdown citation block."""
     meta = chunk.metadata
-    doc_title = meta.get("doc_title") or meta.get("filename") or "Unknown Source"
+    doc_title = (
+        meta.get("source_title")
+        or meta.get("doc_title")
+        or meta.get("filename")
+        or "Unknown Source"
+    )
     section_path = meta.get("section_path") or meta.get("section") or ""
 
     source_label = f"{doc_title} — {section_path}" if section_path else doc_title
     score_str = f"{chunk.similarity_score:.0%}" if chunk.similarity_score is not None else "N/A"
+    identity_lines = []
+    for key, label in (
+        ("kb_service_document_id", "KB service document ID"),
+        ("chunk_id", "Chunk ID"),
+        ("chunk_index", "Chunk index"),
+    ):
+        if meta.get(key) is not None:
+            identity_lines.append(f"{label}: {meta[key]}")
+    identity_block = "\n".join(identity_lines)
+    if identity_block:
+        identity_block = f"\n{identity_block}"
 
-    return f"### Source: {source_label}\n{chunk.text}\n(Relevance: {score_str})"
+    return f"### Source: {source_label}{identity_block}\n{chunk.text}\n(Relevance: {score_str})"
 
 
 def assemble_context(chunks: list[RetrievedChunk], max_tokens: int) -> str:

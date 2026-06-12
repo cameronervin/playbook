@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from uuid import UUID
 
 import httpx
 import structlog
@@ -58,6 +59,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
     async def search(
         self,
         query: str,
+        organization_id: UUID | str,
         max_docs: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict | None = None,
@@ -74,6 +76,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
 
         payload: dict[str, Any] = {
             "query": query,
+            "organization_id": str(organization_id),
             "max_docs": resolved_max_docs,
             "score_threshold": resolved_score_threshold,
             "configuration_id": config_id,
@@ -81,11 +84,11 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         if metadata_filter:
             payload["metadata_filter"] = metadata_filter
 
-        # Matches the kb-service contract: POST /api/kb/embed/search returns
-        # {"chunks": [{document_id, text, score, metadata}], "query", "total"}.
+        # Current kb-service returns "chunks"; future semantic routes may return
+        # "results" with the same citation-ready item shape.
         data = await self._post("/api/kb/embed/search", payload)
 
-        raw_items = data.get("chunks", []) if isinstance(data, dict) else []
+        raw_items = _search_items(data)
         chunks = [
             RetrievedChunk(
                 text=item.get("text", ""),
@@ -145,10 +148,12 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         config_id = await self.resolve_configuration()
         payload = {
             "document_id": str(request.playbook_document_id),
+            "organization_id": str(request.organization_id),
             "configuration_id": config_id,
             "url": request.source_uri,
             "filename": request.filename,
             "metadata": {
+                "organization_id": str(request.organization_id),
                 "playbook_document_id": str(request.playbook_document_id),
                 "source_title": request.source_title,
                 "source_date": (
@@ -245,7 +250,25 @@ def _chunk_metadata(item: dict[str, Any]) -> dict[str, Any]:
         "chunk_id",
         "chunk_index",
         "score",
+        "source_title",
+        "source_date",
+        "is_official",
+        "priority",
+        "visibility_policy",
+        "metadata_tags",
+        "content_type",
     ):
         if key in item and key not in metadata:
             metadata[key] = item[key]
     return metadata
+
+
+def _search_items(data: Any) -> list[dict[str, Any]]:
+    if not isinstance(data, dict):
+        return []
+    items = data.get("results")
+    if items is None:
+        items = data.get("chunks", [])
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]

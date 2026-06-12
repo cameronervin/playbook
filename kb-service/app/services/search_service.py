@@ -39,6 +39,7 @@ class SearchService:
         logger.info(
             "kb_embed_search_request",
             query=req.query,
+            organization_id=str(req.organization_id),
             configuration_id=str(req.configuration_id),
             configuration_name=config.name,
             max_docs=req.max_docs,
@@ -53,6 +54,7 @@ class SearchService:
             logger.info(
                 "kb_embed_search_response",
                 query=req.query,
+                organization_id=str(req.organization_id),
                 configuration_id=str(req.configuration_id),
                 total=0,
                 chunks=[],
@@ -62,6 +64,7 @@ class SearchService:
 
         chunk_results = await self._vector_repo.search(
             configuration_id=req.configuration_id,
+            organization_id=req.organization_id,
             query_vector=query_vector,
             max_docs=req.max_docs,
             score_threshold=req.score_threshold,
@@ -71,6 +74,7 @@ class SearchService:
         logger.info(
             "kb_embed_search_response",
             query=req.query,
+            organization_id=str(req.organization_id),
             configuration_id=str(req.configuration_id),
             configuration_name=config.name,
             total=len(response_chunks),

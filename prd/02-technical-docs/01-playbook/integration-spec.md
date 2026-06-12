@@ -89,7 +89,7 @@ Future state:
 ## LLM Gateway
 
 LiteLLM Proxy is the preferred production integration for all LLM and embedding
-calls. Backend agents, KB-service embeddings, and eval jobs call gateway model
+calls. Backend agents, KB-service embeddings, and eval jobs call LiteLLM model
 aliases through an OpenAI-compatible API instead of storing provider API keys in
 application services.
 
@@ -110,7 +110,7 @@ Gateway responsibilities:
 
 Direct provider mode is allowed only for local development, smoke tests, or an
 explicit break-glass path. Production deployments should set application
-services to gateway mode.
+services to `litellm` mode.
 
 ## Dashboard Insights and Admin Chat
 

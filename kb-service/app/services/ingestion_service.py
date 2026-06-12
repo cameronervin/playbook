@@ -31,6 +31,24 @@ from app.schemas.status import TaskStatusResponse
 logger = structlog.get_logger(__name__)
 
 
+def _metadata_with_organization(
+    metadata: dict | None,
+    *,
+    organization_id: uuid.UUID,
+) -> dict:
+    """Return metadata stamped with the trusted top-level organization scope."""
+    normalized = dict(metadata or {})
+    requested_value = str(organization_id)
+    existing_value = normalized.get("organization_id")
+    if existing_value not in (None, requested_value):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="metadata.organization_id must match organization_id",
+        )
+    normalized["organization_id"] = requested_value
+    return normalized
+
+
 def _delete_s3_object(s3_key: str) -> None:
     """Synchronous S3 deletion — intended to run via asyncio.to_thread."""
     from app.core.config import settings
@@ -38,7 +56,7 @@ def _delete_s3_object(s3_key: str) -> None:
 
     client = build_s3_client()
     try:
-        client.delete_object(Bucket=settings.AWS_S3_BUCKET, Key=s3_key)
+        client.delete_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
         logger.info("kb_s3_object_deleted", s3_key=s3_key)
     except Exception as exc:
         logger.warning("kb_s3_delete_failed", s3_key=s3_key, error=str(exc))
@@ -76,13 +94,17 @@ class IngestionService:
 
     def _head_s3_object_size_sync(self, s3_key: str) -> int:
         from botocore.exceptions import ClientError
+
         from app.core.config import settings
-        from app.infrastructure.io.s3_tempfile import build_s3_client, invalidate_s3_client
+        from app.infrastructure.io.s3_tempfile import (
+            build_s3_client,
+            invalidate_s3_client,
+        )
 
         for attempt in range(2):
             try:
                 response = build_s3_client().head_object(
-                    Bucket=settings.AWS_S3_BUCKET, Key=s3_key
+                    Bucket=settings.S3_BUCKET_NAME, Key=s3_key
                 )
                 return int(response.get("ContentLength", 0))
             except ClientError as exc:
@@ -94,13 +116,17 @@ class IngestionService:
 
     def _compute_s3_object_md5_sync(self, s3_key: str) -> str:
         from botocore.exceptions import ClientError
+
         from app.core.config import settings
-        from app.infrastructure.io.s3_tempfile import build_s3_client, invalidate_s3_client
+        from app.infrastructure.io.s3_tempfile import (
+            build_s3_client,
+            invalidate_s3_client,
+        )
 
         for attempt in range(2):
             try:
                 md5_hash = hashlib.md5()  # noqa: S324
-                response = build_s3_client().get_object(Bucket=settings.AWS_S3_BUCKET, Key=s3_key)
+                response = build_s3_client().get_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
                 body = response["Body"]
                 try:
                     while True:
@@ -126,6 +152,10 @@ class IngestionService:
         config = await self._config_repo.get(req.configuration_id)
         if not config:
             raise LookupError(f"Configuration {req.configuration_id} not found")
+        metadata = _metadata_with_organization(
+            req.metadata,
+            organization_id=req.organization_id,
+        )
 
         _, s3_key = extract_s3_parts(req.url)
         # Enforce max document size BEFORE MD5 download — HEAD is cheap, MD5 streams full bytes.
@@ -135,6 +165,14 @@ class IngestionService:
         existing = await self._doc_repo.get_by_config_and_md5(req.configuration_id, md5)
 
         if existing:
+            existing_organization_id = (existing.metadata_ or {}).get("organization_id")
+            if existing_organization_id != str(req.organization_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "document content already exists for a different organization"
+                    ),
+                )
             if existing.status in self._IN_PROGRESS_STATUSES:
                 # Pipeline already running — return existing task_id, don't dispatch a duplicate.
                 log = await self._log_repo.get_by_document(existing.id)
@@ -170,11 +208,11 @@ class IngestionService:
                 name=req.filename,
                 md5=md5,
                 s3_key=s3_key,
-                metadata=req.metadata,
+                metadata=metadata,
             )
             await self._log_repo.create(doc_id)
 
-        task_id = await self._dispatch_pipeline(doc_id, config, s3_key, req.filename, req.metadata)
+        task_id = await self._dispatch_pipeline(doc_id, config, s3_key, req.filename, metadata)
         logger.info("kb_ingest_dispatched", doc_id=str(doc_id), task_id=task_id, s3_key=s3_key)
         return IngestURLResponse(task_id=task_id, document_id=doc_id)
 

@@ -4,9 +4,9 @@ Worker queues (split CPU vs I/O for optimal throughput):
   kb-cpu     — parse_task, chunk_task, embed_task dispatcher (CPU-bound)
                Use prefork pool, --concurrency=2
   kb-io      — embed_batch_task, load_vector_task, reconcile_stuck_embeds
-               (I/O-bound: gateway HTTP + per-batch DB writes)
+               (I/O-bound: LiteLLM HTTP + per-batch DB writes)
                Use threads pool, --concurrency=50 so a single process can hold
-               many in-flight gateway calls.
+               many in-flight LiteLLM calls.
   kb-notify  — notify_status_task (dedicated to avoid head-of-line blocking)
 
 Start workers (recommended layout on a 3 CPU / 2 GB host)::
@@ -15,7 +15,7 @@ Start workers (recommended layout on a 3 CPU / 2 GB host)::
   celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2 \\
          --loglevel=info -n kb-cpu@%h
 
-  # I/O worker: threads pool — 50 OS threads multiplex gateway calls in one process
+  # I/O worker: threads pool — 50 OS threads multiplex LiteLLM calls in one process
   celery -A app.workers.app worker -Q kb-io --pool=threads --concurrency=50 \\
          --loglevel=info -n kb-io@%h
 
@@ -58,7 +58,7 @@ kb_worker.conf.update(
     task_routes={
         # Notifications: dedicated low-latency queue.
         "app.workers.tasks.notify_status_task": {"queue": "kb-notify"},
-        # I/O-bound — gateway HTTP, DB writes. Routed to kb-io.
+        # I/O-bound — LiteLLM HTTP, DB writes. Routed to kb-io.
         "app.workers.tasks.embed_batch_task":       {"queue": "kb-io"},
         "app.workers.tasks.load_vector_task":       {"queue": "kb-io"},
         "app.workers.tasks.reconcile_stuck_embeds": {"queue": "kb-io"},
@@ -117,7 +117,7 @@ def run_async(coro):
       * threads / gevent (many concurrent tasks share one process) → the shared
         worker loop can't be re-entered, so each task spins up its own loop via
         ``asyncio.run``. Slight per-task overhead but lets I/O workers multiplex
-        50+ in-flight gateway calls.
+        50+ in-flight LiteLLM calls.
       * tests / scripts (no worker init at all) → ``asyncio.run`` fallback.
     """
     global _worker_loop, _worker_loop_owner_thread

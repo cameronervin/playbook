@@ -115,12 +115,12 @@ To restore OCR:
 
 `embedders/` provides:
 
-- `base.py` — `EmbedProviderMode(StrEnum)` (GATEWAY/DIRECT), `BaseEmbedProvider`
+- `base.py` — `EmbedProviderMode(StrEnum)` (LITELLM/DIRECT), `BaseEmbedProvider`
   (ABC with the shared sync `embed()` loop + dimension check), and the error
   hierarchy (`EmbedProviderError` / `EmbedRateLimitError` / `EmbedTransientError`
   + `normalize_embed_exception`).
-- `direct.py` / `gateway.py` — concrete providers (model from
-  `OPENAI_EMBED_MODEL` / `LLM_GATEWAY_EMBED_MODEL`).
+- `direct.py` / `litellm.py` — concrete providers (model from
+  `DIRECT_EMBED_MODEL` / `LITELLM_EMBED_MODEL`).
 - `factory.py` — the StrEnum + `@lru_cache` pattern:
   - `get_embed_provider(mode)` — process-wide cached singleton. Safe for sync
     callers (the API path).
@@ -136,7 +136,7 @@ The embedding dimension is wired in **three** places that must stay in sync:
 
 1. `settings.KB_EMBED_DIMENSIONS` — validated against every returned vector in
    `BaseEmbedProvider.embed()`.
-2. `settings.OPENAI_EMBED_MODEL` / `settings.LLM_GATEWAY_EMBED_MODEL` — the model
+2. `settings.DIRECT_EMBED_MODEL` / `settings.LITELLM_EMBED_MODEL` — the model
    that actually produces vectors of that dimension.
 3. The `vector(N)` column in the database migration for the embeddings table —
    `N` must equal `KB_EMBED_DIMENSIONS`.
@@ -149,7 +149,7 @@ Changing the model or dimension requires re-ingesting existing documents.
 
 `vectorstore/pgvector.py` exposes:
 
-- `cosine_search(pg_engine, collection_id, query_vector, max_docs, score_threshold, metadata_filter)` (sync)
+- `cosine_search(pg_engine, collection_id, organization_id, query_vector, max_docs, score_threshold, metadata_filter)` (sync)
 - `async_cosine_search(session, ...)` (async, via `AsyncSession`)
 - `bulk_insert_embeddings(pg_engine, document_id, collection_id, chunks, embeddings)`
 
@@ -169,7 +169,7 @@ those files land.
 ## 5. IO / S3
 
 - `io/s3_client.py` — `build_s3_client()` (process-wide cached boto3 client,
-  honours `AWS_S3_ENDPOINT_URL` / region / keys / profile) and
+  honours `S3_ENDPOINT_URL` / region / keys / profile) and
   `invalidate_s3_client()` (clears the cache so the next call rebuilds, e.g.
   after credential expiry).
 - `io/s3_tempfile.py` — `stream_s3_object_to_tempfile` (async) and

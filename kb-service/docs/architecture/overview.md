@@ -40,7 +40,7 @@ only small summary dicts flow between tasks.
                                    ▼
         ┌──────────── embed_batch_task × N (kb-io queue) ──────────┐
         │  read chunk slice [start,end) from S3 NDJSON            │
-        │  → embed via gateway (distributed rate limiter)         │
+        │  → embed via LiteLLM (distributed rate limiter)         │
         │  → INSERT batch vectors into kb.langchain_pg_embedding  │
         │  → INCR Redis progress counter                          │
         │  → last batch dispatches load_vector_task               │
@@ -76,7 +76,7 @@ embed started but never finalised.
 ## 2. Search flow
 
 ```
-POST /api/kb/search ──► SearchService ──► embed query (gateway/direct)
+POST /api/kb/search ──► SearchService ──► embed query (litellm/direct)
                                        └─► AsyncVectorRepository.search
                                              (cosine distance over pgvector,
                                               score = 1 - distance,
@@ -99,7 +99,7 @@ contend for the same workers:
 | Queue        | Tasks                                                    | Pool / concurrency        | Why |
 |--------------|----------------------------------------------------------|---------------------------|-----|
 | `kb-cpu`     | `parse_task`, `chunk_task`, `embed_task` (dispatcher)    | prefork, ~2                | Docling + tiktoken are CPU-bound |
-| `kb-io`      | `embed_batch_task`, `load_vector_task`, `reconcile_stuck_embeds` | threads, ~50      | gateway HTTP + per-batch DB writes are I/O-bound |
+| `kb-io`      | `embed_batch_task`, `load_vector_task`, `reconcile_stuck_embeds` | threads, ~50      | LiteLLM HTTP + per-batch DB writes are I/O-bound |
 | `kb-notify`  | `notify_status_task`                                     | solo                       | dedicated low-latency, avoids head-of-line blocking |
 
 Reliability config applies to all queues: `task_acks_late`,

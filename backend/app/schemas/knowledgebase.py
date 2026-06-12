@@ -53,6 +53,7 @@ class KnowledgebaseHealthResponse(BaseModel):
 class KBDocumentIngestRequest(BaseModel):
     """Semantic backend-to-KB-service document ingest request."""
 
+    organization_id: UUID
     playbook_document_id: UUID
     source_uri: str
     filename: str

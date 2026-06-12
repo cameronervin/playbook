@@ -17,7 +17,7 @@ signed status webhooks.
 | Original admin-uploaded binary | Main backend blob storage | Referenced by `kb_documents.storage_key`; KB service reads via signed/presigned URL |
 | Parsed page text | Temporary KB staging storage | NDJSON staging used between parse/chunk tasks; deleted after terminal cleanup |
 | Chunk text | `kb.langchain_pg_embedding.document` or equivalent text column | Durable retrieval text returned in search results |
-| Embedding vectors | `kb.langchain_pg_embedding.embedding` | `vector(1536)` for `text-embedding-3-small` |
+| Embedding vectors | `kb.langchain_pg_embedding.embedding` | `vector(1536)` for the `playbook-embed` LiteLLM alias |
 | Chunk metadata | `kb.langchain_pg_embedding.cmetadata` | Includes Playbook document ID, source fields, visibility policy, and chunk locator |
 | Ingestion lifecycle | `kb.documents`, `kb.ingestion_logs` | KB service internal source of truth |
 
@@ -110,6 +110,7 @@ Required MVP fields:
 - `cmetadata`
 
 Required `cmetadata` keys:
+- `organization_id`
 - `playbook_document_id`
 - `kb_document_id`
 - `chunk_id`

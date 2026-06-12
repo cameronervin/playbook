@@ -66,6 +66,7 @@ class FakeKnowledgebaseProvider:
     async def search(
         self,
         query: str,
+        organization_id: UUID | str,
         max_docs: int = 10,
         score_threshold: float = 0.7,
         metadata_filter: dict | None = None,
@@ -159,6 +160,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
         "topic": "nil",
         "source_type": "policy",
     }
+    assert kb_provider.ingest_requests[0].organization_id == admin.organization_id
 
     list_response = await route_client.client.get("/api/v1/admin/kb/documents")
     get_response = await route_client.client.get(
@@ -182,6 +184,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     assert retry_response.status_code == 200
     assert retry_response.json()["processing_status"] == "uploaded"
     assert len(kb_provider.ingest_requests) == 2
+    assert kb_provider.ingest_requests[1].organization_id == admin.organization_id
 
     events = list(
         (

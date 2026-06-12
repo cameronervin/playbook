@@ -63,7 +63,7 @@ Set them here:
 LITELLM_API_KEY=<backend-virtual-key>
 
 # deploy/envs/.env.kb-service.local or prod secret
-LLM_GATEWAY_API_KEY=<kb-service-virtual-key>
+LITELLM_API_KEY=<kb-service-virtual-key>
 ```
 
 ## Local Startup

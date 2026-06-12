@@ -1,7 +1,7 @@
 """Base embedding provider interface.
 
 Pattern overview:
-  * ``EmbedProviderMode`` is a ``StrEnum`` (GATEWAY/DIRECT) selecting how
+  * ``EmbedProviderMode`` is a ``StrEnum`` (LITELLM/DIRECT) selecting how
     embeddings are produced.
   * ``BaseEmbedProvider`` is an ABC holding the shared sync ``embed()`` loop;
     subclasses only supply the injected ``OpenAI`` client + model name and the
@@ -36,7 +36,7 @@ logger = structlog.get_logger(__name__)
 
 
 class EmbedProviderMode(StrEnum):
-    GATEWAY = "gateway"
+    LITELLM = "litellm"
     DIRECT = "direct"
 
 
