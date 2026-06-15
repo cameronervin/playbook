@@ -38,7 +38,8 @@ kb-service/ api/ -> services/ -> repositories/ -> models/   (+ workers/ Celery p
 The backend reaches `kb-service` over HTTP via `LocalKBProvider`
 (`backend/app/infrastructure/knowledgebase/`). `kb-service` is the RAG pipeline:
 docling parsing -> tiktoken chunking -> OpenAI/LiteLLM embeddings -> pgvector
-similarity search. See `kb-service/README.md` and `kb-service/app/infrastructure/STUBS.md`.
+similarity search. See `kb-service/README.md` and
+`docs/guides/kb_service_extension_points.md`.
 
 ---
 

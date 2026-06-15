@@ -1,9 +1,8 @@
 """KB Service settings — loaded from environment variables.
 
 Grouped by concern. Mode-dependent required fields are enforced in
-``_validate_provider_config``. Genericized scaffold: OCR is a stub
-(``OCR_PROVIDER="none"``); plug Textract/VLM back in via the OCR provider
-(see ``app/infrastructure/STUBS.md``).
+``_validate_provider_config``. OCR is opt-in: ``OCR_PROVIDER="none"`` by
+default, while ``OCR_PROVIDER="vlm"`` routes scanned PDF OCR through LiteLLM.
 """
 from __future__ import annotations
 
@@ -69,6 +68,7 @@ class Settings(BaseSettings):
     LITELLM_BASE_URL: str = ""
     LITELLM_API_KEY: str = ""
     LITELLM_EMBED_MODEL: str = "playbook-embed"
+    LITELLM_VLM_MODEL: str = "playbook-ocr"
 
     # -------------------------------------------------------------------------
     # S3-compatible storage — where original uploads + staged NDJSON live
@@ -121,11 +121,15 @@ class Settings(BaseSettings):
 
     # -------------------------------------------------------------------------
     # Parser routing
-    #   OCR_PROVIDER="none" → NullOCRProvider (stub). High-complexity/scanned
-    #   PDFs fall back to the local text parser. Set to "textract" or "vlm" only
-    #   after implementing those providers (see app/infrastructure/STUBS.md).
+    #   OCR_PROVIDER="none" → NullOCRProvider. High-complexity/scanned PDFs fall
+    #   back to the local text parser. OCR_PROVIDER="vlm" sends scanned PDF
+    #   pages through the LiteLLM vision model alias configured above.
     # -------------------------------------------------------------------------
     OCR_PROVIDER: Literal["none", "textract", "vlm"] = "none"
+    VLM_OCR_DPI: int = 150
+    VLM_OCR_DETAIL: Literal["auto", "low", "high"] = "high"
+    VLM_OCR_MAX_PAGES: int = 50
+    VLM_OCR_REQUEST_TIMEOUT_SECONDS: float = 120.0
     ENABLE_DOCLING_ROUTING: bool = True
     DOC_PARSER_POLICY: str = "complexity"   # complexity | always_docling | always_basic
 
@@ -186,6 +190,13 @@ class Settings(BaseSettings):
             errors.append(
                 "LITELLM_API_KEY is required when LLM_PROVIDER_MODE=litellm"
             )
+        if self.OCR_PROVIDER == "vlm":
+            if not self.LITELLM_BASE_URL:
+                errors.append("LITELLM_BASE_URL is required when OCR_PROVIDER=vlm")
+            if not self.LITELLM_API_KEY:
+                errors.append("LITELLM_API_KEY is required when OCR_PROVIDER=vlm")
+            if not self.LITELLM_VLM_MODEL:
+                errors.append("LITELLM_VLM_MODEL is required when OCR_PROVIDER=vlm")
         if _is_production_environment(self.ENVIRONMENT):
             _require_min_secret_length(
                 errors,

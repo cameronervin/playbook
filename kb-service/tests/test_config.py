@@ -63,6 +63,46 @@ def test_direct_mode_requires_explicit_openai_key() -> None:
     assert "OPENAI_API_KEY is required when LLM_PROVIDER_MODE=direct" in message
 
 
+def test_ocr_provider_defaults_to_none() -> None:
+    settings = _base_settings()
+
+    assert settings.OCR_PROVIDER == "none"
+
+
+def test_vlm_ocr_requires_litellm_connection_settings() -> None:
+    try:
+        _base_settings(
+            LLM_PROVIDER_MODE="direct",
+            OPENAI_API_KEY="direct-key",
+            OCR_PROVIDER="vlm",
+            LITELLM_BASE_URL="",
+            LITELLM_API_KEY="",
+            LITELLM_VLM_MODEL="",
+        )
+    except ValidationError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Settings should reject missing VLM LiteLLM config")
+
+    assert "LITELLM_BASE_URL is required when OCR_PROVIDER=vlm" in message
+    assert "LITELLM_API_KEY is required when OCR_PROVIDER=vlm" in message
+    assert "LITELLM_VLM_MODEL is required when OCR_PROVIDER=vlm" in message
+
+
+def test_vlm_ocr_allows_direct_embedding_mode_with_litellm_vision() -> None:
+    settings = _base_settings(
+        LLM_PROVIDER_MODE="direct",
+        OPENAI_API_KEY="direct-key",
+        OCR_PROVIDER="vlm",
+        LITELLM_BASE_URL="http://litellm:4000",
+        LITELLM_API_KEY="litellm-key",
+        LITELLM_VLM_MODEL="playbook-ocr",
+    )
+
+    assert settings.OCR_PROVIDER == "vlm"
+    assert settings.LITELLM_VLM_MODEL == "playbook-ocr"
+
+
 def test_canonical_s3_settings_populate_runtime_config() -> None:
     settings = _base_settings(
         S3_BUCKET_NAME="playbook-bucket",

@@ -146,42 +146,46 @@ Parser decision tree:
 
 ```text
 ParserRouter.route_path()
-  |
-  +-- PDF
-  |     -> PDFRouter.route_path()
-  |     -> ComplexityAssessor.assess()
-  |          low    -> NativePDFParser
-  |          medium -> DoclingPDFParser if enabled, fallback native
-  |          high   -> OCR provider if available, fallback native
-  |
-  +-- DOCX/PPTX with docling routing enabled
-  |     -> OfficeRouter.route_path()
-  |     -> ComplexityAssessor.assess()
-  |          low    -> native parser
-  |          medium -> Docling parser, fallback native
-  |
-  +-- XLS/XLSX or simple file
-        -> parser from PARSER_DISPATCH
-```
+  -> resolve MIME
+  -> look up MimeExtractorSet in routing/catalog.py
+  -> ComplexityAssessor.assess()
+  -> build ordered candidates
+  -> run candidates until one returns usable ParseOutcome
 
-Registry loading:
+The catalog binds PDF/DOCX/PPTX MIME entries to `DoclingParser` instances with
+format-specific `DoclingParserSpec` metadata. `ParserRouter` only chooses the
+candidate by MIME and complexity; it does not branch on Docling formats.
+Native extractor modules are named by file type: `pdf.py`, `docx.py`,
+`pptx.py`, and `excel.py`.
 
-```text
-ParserRouter.__init__()
-  -> load_parser_registry()
-       -> import docx, excel, pdf_native, pptx extractors
-       -> each module registers PARSER_DISPATCH[mime] = ParserClass
+PDF candidates
+  low    -> native_pdf
+  medium -> docling_pdf, fallback native_pdf
+  high   -> ocr_pdf, fallback native_pdf
+
+DOCX/PPTX candidates
+  low    -> native_docx/native_pptx
+  medium -> docling_docx/docling_pptx, fallback native
+
+XLS/XLSX candidates
+  any    -> native_excel
 ```
 
 Native extractors:
 
 ```text
-NativePDFParser       -> PyMuPDF, one text segment per non-empty page
-NativeDOCXParser      -> python-docx, joined non-empty paragraphs
-PptxParser            -> python-pptx, one text block per slide
-ExcelParser           -> openpyxl, one text block per worksheet
-Docling*Parser        -> structured text plus tables, figures, layout blocks
+NativePDFParser       -> native_pdf, PyMuPDF page text
+NativeDOCXParser      -> native_docx, python-docx paragraphs
+NativePPTXParser      -> native_pptx, python-pptx slide text
+NativeExcelParser     -> native_excel, openpyxl worksheet text
+DoclingParser(spec)   -> docling_*, text plus tables/figures/layout blocks
+OCR provider          -> ocr_pdf, async high-complexity PDF route
 ```
+
+`OCR_PROVIDER=none` is the default; high-complexity PDFs then fall back to the
+native PDF extractor and fail with `NO_TEXT_EXTRACTED` if no usable text exists.
+`OCR_PROVIDER=vlm` enables LiteLLM-routed scanned PDF OCR through the
+`LITELLM_VLM_MODEL` alias before fallback. Textract is intentionally unsupported.
 
 ## Retrieval Flow
 

@@ -7,11 +7,9 @@ overhead.
 
 Each builder is ``@lru_cache``d so a single client (and its connection pool) is
 shared process-wide. ``from openai import OpenAI`` is imported lazily inside
-each builder so this module compiles without ``openai`` installed.
-
-NOTE: the source service also exposed an async ``get_vlm_client`` for the VLM
-OCR path. That has been dropped along with the VLM provider — see
-``app/infrastructure/STUBS.md``.
+each builder so this module compiles without ``openai`` installed. The VLM OCR
+provider builds its own LiteLLM chat client because it has different timeout
+and lifecycle needs than embeddings.
 """
 from __future__ import annotations
 

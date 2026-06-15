@@ -170,17 +170,55 @@ Playbook surface.
 
 ## 5. KB Service
 
-For standalone KB-service work:
+For standalone KB-service work, use Docker Compose for infrastructure and `uv`
+for the API/workers:
 
 ```bash
+# From the repo root: start Postgres, MinIO/S3, LiteLLM, and the KB broker.
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d \
+  db minio minio-bootstrap litellm kb-valkey
+
+# Then run the KB API on the host with uv.
 cd kb-service
 uv sync
-uv run alembic upgrade head          # needs Postgres with pgvector
+cp ../deploy/envs/.env.kb-service.local .env
+
+# Host-run services need host ports instead of Docker service names in .env:
+# DATABASE_URL=postgresql+asyncpg://app:localpass@localhost:5433/playbook
+# CELERY_BROKER_URL=redis://localhost:6380/0
+# CELERY_RESULT_BACKEND=redis://localhost:6380/1
+# LITELLM_BASE_URL=http://localhost:4000
+# S3_ENDPOINT_URL=http://localhost:9000
+# APP_WEBHOOK_URL=http://localhost:8000
+
+uv run alembic upgrade head
 uv run python run_dev.py             # uvicorn on http://localhost:8001
 ```
 
-If running KB-service directly on the host while LiteLLM runs in Docker, set
-`LITELLM_BASE_URL=http://localhost:4000` in `kb-service/.env`.
+Run the KB ingest workers in separate terminals from `kb-service/`:
+
+```bash
+uv run celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2 --loglevel=info
+uv run celery -A app.workers.app worker -Q kb-io,kb-notify --pool=threads --concurrency=50 --loglevel=info
+```
+
+For an all-Docker local stack, include the worker profile:
+
+```bash
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml --profile worker up --build
+```
+
+KB infrastructure definitions:
+
+| Component | Compose service | Local host port | Config |
+|-----------|-----------------|-----------------|--------|
+| Postgres + pgvector | `db` | `5433` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
+| MinIO S3 API | `minio` | `9000` | `deploy/compose/local.yml` |
+| MinIO bucket bootstrap | `minio-bootstrap` | n/a | creates `S3_BUCKET_NAME` (`playbook-bucket`) |
+| KB broker/result backend | `kb-valkey` | `6380` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
+| LiteLLM proxy | `litellm` | `4000` | `deploy/litellm/config.yaml`, `deploy/envs/.env.litellm.local` |
+| KB API container | `kb-api` | `8001` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
+| KB workers | `kb-worker-cpu`, `kb-worker-io` | n/a | enabled with `--profile worker` |
 
 ## 6. Verify End to End
 

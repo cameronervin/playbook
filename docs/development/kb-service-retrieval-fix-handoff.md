@@ -49,9 +49,10 @@ Related docs:
    admin-uploaded shared KB documents are official by definition, priority is
    not a user-facing MVP ranking control, and backend retrieval ranks
    near-similar chunks by `source_date`.
-9. **OCR is stubbed**: future OCR should use a LiteLLM-routed vision model, not
-   AWS Textract. Implement the `vlm` provider path and avoid adding Textract
-   dependencies.
+9. **Resolved — OCR/VLM provider is opt-in**: high-complexity scanned PDFs can
+   use `OCR_PROVIDER=vlm`, which routes page images through a LiteLLM vision
+   model alias. `OCR_PROVIDER=none` remains the default, and Textract remains
+   unsupported with no added dependencies.
 10. **Resolved — Env names differ across services**: reconcile KB-service names with
     backend names for LiteLLM and S3/MinIO, or support aliases with documented
     precedence.
@@ -61,7 +62,7 @@ Key code areas:
 - `backend/app/infrastructure/knowledgebase/providers/local_kb.py`
 - `kb-service/app/repositories/vector_repo.py`
 - `kb-service/app/services/configuration_service.py`
-- `kb-service/app/infrastructure/parsers/providers/ocr/ocr.py`
+- `kb-service/app/infrastructure/parsers/providers/ocr.py`
 
 ## Required Change Direction
 
@@ -75,11 +76,9 @@ Key code areas:
   policy.
 - Implement OCR/VLM through LiteLLM model aliases and LiteLLM credentials. Do
   not implement Textract for this product path.
-- Reconcile env naming around:
-  - LiteLLM: backend uses `LITELLM_BASE_URL` / `LITELLM_API_KEY`; KB-service
-    currently uses `LLM_GATEWAY_BASE_URL` / `LLM_GATEWAY_API_KEY`.
-  - Storage: backend uses `S3_*`; KB-service currently uses `AWS_S3_*` and
-    `AWS_*`.
+- Keep env naming canonical across backend and KB-service:
+  - LiteLLM: `LITELLM_BASE_URL` / `LITELLM_API_KEY`.
+  - Storage: `S3_*`.
 
 ## Suggested Acceptance Criteria
 

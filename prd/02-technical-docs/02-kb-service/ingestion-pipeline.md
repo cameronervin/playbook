@@ -36,7 +36,8 @@ ingest request
 - Use Docling/native parsers from the existing scaffold.
 - Produce page/sheet/slide-aware text records when possible.
 - Fail with `NO_TEXT_EXTRACTED` when a file has no usable text.
-- OCR/image-only extraction is not MVP unless separately enabled.
+- Scanned PDF OCR is available only when explicitly enabled through the
+  LiteLLM-routed VLM provider; standalone image extraction remains out of MVP.
 
 ### Chunk
 
@@ -101,5 +102,5 @@ When a Playbook KB document is deleted or archived:
 
 - Athlete conversation file ingestion into shared KB.
 - Provider API actions in external athletic systems.
-- OCR for image-only documents unless separately scoped.
+- Standalone OCR for image-only documents unless separately scoped.
 - Cross-organization document sharing.

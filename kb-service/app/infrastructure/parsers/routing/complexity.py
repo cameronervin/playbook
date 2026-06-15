@@ -18,7 +18,6 @@ from zipfile import BadZipFile
 
 from app.core.config import settings
 
-
 PDF_MIME = "application/pdf"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"

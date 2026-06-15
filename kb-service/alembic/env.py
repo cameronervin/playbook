@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, pool, text
 
 # ---------------------------------------------------------------------------
 # Import KB models so their metadata is registered on Base.metadata.
@@ -23,6 +25,8 @@ import app.models  # noqa: F401 — ensures all models are imported
 # Alembic Config object (alembic.ini values).
 # ---------------------------------------------------------------------------
 config = context.config
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -56,6 +60,8 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     connectable = create_engine(_get_url(), poolclass=pool.NullPool)
     with connectable.connect() as connection:
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS kb"))
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

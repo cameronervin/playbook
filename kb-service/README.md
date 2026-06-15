@@ -43,7 +43,7 @@ seeding.
 | API | FastAPI (port 8001), Bearer service-to-service auth |
 | Async pipeline | Celery + Valkey (multi-queue: cpu / io / notify) |
 | Parsing | Docling (PDF/DOCX/PPTX) + native (python-docx / openpyxl / python-pptx); complexity router |
-| OCR | **stub** (`NullOCRProvider`) — plug Textract/VLM back in (see `app/infrastructure/STUBS.md`) |
+| OCR | Opt-in scanned PDF OCR via LiteLLM VLM alias (`OCR_PROVIDER=vlm`); default is `NullOCRProvider` |
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
 | Embeddings | OpenAI direct or LiteLLM mode (`EmbedProviderMode`), 1536-dim |
 | Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
@@ -64,7 +64,7 @@ app/
     tasks/                 parse/chunk/embed/finalize/notify/watchdog modules
   infrastructure/
     db/session.py          thread-local async engine + NullPool (Celery-thread safe)
-    parsers/               contracts + extractors + complexity routing + OCR stub
+    parsers/               contracts + extractors + complexity routing + opt-in VLM OCR
     chunkers/              token-based recursive splitter
     embedders/             ABC + direct + litellm + factory
     vectorstore/           pgvector cosine search / bulk insert wrappers
@@ -90,6 +90,7 @@ See `deploy/compose/base.yml` (+ `--profile worker`) to run the whole stack with
 
 ## Extending
 
-Read `app/infrastructure/STUBS.md` for: adding a parser/extractor, plugging a real
-OCR provider (Textract / VLM), and changing the embedding model or vector dimension
-(requires a migration — the `vector(N)` column dimension is fixed).
+Read `../docs/guides/kb_service_extension_points.md` for: adding a
+parser/extractor, enabling the LiteLLM-routed VLM OCR path, and changing the
+embedding model or vector dimension (requires a migration — the `vector(N)`
+column dimension is fixed).

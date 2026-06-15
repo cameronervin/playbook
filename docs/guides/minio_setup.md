@@ -14,11 +14,11 @@ and the web console on port `9001`:
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d minio minio-bootstrap
 ```
 
-The `minio-bootstrap` service creates the local buckets used by Playbook:
+The `minio-bootstrap` service creates the configured local bucket used by
+Playbook:
 
 ```text
 playbook-bucket
-kb-documents
 ```
 
 ## Option B — Standalone container
@@ -63,8 +63,7 @@ client:
 ```bash
 docker run --rm --network host quay.io/minio/mc \
   sh -c 'mc alias set local http://localhost:9000 playbookminio playbookminio123 && \
-  mc mb --ignore-existing local/playbook-bucket && \
-  mc mb --ignore-existing local/kb-documents'
+  mc mb --ignore-existing local/playbook-bucket'
 ```
 
 ## Validate

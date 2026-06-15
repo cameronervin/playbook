@@ -1,24 +1,16 @@
-"""OCR provider abstraction and factory for parser routing (SCAFFOLD STUB).
+"""OCR provider abstraction and factory for parser routing.
 
-This is the key genericization point. In the source service two concrete OCR
-providers backed the "high complexity" PDF route and image parsing:
+This is the key genericization point. The product path supports:
 
-  * a Textract provider (AWS Textract async document analysis + result polling)
-  * a VLM provider (OpenAI Vision: rasterise pages and caption them)
-
-Both were dropped from the scaffold to keep it dependency-light and
-vendor-neutral. What remains is:
-
-  * ``BaseOCRProvider`` — the Protocol every real provider must satisfy.
   * ``NullOCRProvider`` — the default. ``parse_pdf_high_complexity`` returns
-    ``None``, which the PDF router reads as "no OCR available — fall back to
+    ``None``, which ``ParserRouter`` reads as "no OCR available — fall back to
     the native text extractor". ``parse_image_s3`` raises, because there is no
-    sensible text-only fallback for an image.
-  * ``build_ocr_provider`` — factory keyed off ``settings.OCR_PROVIDER``.
+    image route in the shared KB MVP.
+  * ``VLMOCRProvider`` — opt-in via ``OCR_PROVIDER="vlm"``. It rasterises
+    scanned PDF pages and transcribes them through a LiteLLM vision model alias.
 
-To plug a real provider back in, implement ``BaseOCRProvider``, return it from
-``build_ocr_provider`` for the matching ``OCR_PROVIDER`` value, and set
-``OCR_PROVIDER=textract`` or ``vlm``. See ``app/infrastructure/STUBS.md``.
+Textract is intentionally unsupported for Playbook; OCR must route through
+LiteLLM credentials/model aliases.
 """
 from __future__ import annotations
 
@@ -47,7 +39,7 @@ class BaseOCRProvider(Protocol):
     ) -> ParseOutcome | None:
         """Parse a scanned / image-dominant PDF via OCR.
 
-        Returning ``None`` signals "no OCR available" — the PDF router then
+        Returning ``None`` signals "no OCR available" — ``ParserRouter`` then
         falls back to the native text extractor.
         """
         ...
@@ -82,22 +74,25 @@ class NullOCRProvider:
 
     async def parse_image_s3(self, *, s3_bucket: str | None, s3_key: str | None) -> ParseOutcome:
         raise UnsupportedFileTypeError(
-            "OCR provider not configured; image parsing requires Textract or VLM — see STUBS.md"
+            "OCR provider not configured; image parsing is not part of the shared KB parser route"
         )
 
 
 def build_ocr_provider(provider: OCRProvider | None = None) -> BaseOCRProvider:
     """Return the configured OCR provider.
 
-    Defaults to ``settings.OCR_PROVIDER`` (``"none"`` in the scaffold). The
-    ``textract``/``vlm`` branches are intentionally unimplemented stubs — wire
-    in a real ``BaseOCRProvider`` here when you implement them.
+    Defaults to ``settings.OCR_PROVIDER``. ``textract`` intentionally remains
+    unsupported for Playbook; use ``vlm`` to route OCR through LiteLLM.
     """
     selected_provider = provider or settings.OCR_PROVIDER
     if selected_provider == "none":
         return NullOCRProvider()
-    if selected_provider in ("textract", "vlm"):
+    if selected_provider == "vlm":
+        from app.infrastructure.parsers.providers.vlm import VLMOCRProvider
+
+        return VLMOCRProvider()
+    if selected_provider == "textract":
         raise NotImplementedError(
-            "Textract/VLM OCR not implemented in scaffold — see app/infrastructure/STUBS.md"
+            "Textract OCR is not supported for Playbook; set OCR_PROVIDER=vlm to use LiteLLM-routed vision OCR"
         )
     raise UnsupportedFileTypeError(f"Unsupported OCR provider: {selected_provider}")

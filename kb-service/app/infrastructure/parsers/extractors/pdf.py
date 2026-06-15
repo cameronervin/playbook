@@ -1,4 +1,4 @@
-"""Native PDF text extractor (PyMuPDF / ``fitz``).
+"""Native PDF parser (PyMuPDF / ``fitz``).
 
 This is the "low complexity" local PDF path. The source service used the
 ``unstructured`` library here; we dropped that heavy dependency in favour of a
@@ -18,8 +18,9 @@ from typing import IO
 
 import structlog
 
-from app.infrastructure.parsers.contracts.base import PARSER_DISPATCH
+from app.infrastructure.parsers.contracts.base import build_text_only_outcome
 from app.infrastructure.parsers.contracts.errors import CorruptFileError, ParseWarning
+from app.infrastructure.parsers.contracts.models import ParseOutcome
 
 logger = structlog.get_logger(__name__)
 
@@ -42,6 +43,8 @@ def _pages_from_document(document) -> list[str]:
 class NativePDFParser:
     """Lightweight PyMuPDF text extractor for digitally-native PDFs."""
 
+    parser_id = "native_pdf"
+
     def parse(self, file: IO[bytes], filename: str) -> list[str]:
         import fitz
 
@@ -51,7 +54,7 @@ class NativePDFParser:
             with fitz.open(stream=data, filetype="pdf") as document:
                 return _pages_from_document(document)
         except Exception as exc:  # pragma: no cover - dependency-specific failures
-            logger.error("pdf_parse_failed", filename=filename, error=str(exc))
+            logger.exception("pdf_parse_failed", filename=filename, error=str(exc))
             raise CorruptFileError(f"Failed to parse PDF: {filename}") from exc
 
     def parse_path(self, path: str, filename: str) -> list[str]:
@@ -65,12 +68,17 @@ class NativePDFParser:
                 # genuinely needs OCR. Signal the router rather than returning
                 # an empty/garbage result.
                 raise ParseWarning(f"Low text output for PDF: {filename}")
-            return pages
         except ParseWarning:
             raise
         except Exception as exc:  # pragma: no cover - dependency-specific failures
-            logger.error("pdf_parse_path_failed", filename=filename, error=str(exc))
+            logger.exception("pdf_parse_path_failed", filename=filename, error=str(exc))
             raise CorruptFileError(f"Failed to parse PDF: {filename}") from exc
+        else:
+            return pages
 
-
-PARSER_DISPATCH["application/pdf"] = NativePDFParser
+    def parse_outcome_path(self, path: str, filename: str) -> ParseOutcome:
+        return build_text_only_outcome(
+            text_segments=self.parse_path(path, filename),
+            selected_parser=self.parser_id,
+            route="extractor",
+        )

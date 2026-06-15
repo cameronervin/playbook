@@ -1,113 +1,132 @@
-# Infrastructure Stubs & Extension Points
+# KB Service Extension Points
 
-This is the genericized RAG infrastructure layer. It ships with the heavy,
-vendor-specific pieces stubbed out so the scaffold compiles and runs with a
-minimal dependency set. This document explains the extension points and how to
-plug real implementations back in.
+This guide describes the KB service's RAG infrastructure layer. It keeps provider-specific
+behavior behind small extension points so the service compiles and runs with a
+minimal dependency set. This document explains those extension points and how
+to configure the implemented provider paths.
 
 ---
 
 ## 1. Parser layer
 
-### The Protocol + dispatch registry
+### The Protocols + explicit extractor catalog
 
-Every extractor satisfies one of two Protocols in
-`parsers/contracts/base.py`:
+Routing-facing extractors return `ParseOutcome`. Native text-only extractors
+can still keep their `parse(file, filename) -> list[str]` compatibility method,
+but they expose `parse_outcome_path(...)` for the router.
 
-- `IParser` — `parse(file, filename) -> list[str]` (one string per page/section).
-  You get `parse_path(path, filename)` for free, or override it for path-based
-  libraries.
-- `IStructuredParser` — `parse_structured*` returning a `ParseOutcome` with
-  structured `ParseArtifacts` (tables, figures, layout blocks). Docling parsers
-  implement this.
+- `ITextParser` — compatibility protocol for native `parse*` methods.
+- `IOutcomeParser` — routing-facing `parse_outcome_path(...) -> ParseOutcome`.
+- `IStructuredParser` — legacy compatibility for structured parsers that expose
+  `parse_structured*`; new structured extractors should prefer
+  `parse_outcome_path(...)`.
 
-Both are `runtime_checkable`, so the router can `isinstance`-check a parser
-without importing concrete classes.
-
-`PARSER_DISPATCH: dict[str, type[IParser]]` is the global MIME -> parser-class
-table. Each extractor module registers itself at import time:
-
-```python
-PARSER_DISPATCH["application/pdf"] = NativePDFParser
-```
-
-`parsers/__init__.py::load_parser_registry()` imports every extractor module
-exactly once so the table is fully populated before routing. The top-level
-`ParserRouter` calls it in its constructor.
+`parsers/routing/catalog.py` owns the explicit MIME -> extractor candidate map.
+There is no import-time parser registration; `ParserRouter` builds its default
+catalog directly. Docling uses one `DoclingParser` configured with a
+`DoclingParserSpec`; the catalog binds each supported MIME type to the matching
+spec.
+Native extractor modules are file-type named (`pdf.py`, `docx.py`, `pptx.py`,
+`excel.py`) while native classes stay explicit (`NativePDFParser`,
+`NativeDOCXParser`, `NativePPTXParser`, `NativeExcelParser`).
 
 ### Adding a new extractor
 
 1. Create `parsers/extractors/<name>.py`.
-2. Implement a class with `parse(self, file, filename) -> list[str]`.
+2. Implement a class with `parse_outcome_path(path, filename) -> ParseOutcome`
+   or a native text parser plus a wrapper method.
 3. Import any heavy library **lazily inside the method** (so the module compiles
    without it installed).
-4. Register it: `PARSER_DISPATCH["<mime>"] = MyParser`.
-5. Add the import to `load_parser_registry()` in `parsers/__init__.py`.
+4. Add an `ExtractorCandidate` for the MIME type in
+   `parsers/routing/catalog.py`.
 
-### The complexity router
+### Unified complexity routing
 
 `parsers/routing/complexity.py::ComplexityAssessor` classifies a document
 deterministically (no model calls) using the `settings.*THRESHOLD*` values:
 
 | Category | Parser | Module |
 |----------|--------|--------|
-| `low`    | native extractor (fast, light) | `extractors/pdf_native.py`, `docx.py`, `pptx.py`, `excel.py` |
+| `low`    | native extractor (fast, light) | `extractors/pdf.py`, `docx.py`, `pptx.py`, `excel.py` |
 | `medium` | Docling (structured extraction) | `extractors/docling.py` |
-| `high`   | OCR provider (scanned / image-dominant) | `providers/ocr/ocr.py` |
+| `high`   | OCR provider (scanned / image-dominant) | `providers/ocr.py` / `providers/vlm.py` |
 
-- `parsers/routing/pdf.py::PDFRouter` — high -> OCR, medium -> Docling, low -> native.
-- `parsers/routing/office.py::OfficeRouter` — medium -> Docling DOCX/PPTX, low -> native.
-- `parsers/routing/router.py::ParserRouter` — top-level MIME dispatch.
+`parsers/routing/router.py::ParserRouter` is the single orchestrator:
+resolve MIME -> assess complexity -> build ordered candidates -> return the
+first usable `ParseOutcome`.
 
 ### What changed vs the source service
 
 - **`unstructured` was dropped.** The low-complexity local PDF path now uses
   `NativePDFParser` (PyMuPDF / `fitz`), which simply returns
-  `[page.get_text() for page in doc]`. See `extractors/pdf_native.py`.
+  `[page.get_text() for page in doc]`. See `extractors/pdf.py`.
 - **The `image/` route was dropped** from `ParserRouter`, along with
-  `routing/image.py`. Image OCR depended on the now-stubbed OCR providers.
+  `routing/image.py`. Standalone image OCR is outside the shared KB MVP.
+- **PDFRouter and OfficeRouter were removed.** Their complexity-specific
+  behavior now lives in `ParserRouter` plus the explicit extractor catalog.
 - The native DOCX parser class was renamed `UnstructuredDOCXParser` ->
   `NativeDOCXParser` (it never used `unstructured`; the name was misleading).
 
 ---
 
-## 2. OCR provider (the key stub)
+## 2. OCR provider
 
-`parsers/providers/ocr/ocr.py` defines:
+`parsers/providers/ocr.py` defines:
 
 - `OCRProvider = Literal["none", "textract", "vlm"]`
 - `BaseOCRProvider` (Protocol) — `parse_pdf_high_complexity(...) -> ParseOutcome | None`
   and `parse_image_s3(...) -> ParseOutcome`.
 - `NullOCRProvider` — the default (`OCR_PROVIDER="none"`):
-  - `parse_pdf_high_complexity` returns `None` → the PDF router falls back to
-    native text extraction (`ocr_unavailable_fallback_native`). Scanned PDFs
+  - `parse_pdf_high_complexity` returns `None` → `ParserRouter` falls back to
+    native text extraction (`ocr_unavailable`, then `fallback_native`). Scanned PDFs
     degrade gracefully instead of hard-failing.
-  - `parse_image_s3` raises `UnsupportedFileTypeError` — there is no sensible
-    text-only fallback for an image.
+  - `parse_image_s3` raises `UnsupportedFileTypeError` — standalone image OCR is
+    not part of the shared KB parser route.
+- `VLMOCRProvider` — opt-in (`OCR_PROVIDER="vlm"`):
+  - rasterises high-complexity PDF pages with PyMuPDF,
+  - sends page PNG data URLs to a LiteLLM OpenAI-compatible chat completion
+    endpoint using `LITELLM_VLM_MODEL`,
+  - returns a normal `ParseOutcome` with page text and OCR telemetry,
+  - returns `None` when all OCR page outputs are blank/no-text sentinels so the
+    router can keep its existing fallback behavior.
 - `build_ocr_provider(provider=None)` — factory keyed off `settings.OCR_PROVIDER`.
-  Returns `NullOCRProvider()` for `"none"`; raises `NotImplementedError` for
-  `"textract"` / `"vlm"`.
+  Returns `NullOCRProvider()` for `"none"` and `VLMOCRProvider()` for `"vlm"`.
+  `textract` intentionally remains unsupported for Playbook.
 
-### Plugging a real OCR provider back in
+### Enabling scanned PDF OCR
 
-The source service shipped two providers that were **dropped for genericity**:
+Set:
 
-- **Textract** — AWS Textract async document analysis: submit the S3 object,
-  poll the job until complete, assemble text from the returned blocks.
-- **VLM** — OpenAI Vision: rasterise pages to images and caption/transcribe
-  them with a vision-language model.
+```env
+OCR_PROVIDER=vlm
+LITELLM_BASE_URL=http://litellm:4000
+LITELLM_API_KEY=...
+LITELLM_VLM_MODEL=playbook-ocr
+```
 
-To restore OCR:
+Optional tuning:
+
+```env
+VLM_OCR_DPI=150
+VLM_OCR_DETAIL=high
+VLM_OCR_MAX_PAGES=50
+VLM_OCR_REQUEST_TIMEOUT_SECONDS=120.0
+```
+
+LiteLLM owns the actual provider/model mapping behind the `playbook-ocr` alias.
+The KB service must not store provider-specific vision API keys.
+
+### Adding another OCR provider
 
 1. Implement a class satisfying `BaseOCRProvider` (set `provider = "textract"`
-   or `"vlm"`). Put it under `parsers/providers/ocr/`.
+   or another supported literal). Put it under `parsers/providers/`.
 2. Return it from `build_ocr_provider()` for the matching `OCR_PROVIDER` value
-   (replace the `NotImplementedError` branch).
-3. Set `OCR_PROVIDER=textract` (or `vlm`) in the environment.
+   (replace the `NotImplementedError` branch only if the provider is a product-approved path).
+3. Set the matching `OCR_PROVIDER` in the environment.
 4. If you want image parsing back, re-add an `ImageRouter` and an `image/`
    branch in `ParserRouter.route_path` that calls `provider.parse_image_s3(...)`.
-5. Add any provider-specific settings (the scaffold config intentionally has no
-   `TEXTRACT_*` / `VLM_*` keys — add them to `app/core/config.py`).
+5. Add any provider-specific settings to `app/core/config.py` and document the
+   credential boundary. Textract is intentionally not implemented for Playbook.
 
 ---
 
