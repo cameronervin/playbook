@@ -22,15 +22,18 @@ Playbook main backend owns:
 - chat orchestration and final answer generation.
 
 KB service owns:
-- ingestion jobs for admin-uploaded documents,
+- ingestion jobs for admin-uploaded documents and trusted conversation files,
 - parser/chunker/embedder execution,
 - durable searchable chunk text and embeddings,
 - ingestion lifecycle status,
-- semantic search over ready KB documents.
+- semantic search over ready shared KB documents and private conversation-file
+  chunks when the backend supplies trusted private scope.
 
-Athlete-uploaded conversation files are explicitly outside the shared KB service
-corpus for MVP. They are stored and chunked in the main backend schema as private
-conversation context.
+Athlete-uploaded conversation files are outside the shared admin KB corpus, but
+they use the same KB-service parser/chunker/embedder/vector pipeline with
+`source_type="conversation_file"` metadata. The main backend owns browser
+authorization, original-file metadata, and athlete-visible status; KB-service
+owns parsed chunks, vectors, and private retrieval filters.
 
 ## Implemented Contract
 

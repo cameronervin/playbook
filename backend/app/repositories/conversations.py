@@ -7,14 +7,13 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
 from app.models.conversations import (
     Conversation,
     ConversationFile,
-    ConversationFileChunk,
     ConversationMessage,
     MessageCitation,
 )
@@ -377,27 +376,15 @@ class ConversationFileRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[ConversationFile, int]]:
-        """Return conversation files with bounded chunk counts."""
-        chunk_counts = (
-            select(
-                ConversationFileChunk.file_id,
-                func.count(ConversationFileChunk.id).label("chunk_count"),
-            )
-            .group_by(ConversationFileChunk.file_id)
-            .subquery()
-        )
-        result = await self.session.execute(
-            select(
-                ConversationFile,
-                func.coalesce(chunk_counts.c.chunk_count, 0),
-            )
-            .outerjoin(chunk_counts, chunk_counts.c.file_id == ConversationFile.id)
+        """Return conversation files with placeholder KB-service chunk counts."""
+        result = await self.session.scalars(
+            select(ConversationFile)
             .where(ConversationFile.conversation_id == conversation_id)
             .order_by(ConversationFile.created_at.asc(), ConversationFile.id.asc())
             .limit(limit)
             .offset(offset)
         )
-        return [(file, int(chunk_count)) for file, chunk_count in result.all()]
+        return [(file, 0) for file in result.all()]
 
     async def list_by_conversation_and_ids(
         self,
@@ -445,57 +432,3 @@ class ConversationFileRepository:
         await self.session.flush()
         await self.session.refresh(file)
         return file
-
-
-class ConversationFileChunkRepository:
-    """Data access for bounded conversation file text chunks."""
-
-    def __init__(self, session: AsyncSession = Depends(get_db)) -> None:
-        self.session = session
-
-    async def create(
-        self,
-        *,
-        file_id: UUID,
-        chunk_index: int,
-        text: str,
-        token_count: int | None = None,
-        source_locator: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> ConversationFileChunk:
-        """Create a conversation file chunk without committing."""
-        chunk = ConversationFileChunk(
-            file_id=file_id,
-            chunk_index=chunk_index,
-            text=text,
-            token_count=token_count,
-        )
-        if source_locator is not None:
-            chunk.source_locator = source_locator
-        if metadata is not None:
-            chunk.chunk_metadata = metadata
-
-        self.session.add(chunk)
-        await self.session.flush()
-        await self.session.refresh(chunk)
-        return chunk
-
-    async def list_by_file(
-        self,
-        file_id: UUID,
-        *,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[ConversationFileChunk]:
-        """Return chunks for a conversation file in source order."""
-        result = await self.session.scalars(
-            select(ConversationFileChunk)
-            .where(ConversationFileChunk.file_id == file_id)
-            .order_by(
-                ConversationFileChunk.chunk_index.asc(),
-                ConversationFileChunk.id.asc(),
-            )
-            .limit(limit)
-            .offset(offset)
-        )
-        return list(result.all())

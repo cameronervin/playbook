@@ -11,7 +11,6 @@ from app.models.base import Base
 from app.models.conversations import (
     Conversation,
     ConversationFile,
-    ConversationFileChunk,
     ConversationMessage,
     MessageCitation,
 )
@@ -25,7 +24,6 @@ __all__ = [
     "Base",
     "Conversation",
     "ConversationFile",
-    "ConversationFileChunk",
     "ConversationMessage",
     "DashboardInsight",
     "DashboardInsightRun",

@@ -93,7 +93,7 @@ Worker flow:
 parse_task
   -> stream original S3 object to tempfile
   -> ParserRouter.route_path()
-  -> stage page text to S3 as pages.ndjson
+  -> stage text-segment records to S3 as pages.ndjson
 
 chunk_task
   -> stream pages.ndjson
@@ -140,6 +140,7 @@ outcome = await router.route_path(
 @dataclass(frozen=True)
 class ParseOutcome:
     text_segments: list[str]
+    text_segment_locators: list[dict[str, Any]]
     artifacts: ParseArtifacts
     selected_parser: str
     route: str
@@ -180,11 +181,11 @@ XLS/XLSX candidates
 Native extractors:
 
 ```text
-NativePDFParser       -> native_pdf, PyMuPDF page text
-NativeDOCXParser      -> native_docx, python-docx paragraphs
-NativePPTXParser      -> native_pptx, python-pptx slide text
-NativeExcelParser     -> native_excel, openpyxl worksheet text
-DoclingParser(spec)   -> docling_*, text plus tables/figures/layout blocks
+NativePDFParser       -> native_pdf, PyMuPDF page text plus page locators
+NativeDOCXParser      -> native_docx, python-docx paragraphs plus paragraph range
+NativePPTXParser      -> native_pptx, python-pptx slide text plus slide locators
+NativeExcelParser     -> native_excel, openpyxl worksheet text plus sheet/row locators
+DoclingParser(spec)   -> docling_*, text plus tables/figures/layout block locators
 OCR provider          -> ocr_pdf, async high-complexity PDF route
 ```
 

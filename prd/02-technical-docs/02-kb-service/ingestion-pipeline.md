@@ -1,7 +1,7 @@
 # KB Service Ingestion Pipeline
 
 This document defines MVP ingestion behavior for admin-uploaded Playbook KB
-documents.
+documents and trusted conversation-scoped files.
 
 ## Pipeline Stages
 
@@ -10,8 +10,8 @@ ingest request
   -> validate source URL and metadata
   -> create kb.documents row
   -> parse original file
-  -> stage page text
-  -> chunk page text
+  -> stage text-segment records
+  -> chunk text records
   -> stage chunks
   -> embed chunks
   -> write chunk text + vectors
@@ -34,7 +34,7 @@ ingest request
 
 - Support MVP file types: PDF, DOCX, PPTX, XLSX.
 - Use Docling/native parsers from the existing scaffold.
-- Produce page/sheet/slide-aware text records when possible.
+- Produce page/sheet/slide/paragraph-aware text records when possible.
 - Fail with `NO_TEXT_EXTRACTED` when a file has no usable text.
 - Scanned PDF OCR is available only when explicitly enabled through the
   LiteLLM-routed VLM provider; standalone image extraction remains out of MVP.
@@ -43,7 +43,8 @@ ingest request
 
 - Use deterministic token-aware chunking.
 - Preserve chunk order with zero-based `chunk_index`.
-- Preserve source locators such as page number, slide number, sheet name, or row range.
+- Preserve source locators such as page number, slide number, sheet name, row
+  range, paragraph range, or Docling layout block.
 - Store chunk metadata needed for citations and conflict ranking.
 
 ### Embed
@@ -100,7 +101,7 @@ When a Playbook KB document is deleted or archived:
 
 ## Non-Goals
 
-- Athlete conversation file ingestion into shared KB.
+- Athlete conversation file ingestion into the shared admin KB corpus.
 - Provider API actions in external athletic systems.
 - Standalone OCR for image-only documents unless separately scoped.
 - Cross-organization document sharing.

@@ -17,6 +17,31 @@ from app.infrastructure.parsers.contracts.models import ParseOutcome
 logger = structlog.get_logger(__name__)
 
 
+def _slide_segments_from_presentation(presentation) -> list[tuple[str, dict]]:
+    """Return one text segment per slide with slide locators."""
+    slides: list[tuple[str, dict]] = []
+    for slide_index, slide in enumerate(presentation.slides):
+        texts: list[str] = []
+        for shape in slide.shapes:
+            if hasattr(shape, "text") and shape.text:
+                text = shape.text.strip()
+                if text:
+                    texts.append(text)
+        if texts:
+            slide_number = slide_index + 1
+            slides.append(
+                (
+                    f"# Slide {slide_number}\n" + "\n".join(texts),
+                    {
+                        "type": "slide",
+                        "slide_index": slide_index,
+                        "slide_number": slide_number,
+                    },
+                )
+            )
+    return slides
+
+
 class NativePPTXParser:
     parser_id = "native_pptx"
 
@@ -26,16 +51,7 @@ class NativePPTXParser:
         try:
             file.seek(0)
             presentation = Presentation(file)
-            slides: list[str] = []
-            for index, slide in enumerate(presentation.slides, start=1):
-                texts: list[str] = []
-                for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text:
-                        text = shape.text.strip()
-                        if text:
-                            texts.append(text)
-                if texts:
-                    slides.append(f"# Slide {index}\n" + "\n".join(texts))
+            slides = [text for text, _locator in _slide_segments_from_presentation(presentation)]
         except Exception as exc:  # pragma: no cover - dependency-specific failures
             logger.exception("pptx_parse_failed", filename=filename, error=str(exc))
             raise CorruptFileError(f"Failed to parse PPTX: {filename}") from exc
@@ -47,8 +63,18 @@ class NativePPTXParser:
             return self.parse(file, filename)
 
     def parse_outcome_path(self, path: str, filename: str) -> ParseOutcome:
+        from pptx import Presentation
+
+        try:
+            presentation = Presentation(path)
+            segments = _slide_segments_from_presentation(presentation)
+        except Exception as exc:  # pragma: no cover - dependency-specific failures
+            logger.exception("pptx_parse_path_failed", filename=filename, error=str(exc))
+            raise CorruptFileError(f"Failed to parse PPTX: {filename}") from exc
+
         return build_text_only_outcome(
-            text_segments=self.parse_path(path, filename),
+            text_segments=[text for text, _locator in segments],
+            text_segment_locators=[locator for _text, locator in segments],
             selected_parser=self.parser_id,
             route="extractor",
         )

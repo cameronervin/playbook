@@ -80,7 +80,7 @@ Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "healthy"}`.
 Optional backend worker for Phase 2+ async jobs:
 
 ```bash
-uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
+uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
 ```
 
 The backend worker and future interactive agent stream endpoints use the app

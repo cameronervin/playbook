@@ -194,7 +194,7 @@ class DoclingParser:
             document = result.document
 
             # Single-pass extraction to minimise the time we hold the Docling object.
-            text_segments, artifacts = self._extract_all(document)
+            text_segments, text_segment_locators, artifacts = self._extract_all(document)
 
             # Release the Docling document explicitly — converter caches and any
             # held parser state can be GC'd before downstream stages run.
@@ -209,6 +209,7 @@ class DoclingParser:
                 artifacts=artifacts,
                 selected_parser=self._spec.parser_id,
                 route=self._spec.route,
+                text_segment_locators=text_segment_locators,
                 reason_codes=[f"{self._spec.parser_id}_selected"],
                 quality_signals={
                     "text_segment_count": len(text_segments),
@@ -229,7 +230,7 @@ class DoclingParser:
             raise CorruptFileError(f"Failed to parse with Docling: {filename}") from exc
 
     @staticmethod
-    def _extract_all(document: Any) -> tuple[list[str], "ParseArtifacts"]:
+    def _extract_all(document: Any) -> tuple[list[str], list[dict[str, Any]], "ParseArtifacts"]:
         """Single-pass extraction of text segments + layout blocks + artifacts.
 
         Walks `document.iterate_items()` exactly once (vs the previous two
@@ -238,6 +239,7 @@ class DoclingParser:
         and same memory peak as the prior version.
         """
         text_segments: list[str] = []
+        text_segment_locators: list[dict[str, Any]] = []
         layout_blocks: list[dict[str, Any]] = []
 
         if hasattr(document, "iterate_items"):
@@ -247,6 +249,14 @@ class DoclingParser:
                     normalized = text.strip()
                     if normalized:
                         text_segments.append(normalized)
+                        text_segment_locators.append(
+                            {
+                                "type": "layout_block",
+                                "block_index": idx,
+                                "level": level,
+                                "label": getattr(getattr(item, "label", None), "name", ""),
+                            }
+                        )
                         layout_blocks.append(
                             {
                                 "index": idx,
@@ -261,6 +271,7 @@ class DoclingParser:
             markdown_text = document.export_to_markdown()
             if isinstance(markdown_text, str) and markdown_text.strip():
                 text_segments.append(markdown_text.strip())
+                text_segment_locators.append({"type": "document"})
 
         # Tables — dedicated attribute on the document.
         tables: list[dict[str, Any]] = []
@@ -292,9 +303,13 @@ class DoclingParser:
                 }
             )
 
-        return text_segments, ParseArtifacts(
-            tables=tables,
-            figures=figures,
-            layout_blocks=layout_blocks,
-            source_refs=source_refs,
+        return (
+            text_segments,
+            text_segment_locators,
+            ParseArtifacts(
+                tables=tables,
+                figures=figures,
+                layout_blocks=layout_blocks,
+                source_refs=source_refs,
+            ),
         )

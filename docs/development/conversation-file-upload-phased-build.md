@@ -79,9 +79,9 @@ Backend should mirror enough KB-service state for UI and chat orchestration:
 - chunk count
 - sanitized failure reason
 
-Long-term, backend `conversation_file_chunks` should be deprecated for the RAG
-path. KB-service should be the canonical owner of chunk text and vectors for
-both `admin_upload` and `conversation_file`.
+Backend `conversation_file_chunks` was removed in Phase 3. KB-service is the
+canonical owner of chunk text, locators, and vectors for both `admin_upload` and
+`conversation_file`.
 
 ### KB-Service
 
@@ -264,7 +264,7 @@ Do not do yet:
   migration remains a follow-up once private retrieval/status webhook behavior
   settles.
 
-## Phase 3: Real Parse, Chunk, and Embed
+## [IMPLEMENTED] Phase 3: Real Parse, Chunk, and Embed
 
 Scope:
 
@@ -274,6 +274,23 @@ Scope:
 - Store chunk text/vectors with `source_type` metadata.
 - Preserve source locators such as page, slide, sheet, row range, or paragraph
   range when available.
+- Remove obsolete backend-local conversation file extraction/chunk persistence.
+
+Implemented behavior:
+
+- KB-service parsers now emit streamable text-segment records with locator
+  metadata for native PDF pages, DOCX paragraph ranges, PPTX slides, XLSX sheet
+  row ranges, and Docling layout blocks.
+- The parse task stages text-segment records in S3 NDJSON; chunking consumes
+  those records without sending full document text through Celery/Valkey broker
+  payloads.
+- Token-aware chunks preserve `source_locator` plus trusted source metadata, and
+  pgvector metadata stores `source_type`, organization scope, conversation scope
+  for private files, stable chunk IDs, and locator hints for citations.
+- Backend-local `conversation_file_chunks`, `ConversationFileChunkRepository`,
+  and the obsolete `extract_conversation_file_task` worker route were removed;
+  conversation file summaries keep returning `chunk_count=0` until later
+  KB-service status/count sync supplies mirrored counts.
 
 Acceptance criteria:
 
@@ -428,11 +445,64 @@ Do not do yet:
 - Do not add broad frontend upload UI in this backend/RAG build unless a later
   phase explicitly takes it on.
 
+## Phase 9: Direct Uploads and Reliable Ingest Handoff
+
+Scope:
+
+- Move both admin KB document uploads and athlete conversation-file uploads to a
+  two-step direct-to-S3-compatible-storage flow:
+  - Backend creates an upload intent after authorization and metadata
+    validation.
+  - Backend returns a presigned upload URL plus required headers/fields and the
+    backend document/file ID.
+  - Browser uploads the binary directly to object storage with progress and
+    client-side retry.
+  - Browser calls a backend complete endpoint after upload.
+  - Backend verifies the object with `HEAD` before marking it `uploaded`.
+- Add a backend durable outbox for KB-service ingest handoff for both source
+  types.
+- Add a backend worker that drains the outbox, derives trusted
+  `source_type` metadata, calls `BaseKnowledgebaseProvider.ingest_source(...)`,
+  and records `kb_service_document_id`, task ID, dispatch attempts, and safe
+  failure state.
+- Make the outbox worker retryable and idempotent:
+  - repeated complete calls must not duplicate KB ingest work;
+  - transient KB-service outages must not require the user to re-upload;
+  - stale upload intents and orphaned storage objects must be reconciled or
+    cleaned up.
+- Keep KB-service responsible for parse, chunk, embed, vectors, summaries, and
+  retrieval; the backend worker only handles reliable handoff.
+
+Acceptance criteria:
+
+- Large file uploads do not stream through backend request bodies in the normal
+  browser path.
+- Admin documents and conversation files share the same upload-intent,
+  completion, verification, and outbox reliability pattern while keeping
+  separate public routes and auth semantics.
+- Backend never marks a file/document as uploaded until storage confirms the
+  object exists and matches expected size/checksum metadata where available.
+- KB ingest dispatch survives backend restarts and KB-service downtime without
+  losing accepted uploads.
+- Duplicate browser completion calls and duplicate worker attempts are safe.
+- Users see accurate states for upload pending, upload complete/queued,
+  extracting, ready, and failed.
+
+Do not do yet:
+
+- Do not move parsing, chunking, embedding, or retrieval into backend workers.
+- Do not let browsers choose `source_type` or KB-service metadata.
+- Do not expose raw storage keys, presigned URLs, or signed source URLs in
+  conversation/detail/admin document responses after the upload intent is
+  created.
+
 ## Test Matrix
 
 | Area | Required scenarios |
 |------|--------------------|
 | Backend upload | Ownership, validation, S3 streaming, safe response shape |
+| Direct upload | Intent creation, presigned URL shape, completion verification, duplicate completion, orphan cleanup |
+| Ingest outbox | Retryable KB handoff, idempotent dispatch, restart-safe queued rows, safe failure metadata |
 | Backend webhooks | Status/summary mirroring for both source types |
 | KB ingest | Valid/invalid metadata for `admin_upload` and `conversation_file` |
 | KB memory path | Spooled temp files and S3 NDJSON staging for large artifacts |
@@ -452,9 +522,6 @@ Do not do yet:
 
 ## Open Follow-Ups
 
-- Decide whether `conversation_file_chunks` remains temporarily for compatibility
-  during migration or is removed in the same schema migration that introduces
-  KB-service private retrieval.
 - Add first-class KB-service `source_type`, `playbook_document_id`,
   `conversation_id`, and `conversation_file_id` columns, with JSON metadata
   backfill, after the private retrieval and status webhook contracts stabilize.

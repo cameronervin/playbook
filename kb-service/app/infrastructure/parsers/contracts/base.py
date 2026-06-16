@@ -41,6 +41,7 @@ def build_text_only_outcome(
     text_segments: list[str],
     selected_parser: str,
     route: str,
+    text_segment_locators: list[dict[str, Any]] | None = None,
     reason_codes: list[str] | None = None,
     quality_signals: dict[str, Any] | None = None,
     warnings: list[str] | None = None,
@@ -51,8 +52,8 @@ def build_text_only_outcome(
         artifacts=ParseArtifacts(),
         selected_parser=selected_parser,
         route=route,
+        text_segment_locators=text_segment_locators or [],
         reason_codes=reason_codes or [],
         quality_signals=quality_signals or {},
         warnings=warnings or [],
     )
-

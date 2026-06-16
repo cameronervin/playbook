@@ -21,3 +21,4 @@
 | ID | Date | Priority | Area | Description | Proposed Fix | Status |
 |----|------|----------|------|-------------|--------------|--------|
 | TD-001 | YYYY-MM-DD | — | _backend/frontend/agents/infra_ | _What the debt is and why it exists_ | _How to pay it down_ | Identified |
+| TD-002 | 2026-06-16 | P1 | backend/kb-service | Conversation file summaries return `chunk_count=0` after backend-local chunks were removed; KB-service owns real chunk counts but Phase 5/6 sync is not implemented yet. | Include chunk count in signed KB-service status/search metadata and mirror it onto `conversation_files` for conversation detail responses. | Planned |

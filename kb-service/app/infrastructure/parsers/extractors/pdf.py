@@ -30,14 +30,28 @@ logger = structlog.get_logger(__name__)
 _MIN_TEXT_CHARS = 100
 
 
-def _pages_from_document(document) -> list[str]:
-    """Return one stripped text string per page, skipping empty pages."""
-    pages: list[str] = []
-    for page in document:
+def _page_segments_from_document(document) -> list[tuple[str, dict]]:
+    """Return page text with original page locators, skipping empty pages."""
+    segments: list[tuple[str, dict]] = []
+    for page_index, page in enumerate(document):
         text = (page.get_text() or "").strip()
         if text:
-            pages.append(text)
-    return pages
+            segments.append(
+                (
+                    text,
+                    {
+                        "type": "page",
+                        "page_index": page_index,
+                        "page_number": page_index + 1,
+                    },
+                )
+            )
+    return segments
+
+
+def _pages_from_document(document) -> list[str]:
+    """Return one stripped text string per page, skipping empty pages."""
+    return [text for text, _locator in _page_segments_from_document(document)]
 
 
 class NativePDFParser:
@@ -77,8 +91,22 @@ class NativePDFParser:
             return pages
 
     def parse_outcome_path(self, path: str, filename: str) -> ParseOutcome:
+        import fitz
+
+        try:
+            with fitz.open(filename=path) as document:
+                segments = _page_segments_from_document(document)
+            if sum(len(text) for text, _locator in segments) < _MIN_TEXT_CHARS:
+                raise ParseWarning(f"Low text output for PDF: {filename}")
+        except ParseWarning:
+            raise
+        except Exception as exc:  # pragma: no cover - dependency-specific failures
+            logger.exception("pdf_parse_path_failed", filename=filename, error=str(exc))
+            raise CorruptFileError(f"Failed to parse PDF: {filename}") from exc
+
         return build_text_only_outcome(
-            text_segments=self.parse_path(path, filename),
+            text_segments=[text for text, _locator in segments],
+            text_segment_locators=[locator for _text, locator in segments],
             selected_parser=self.parser_id,
             route="extractor",
         )

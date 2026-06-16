@@ -45,6 +45,7 @@ class ParseOutcome:
     artifacts: ParseArtifacts
     selected_parser: str
     route: str
+    text_segment_locators: list[dict[str, Any]] = field(default_factory=list)
     reason_codes: list[str] = field(default_factory=list)
     quality_signals: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -53,6 +54,19 @@ class ParseOutcome:
     def pages(self) -> list[str]:
         """Backward-compatible alias used by existing pipeline stages."""
         return self.text_segments
+
+    @property
+    def text_segment_records(self) -> list[dict[str, Any]]:
+        """Return streamable text records with optional source locators."""
+        records: list[dict[str, Any]] = []
+        for index, text in enumerate(self.text_segments):
+            record: dict[str, Any] = {"text": text}
+            if index < len(self.text_segment_locators):
+                locator = self.text_segment_locators[index]
+                if locator:
+                    record["source_locator"] = dict(locator)
+            records.append(record)
+        return records
 
     def to_dict(self) -> dict[str, Any]:
         return {

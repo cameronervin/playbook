@@ -14,7 +14,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -167,27 +166,3 @@ class ConversationFile(Base):
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
 
-
-class ConversationFileChunk(Base):
-    """Bounded text chunk extracted from an athlete-uploaded file."""
-
-    __tablename__ = "conversation_file_chunks"
-    __table_args__ = (
-        UniqueConstraint(
-            "file_id", "chunk_index", name="uq_conversation_file_chunks_file_index"
-        ),
-        Index("ix_conversation_file_chunks_file_id", "file_id"),
-    )
-
-    id: Mapped[UUID] = uuid_primary_key()
-    file_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("conversation_files.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
-    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_locator: Mapped[dict[str, Any]] = jsonb_object_column()
-    chunk_metadata: Mapped[dict[str, Any]] = jsonb_object_column("metadata")
-    created_at: Mapped[datetime] = created_at_column()

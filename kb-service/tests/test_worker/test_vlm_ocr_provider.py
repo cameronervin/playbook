@@ -115,6 +115,10 @@ async def test_vlm_ocr_renders_pdf_pages_and_returns_extracted_text(
 
     assert outcome is not None
     assert outcome.text_segments == ["Student Athlete Handbook", "NIL disclosure form"]
+    assert outcome.text_segment_locators == [
+        {"type": "page", "page_index": 0, "page_number": 1},
+        {"type": "page", "page_index": 1, "page_number": 2},
+    ]
     assert outcome.selected_parser == "vlm_ocr_pdf"
     assert outcome.reason_codes == ["vlm_ocr_selected"]
     assert outcome.quality_signals["provider"] == "vlm"

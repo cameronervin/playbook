@@ -75,6 +75,20 @@ def test_docling_parser_uses_spec_metadata_and_extracts_artifacts() -> None:
     outcome = parser.parse_outcome_path("/tmp/policy.pdf", "policy.pdf")
 
     assert outcome.text_segments == ["Title", "Body text"]
+    assert outcome.text_segment_locators == [
+        {
+            "type": "layout_block",
+            "block_index": 0,
+            "level": 0,
+            "label": "SECTION_HEADER",
+        },
+        {
+            "type": "layout_block",
+            "block_index": 1,
+            "level": 1,
+            "label": "PARAGRAPH",
+        },
+    ]
     assert outcome.selected_parser == "docling_pdf"
     assert outcome.route == "docling_pdf"
     assert outcome.reason_codes == ["docling_pdf_selected"]

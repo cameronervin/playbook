@@ -13,7 +13,6 @@ from app.infrastructure.knowledgebase import get_kb_provider_dependency
 from app.infrastructure.storage import get_storage_provider_dependency
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.repositories.conversations import (
-    ConversationFileChunkRepository,
     ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
@@ -152,13 +151,6 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
         storage_key="conversations/org/conversation/file/nil-contract.pdf",
         message_id=message.id,
     )
-    await ConversationFileChunkRepository(db_session).create(
-        file_id=file.id,
-        chunk_index=1,
-        text="Contract excerpt",
-        token_count=2,
-    )
-
     list_response = await route_client.client.get("/api/v1/conversations")
     detail_response = await route_client.client.get(
         f"/api/v1/conversations/{conversation_id}"
@@ -183,7 +175,7 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
             "content_type": "application/pdf",
             "size_bytes": 123456,
             "extraction_status": "uploaded",
-            "chunk_count": 1,
+            "chunk_count": 0,
             "created_at": file.created_at.isoformat().replace("+00:00", "Z"),
             "updated_at": file.updated_at.isoformat().replace("+00:00", "Z"),
         }

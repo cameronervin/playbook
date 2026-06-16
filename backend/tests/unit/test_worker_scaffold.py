@@ -14,7 +14,6 @@ from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPay
 from app.workers.queues import (
     BACKEND_AGENT_QUEUE,
     BACKEND_DEFAULT_QUEUE,
-    BACKEND_FILES_QUEUE,
     BACKEND_INSIGHTS_QUEUE,
     BACKEND_MAINTENANCE_QUEUE,
     TASK_ROUTES,
@@ -49,7 +48,6 @@ def test_backend_worker_config_declares_expected_queues() -> None:
     assert declared_queues == {
         BACKEND_AGENT_QUEUE,
         BACKEND_DEFAULT_QUEUE,
-        BACKEND_FILES_QUEUE,
         BACKEND_INSIGHTS_QUEUE,
         BACKEND_MAINTENANCE_QUEUE,
     }
@@ -83,7 +81,6 @@ def test_backend_worker_registers_and_routes_named_tasks() -> None:
     expected_routes = {
         WorkerTaskName.RUN_ATHLETE_CHAT: BACKEND_AGENT_QUEUE,
         WorkerTaskName.RUN_ADMIN_CHAT: BACKEND_AGENT_QUEUE,
-        WorkerTaskName.EXTRACT_CONVERSATION_FILE: BACKEND_FILES_QUEUE,
         WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS: BACKEND_INSIGHTS_QUEUE,
         WorkerTaskName.PRUNE_CHECKPOINTS: BACKEND_MAINTENANCE_QUEUE,
         WorkerTaskName.HEALTH_CHECK: BACKEND_MAINTENANCE_QUEUE,

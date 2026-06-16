@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 import pytest
 
 from app.repositories.conversations import (
-    ConversationFileChunkRepository,
     ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
@@ -224,7 +223,7 @@ async def test_message_citation_repository_lists_by_messages(db_session):
 
 
 @pytest.mark.asyncio
-async def test_conversation_file_repositories_create_list_and_count_chunks(
+async def test_conversation_file_repositories_create_list_with_zero_chunk_count(
     db_session,
 ):
     org_repo = OrganizationRepository(db_session)
@@ -232,7 +231,6 @@ async def test_conversation_file_repositories_create_list_and_count_chunks(
     conversation_repo = ConversationRepository(db_session)
     message_repo = ConversationMessageRepository(db_session)
     file_repo = ConversationFileRepository(db_session)
-    chunk_repo = ConversationFileChunkRepository(db_session)
     organization = await org_repo.create(name="Playbook Athletics", slug="playbook")
     athlete = await user_repo.create(
         organization_id=organization.id,
@@ -259,20 +257,6 @@ async def test_conversation_file_repositories_create_list_and_count_chunks(
         storage_key="conversations/org/conversation/file/contract.pdf",
         message_id=message.id,
     )
-    second_chunk = await chunk_repo.create(
-        file_id=file.id,
-        chunk_index=2,
-        text="Second chunk",
-        token_count=2,
-        source_locator={"page": 2},
-    )
-    first_chunk = await chunk_repo.create(
-        file_id=file.id,
-        chunk_index=1,
-        text="First chunk",
-        token_count=2,
-        source_locator={"page": 1},
-    )
     await file_repo.update_extraction_status(
         file,
         extraction_status="ready",
@@ -285,9 +269,7 @@ async def test_conversation_file_repositories_create_list_and_count_chunks(
     files_with_counts = await file_repo.list_by_conversation_with_chunk_counts(
         conversation.id,
     )
-    chunks = await chunk_repo.list_by_file(file.id)
 
-    assert files_with_counts == [(file, 2)]
-    assert chunks == [first_chunk, second_chunk]
+    assert files_with_counts == [(file, 0)]
     assert file.extraction_status == "ready"
     assert file.extraction_metadata == {"extractor": "test"}

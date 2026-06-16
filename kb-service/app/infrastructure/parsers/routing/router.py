@@ -84,6 +84,7 @@ def _with_route_metadata(
         artifacts=outcome.artifacts,
         selected_parser=candidate.parser_id,
         route=PARSER_ROUTER_ROUTE,
+        text_segment_locators=list(outcome.text_segment_locators),
         reason_codes=list(decision.reason_codes) + route_reason_codes,
         quality_signals=dict(decision.quality_signals) | dict(outcome.quality_signals),
         warnings=list(outcome.warnings),

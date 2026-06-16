@@ -32,7 +32,6 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 | `conversation_messages` | User, assistant, and system messages with safety/topic metadata |
 | `message_citations` | Assistant answer source references |
 | `conversation_files` | Conversation-scoped athlete uploads and extraction status |
-| `conversation_file_chunks` | Bounded extracted chunks for conversation context |
 | `kb_documents` | Backend record for admin-uploaded department documents |
 | `kb_document_events` | KB document lifecycle/status events |
 | `dashboard_insight_runs` | Nightly/manual dashboard insight generation runs |
@@ -66,7 +65,6 @@ Phase 1 repository coverage:
 | `ConversationMessageRepository` | `conversation_messages` | Message append, ordered history, bounded recent history, and assistant status/content updates |
 | `MessageCitationRepository` | `message_citations` | Assistant citation append and rank-ordered listing |
 | `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list and extraction-status updates |
-| `ConversationFileChunkRepository` | `conversation_file_chunks` | File chunk creation and ordered listing for private conversation context |
 
 Repositories flush and refresh written models so generated IDs and server
 defaults are visible to callers, but they do not commit transactions. Services
@@ -83,7 +81,9 @@ LangGraph checkpoint tables are package-owned and initialized by
 `langgraph_checkpoint%` tables as infrastructure-owned implementation details.
 
 The KB service owns its own ingestion/retrieval schema separately from the main
-backend schema.
+backend schema. Conversation-file parsed chunks and vectors are owned by
+KB-service private ingest/search; the backend no longer stores
+`conversation_file_chunks`.
 
 ## Migrations
 

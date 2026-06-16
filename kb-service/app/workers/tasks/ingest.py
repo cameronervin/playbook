@@ -174,7 +174,11 @@ def parse_task(
 
             # Stage pages to S3 so they don't travel through the broker.
             page_count = len(outcome.pages)
-            pages_key = await asyncio.to_thread(_save_pages_to_s3, document_id, outcome.pages)
+            pages_key = await asyncio.to_thread(
+                _save_pages_to_s3,
+                document_id,
+                outcome.text_segment_records,
+            )
 
             if doc:
                 await log_repo.set_parse_result(

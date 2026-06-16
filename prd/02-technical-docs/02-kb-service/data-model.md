@@ -16,7 +16,7 @@ signed status webhooks.
 |---------|------------------|-------|
 | Original admin-uploaded binary | Main backend blob storage | Referenced by `kb_documents.storage_key`; KB service reads via signed/presigned URL |
 | Original conversation-file binary | Main backend blob storage | Referenced by `conversation_files.storage_key`; KB service reads via signed/presigned URL after backend authorization |
-| Parsed page text | Temporary KB staging storage | NDJSON staging used between parse/chunk tasks; deleted after terminal cleanup |
+| Parsed text-segment records | Temporary KB staging storage | NDJSON staging used between parse/chunk tasks; includes text plus source locators and is deleted after terminal cleanup |
 | Chunk text | `kb.langchain_pg_embedding.document` or equivalent text column | Durable retrieval text returned in search results |
 | Embedding vectors | `kb.langchain_pg_embedding.embedding` | `vector(1536)` for the `playbook-embed` LiteLLM alias |
 | Chunk metadata | `kb.langchain_pg_embedding.cmetadata` | Includes Playbook document ID, source fields, visibility policy, and chunk locator |
@@ -139,6 +139,9 @@ omitted. For `conversation_file` vectors, `playbook_document_id` is omitted and
 `visibility_policy.scope` must be `conversation`. Shared KB search must filter
 to `source_type="admin_upload"`; private file search must filter to
 `source_type="conversation_file"`, `organization_id`, and `conversation_id`.
+Phase 3 preserves source locators in `cmetadata.source_locator`, with file-type
+specific hints such as page number, slide number, sheet and row range,
+paragraph range, or Docling layout block.
 
 The `document` text and `embedding` vector are the durable retrieval payload.
 Temporary pages/chunks staged in S3 are implementation artifacts, not the long-term

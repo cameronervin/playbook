@@ -65,6 +65,7 @@ class VLMOCRProvider:
         )
         client = self._build_client()
         text_segments: list[str] = []
+        text_segment_locators: list[dict[str, int | str]] = []
 
         for page in page_images.pages:
             page_text = self._extract_page_text(
@@ -75,6 +76,13 @@ class VLMOCRProvider:
             )
             if page_text:
                 text_segments.append(page_text)
+                text_segment_locators.append(
+                    {
+                        "type": "page",
+                        "page_index": page.page_number - 1,
+                        "page_number": page.page_number,
+                    }
+                )
 
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.info(
@@ -96,6 +104,7 @@ class VLMOCRProvider:
             artifacts=ParseArtifacts(),
             selected_parser=_VLM_OCR_PARSER_ID,
             route=_VLM_OCR_ROUTE,
+            text_segment_locators=text_segment_locators,
             reason_codes=["vlm_ocr_selected"],
             quality_signals={
                 "provider": self.provider,

@@ -194,30 +194,6 @@ def run_admin_chat_task(
 
 @backend_worker.task(
     bind=True,
-    name=WorkerTaskName.EXTRACT_CONVERSATION_FILE.value,
-    max_retries=TASK_MAX_RETRIES,
-)
-def extract_conversation_file_task(
-    self: Any,
-    *,
-    conversation_id: str,
-    file_id: str,
-    athlete_user_id: str,
-    organization_id: str,
-) -> None:
-    """Future conversation-scoped file extraction entrypoint."""
-    _raise_scaffold_not_implemented(
-        WorkerTaskName.EXTRACT_CONVERSATION_FILE,
-        task_id=self.request.id,
-        conversation_id=conversation_id,
-        file_id=file_id,
-        athlete_user_id=athlete_user_id,
-        organization_id=organization_id,
-    )
-
-
-@backend_worker.task(
-    bind=True,
     name=WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS.value,
     max_retries=TASK_MAX_RETRIES,
 )

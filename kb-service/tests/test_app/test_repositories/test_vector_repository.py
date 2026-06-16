@@ -194,6 +194,7 @@ def test_chunk_records_store_conversation_file_identity_without_playbook_documen
                     "conversation_file_id": str(conversation_file_id),
                     "source_title": "contract.pdf",
                     "visibility_policy": {"scope": "conversation"},
+                    "source_locator": {"type": "page", "page_number": 2},
                 },
             }
         ],
@@ -208,6 +209,7 @@ def test_chunk_records_store_conversation_file_identity_without_playbook_documen
     assert metadata["kb_document_id"] == str(kb_doc_id)
     assert metadata["source_type"] == "conversation_file"
     assert metadata["visibility_policy"] == {"scope": "conversation"}
+    assert metadata["source_locator"] == {"type": "page", "page_number": 2}
     assert "playbook_document_id" not in metadata
 
 

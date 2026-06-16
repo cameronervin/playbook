@@ -148,9 +148,10 @@ CREATE TABLE conversation_files (
 ```
 
 `storage_key` points to the original uploaded binary in configured blob storage.
-`extracted_text_ref` points to the full extracted text/page JSON artifact in blob
-storage. Full extracted text is not stored directly on this row to avoid
-accidentally loading large file contents during conversation list/detail queries.
+The extracted-text fields are retained as nullable compatibility metadata for
+older backend-local designs, but the Phase 3 RAG path stores parsed chunks,
+locator metadata, and vectors in KB-service private ingestion state rather than
+backend tables.
 
 Extraction statuses:
 - `uploaded`
@@ -164,29 +165,6 @@ conversation-file RAG path, the backend owns this athlete-visible metadata while
 KB-service owns parsed chunks, embeddings, summaries, and private retrieval
 state. Backend dispatches the trusted `source_type="conversation_file"` metadata
 after authorizing the athlete; browser callers never choose the source type.
-
-### `conversation_file_chunks`
-```sql
-CREATE TABLE conversation_file_chunks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    file_id UUID NOT NULL REFERENCES conversation_files(id) ON DELETE CASCADE,
-    chunk_index INT NOT NULL,
-    text TEXT NOT NULL,
-    token_count INT NULL,
-    source_locator JSONB NOT NULL DEFAULT '{}',
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-    UNIQUE (file_id, chunk_index)
-);
-```
-
-`conversation_file_chunks` stores the bounded runtime representation of extracted
-athlete-uploaded files for the earlier backend-local path. The KB-service private
-RAG path is the canonical direction for new conversation-file retrieval; this
-table remains temporarily available until a later migration decides whether to
-remove or retain it for compatibility. `source_locator` captures user-facing
-position hints such as page number, slide number, sheet name, row range, or
-paragraph range when the extractor can provide them.
 
 ### `kb_documents`
 ```sql
@@ -370,8 +348,7 @@ Checkpoint requirements:
 | `conversations` | Belongs to one athlete and contains messages/files |
 | `conversation_messages` | Stores user/assistant messages, risk labels, and safety outcomes |
 | `message_citations` | Links assistant messages to KB source records |
-| `conversation_files` | Stores original-file and extracted-text blob references for athlete uploads |
-| `conversation_file_chunks` | Stores conversation-scoped extracted chunks used for chat context |
+| `conversation_files` | Stores original-file metadata and KB-service ingest status for athlete uploads |
 | `kb_documents` | Represents admin-uploaded searchable department documents |
 | `dashboard_insight_runs` | Tracks nightly/manual dashboard insights agent lifecycle |
 | `dashboard_insights` | Stores agent-curated dashboard insight output |
@@ -389,6 +366,6 @@ Checkpoint requirements:
 - `is_official` and `priority` remain internal compatibility columns for MVP;
   admin-uploaded shared KB documents are treated as official and priority is not
   a user-facing ranking control.
-- `conversation_file_chunks` can later gain private conversation-scoped embeddings,
-  but those vectors must remain filtered by `conversation_id`/owner and separate
-  from the shared KB corpus.
+- Conversation-file parsed chunks and embeddings live in KB-service private
+  metadata and must remain filtered by `conversation_id`/owner and separate from
+  the shared KB corpus.

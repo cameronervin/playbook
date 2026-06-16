@@ -13,7 +13,6 @@ EXPECTED_PLAYBOOK_TABLES = {
     "conversation_messages",
     "message_citations",
     "conversation_files",
-    "conversation_file_chunks",
     "kb_documents",
     "kb_document_events",
     "dashboard_insight_runs",
@@ -29,6 +28,7 @@ def test_playbook_tables_are_registered_without_scaffold_examples() -> None:
 
     assert EXPECTED_PLAYBOOK_TABLES.issubset(table_names)
     assert "examples" not in table_names
+    assert "conversation_file_chunks" not in table_names
 
 
 def test_domain_model_modules_export_registered_models() -> None:
@@ -38,7 +38,6 @@ def test_domain_model_modules_export_registered_models() -> None:
         AuditLog,
         Conversation,
         ConversationFile,
-        ConversationFileChunk,
         ConversationMessage,
         DashboardInsight,
         DashboardInsightRun,
@@ -59,7 +58,6 @@ def test_domain_model_modules_export_registered_models() -> None:
     from app.models.conversations import (
         Conversation as ConversationsConversation,
         ConversationFile as ConversationsConversationFile,
-        ConversationFileChunk as ConversationsConversationFileChunk,
         ConversationMessage as ConversationsConversationMessage,
         MessageCitation as ConversationsMessageCitation,
     )
@@ -76,7 +74,6 @@ def test_domain_model_modules_export_registered_models() -> None:
     assert ConversationsConversationMessage is ConversationMessage
     assert ConversationsMessageCitation is MessageCitation
     assert ConversationsConversationFile is ConversationFile
-    assert ConversationsConversationFileChunk is ConversationFileChunk
     assert KnowledgeBaseKBDocument is KBDocument
     assert KnowledgeBaseKBDocumentEvent is KBDocumentEvent
     assert AnalyticsDashboardInsightRun is DashboardInsightRun
@@ -128,10 +125,6 @@ def test_jsonb_columns_have_server_defaults() -> None:
         },
         "message_citations": {"source_metadata": "'{}'::jsonb"},
         "conversation_files": {"extraction_metadata": "'{}'::jsonb"},
-        "conversation_file_chunks": {
-            "source_locator": "'{}'::jsonb",
-            "metadata": "'{}'::jsonb",
-        },
         "kb_documents": {
             "visibility_policy": """'{"scope":"all_athletes"}'::jsonb""",
             "metadata_tags": "'{}'::jsonb",
@@ -170,7 +163,6 @@ def test_key_foreign_key_delete_behaviors_are_explicit() -> None:
         ("message_citations", ("message_id",)): "CASCADE",
         ("conversation_files", ("conversation_id",)): "CASCADE",
         ("conversation_files", ("message_id",)): "SET NULL",
-        ("conversation_file_chunks", ("file_id",)): "CASCADE",
         ("kb_documents", ("organization_id",)): "CASCADE",
         ("kb_document_events", ("document_id",)): "CASCADE",
         ("dashboard_insight_runs", ("requested_by",)): "SET NULL",
@@ -203,7 +195,6 @@ def test_operational_indexes_are_registered() -> None:
         "ix_conversations_athlete_id",
         "ix_conversation_messages_conversation_id",
         "ix_conversation_files_conversation_id",
-        "ix_conversation_file_chunks_file_id",
         "ix_kb_documents_organization_id",
         "ix_kb_documents_processing_status",
         "ix_dashboard_insight_runs_organization_id",
