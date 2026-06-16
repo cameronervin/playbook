@@ -48,6 +48,7 @@ Example error response:
 | GET | `/conversations` | List current athlete conversations |
 | POST | `/conversations` | Create a current-athlete conversation from the initial message |
 | GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations/files |
+| POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file, store original metadata, and enqueue private ingest intent |
 | POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message, enqueue the Celery agent task, and return `202` with `task_id` stream metadata |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream validated assistant response events as SSE from the Valkey stream for `task_id` |
 | GET | `/admin/kb/documents` | List KB documents and status |
@@ -79,12 +80,6 @@ For a repeatable local Swagger and curl validation pass, see
 [`phase1_backend_endpoint_validation.md`](../guides/phase1_backend_endpoint_validation.md).
 
 ## Remaining Planned Surface
-
-### Athlete Chat
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file |
 
 ### Admin Analytics and Governance
 

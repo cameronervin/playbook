@@ -94,8 +94,8 @@ Recommended deployment shape:
 | `litellm` service | Runs LiteLLM Proxy on the internal network, usually port `4000` |
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, and `playbook-embed` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
-| Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat` |
-| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, and `LITELLM_EMBED_MODEL=playbook-embed` |
+| Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200` |
+| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, and `LITELLM_SUMMARY_MODEL=playbook-fast` |
 | LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, and `LITELLM_DATABASE_URL` |
 
 Use a separate LiteLLM database or at least a separate database/user in the
@@ -119,7 +119,7 @@ model aliases:
 | Alias | Provider model | Used by |
 |-------|----------------|---------|
 | `playbook-chat` | `LITELLM_PLAYBOOK_CHAT_MODEL` | athlete chat, admin chat, eval judge default |
-| `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries or future fast paths |
+| `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries and fast agent paths |
 | `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
 
 For local Compose, `litellm-db-init` creates a separate `litellm` database in

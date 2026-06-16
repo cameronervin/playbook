@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     LITELLM_API_KEY: str = Field(default="", repr=False)
     LITELLM_EMBED_MODEL: str = "playbook-embed"
     LITELLM_VLM_MODEL: str = "playbook-ocr"
+    LITELLM_SUMMARY_MODEL: str = "playbook-fast"
+
+    # Summary generation placeholders. The summary worker lands in a later
+    # phase; these defaults reserve the config contract now.
+    KB_SUMMARY_INPUT_MAX_TOKENS: int = 3000
+    KB_SUMMARY_MAX_OUTPUT_TOKENS: int = 160
 
     # -------------------------------------------------------------------------
     # S3-compatible storage — where original uploads + staged NDJSON live

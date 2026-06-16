@@ -52,6 +52,7 @@ def _metadata_with_organization(
 def _metadata_from_ingest_request(req: IngestDocumentRequest) -> dict:
     metadata = {
         **req.metadata_tags,
+        "source_type": req.source_type,
         "organization_id": str(req.organization_id),
         "playbook_document_id": str(req.playbook_document_id),
         "source_title": req.source_title,

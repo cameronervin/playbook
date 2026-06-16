@@ -15,6 +15,7 @@ signed status webhooks.
 | Content | Durable Location | Notes |
 |---------|------------------|-------|
 | Original admin-uploaded binary | Main backend blob storage | Referenced by `kb_documents.storage_key`; KB service reads via signed/presigned URL |
+| Original conversation-file binary | Main backend blob storage | Referenced by `conversation_files.storage_key`; KB service reads via signed/presigned URL after backend authorization |
 | Parsed page text | Temporary KB staging storage | NDJSON staging used between parse/chunk tasks; deleted after terminal cleanup |
 | Chunk text | `kb.langchain_pg_embedding.document` or equivalent text column | Durable retrieval text returned in search results |
 | Embedding vectors | `kb.langchain_pg_embedding.embedding` | `vector(1536)` for the `playbook-embed` LiteLLM alias |
@@ -56,13 +57,18 @@ Required MVP fields:
 - `md5` or content hash for deduplication
 - `status`
 - `playbook_document_id`
+- `conversation_id`
+- `conversation_file_id`
 - `metadata`
 - `error_message`
 - `created_at`
 - `updated_at`
 
-`playbook_document_id` maps to main backend `kb_documents.id`. Search responses
-must prefer this identifier as the external `document_id`.
+`source_type` is `admin_upload` or `conversation_file`. For `admin_upload`,
+`playbook_document_id` maps to main backend `kb_documents.id`, and search
+responses must prefer this identifier as the external `document_id`. For
+`conversation_file`, `conversation_id` and `conversation_file_id` map to backend
+conversation metadata and are required for private retrieval filters.
 
 Allowed statuses:
 - `pending`
@@ -111,7 +117,10 @@ Required MVP fields:
 
 Required `cmetadata` keys:
 - `organization_id`
+- `source_type`
 - `playbook_document_id`
+- `conversation_id`
+- `conversation_file_id`
 - `kb_document_id`
 - `chunk_id`
 - `chunk_index`
@@ -123,6 +132,12 @@ Required `cmetadata` keys:
 - `metadata_tags`
 - `content_type`
 - `source_locator`
+
+For `admin_upload` vectors, `conversation_id` and `conversation_file_id` are
+omitted. For `conversation_file` vectors, `playbook_document_id` is omitted and
+`visibility_policy.scope` must be `conversation`. Shared KB search must filter
+to `source_type="admin_upload"`; private file search must filter to
+`source_type="conversation_file"`, `organization_id`, and `conversation_id`.
 
 The `document` text and `embedding` vector are the durable retrieval payload.
 Temporary pages/chunks staged in S3 are implementation artifacts, not the long-term

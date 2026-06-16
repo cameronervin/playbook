@@ -159,7 +159,11 @@ Extraction statuses:
 - `failed`
 
 Athlete files are conversation-scoped and not promoted into the shared KB in MVP.
-They may be used as private context for the owning conversation only.
+They may be used as private context for the owning conversation only. For the
+conversation-file RAG path, the backend owns this athlete-visible metadata while
+KB-service owns parsed chunks, embeddings, summaries, and private retrieval
+state. Backend dispatches the trusted `source_type="conversation_file"` metadata
+after authorizing the athlete; browser callers never choose the source type.
 
 ### `conversation_file_chunks`
 ```sql
@@ -177,10 +181,12 @@ CREATE TABLE conversation_file_chunks (
 ```
 
 `conversation_file_chunks` stores the bounded runtime representation of extracted
-athlete-uploaded files. The chat agent can select ordered chunks from this table
-without loading the entire extracted text artifact into the prompt. `source_locator`
-captures user-facing position hints such as page number, slide number, sheet name,
-row range, or paragraph range when the extractor can provide them.
+athlete-uploaded files for the earlier backend-local path. The KB-service private
+RAG path is the canonical direction for new conversation-file retrieval; this
+table remains temporarily available until a later migration decides whether to
+remove or retain it for compatibility. `source_locator` captures user-facing
+position hints such as page number, slide number, sheet name, row range, or
+paragraph range when the extractor can provide them.
 
 ### `kb_documents`
 ```sql

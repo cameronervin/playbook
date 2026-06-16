@@ -50,19 +50,27 @@ Implementation notes:
 
 ## Conversation File Uploads
 
-Athlete-uploaded files are conversation-scoped.
+Athlete-uploaded files are conversation-scoped. The main backend owns upload
+authorization, storage keys, conversation metadata, athlete-visible status, and
+chat orchestration. KB-service owns document intelligence for the private RAG
+path: parsing, chunking, embeddings, canonical summaries, vector metadata, and
+retrieval.
 
 1. Athlete uploads supported file to conversation.
 2. Original file is stored securely in configured blob storage and associated with conversation.
-3. Extraction runs for that file.
-4. Full extracted text/page JSON is stored as a separate blob referenced by `conversation_files.extracted_text_ref`.
-5. Extracted content is chunked into `conversation_file_chunks` for bounded chat context assembly.
-6. File metadata and extraction status remain visible in conversation history.
-7. File is not added to shared KB in MVP.
+3. Backend dispatches KB-service ingestion with trusted
+   `source_type="conversation_file"`, `organization_id`, `conversation_id`, and
+   `conversation_file_id`; the frontend never supplies `source_type`.
+4. KB-service parses, chunks, embeds, and summarizes the file under
+   `visibility_policy.scope="conversation"`.
+5. Backend mirrors safe status/summary metadata for conversation history.
+6. File is not added to shared KB in MVP.
 
 Conversation-file chunks are private to the owning conversation. The chat agent may
 include selected chunks when the current message references uploaded files, but
-shared KB search must exclude athlete-uploaded files.
+shared KB search must exclude athlete-uploaded files. Private retrieval must
+filter by `organization_id`, `source_type="conversation_file"`, and
+`conversation_id`, with optional file ID narrowing.
 
 Supported MVP file types:
 - PDF

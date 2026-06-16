@@ -38,6 +38,7 @@ not need to provide a name or collection name.
 ```json
 POST /api/kb/ingest/document
 {
+  "source_type": "admin_upload",
   "organization_id": "uuid",
   "playbook_document_id": "uuid",
   "configuration_id": "uuid",
@@ -55,6 +56,17 @@ POST /api/kb/ingest/document
   "status_webhook_url": "https://app.example/api/v1/kb/webhook"
 }
 ```
+
+`source_type` is backend-derived and currently accepts:
+
+| Source type | Required identifiers | Visibility |
+|-------------|----------------------|------------|
+| `admin_upload` | `organization_id`, `playbook_document_id` | `visibility_policy.scope="all_athletes"` by default |
+| `conversation_file` | `organization_id`, `conversation_id`, `conversation_file_id` | `visibility_policy.scope="conversation"` |
+
+Conversation-file ingestion uses the same endpoint/worker pipeline, but the
+backend sends conversation metadata only after validating the athlete owns the
+conversation. Browser callers never send `source_type` directly to KB-service.
 
 Response:
 
@@ -78,9 +90,13 @@ POST /api/v1/kb/webhook
 {
   "event_id": "uuid",
   "kb_service_document_id": "uuid",
+  "source_type": "admin_upload",
   "playbook_document_id": "uuid",
+  "conversation_id": null,
+  "conversation_file_id": null,
   "stage": "embed",
   "status": "STARTED",
+  "summary": null,
   "message": null,
   "metadata": {
     "chunk_count": 42,
@@ -89,6 +105,11 @@ POST /api/v1/kb/webhook
   "occurred_at": "2026-06-04T12:00:00Z"
 }
 ```
+
+For `source_type="conversation_file"`, `conversation_id` and
+`conversation_file_id` are populated and `playbook_document_id` is omitted.
+Webhook payloads must not include signed URLs, raw extracted text, model inputs,
+or file contents.
 
 Required signature headers:
 - `X-KB-Timestamp`
@@ -109,6 +130,21 @@ POST /api/kb/search
     "role": "athlete",
     "sport_team": "Basketball"
   },
+  "source_types": ["admin_upload"],
+  "limit": 10,
+  "score_threshold": 0.7
+}
+```
+
+Private conversation-file retrieval requires trusted backend scope:
+
+```json
+{
+  "query": "Does this contract require approval?",
+  "organization_id": "uuid",
+  "source_types": ["conversation_file"],
+  "conversation_id": "uuid",
+  "file_ids": ["uuid"],
   "limit": 10,
   "score_threshold": 0.7
 }

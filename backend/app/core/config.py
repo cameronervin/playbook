@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     AWS_PROFILE: str | None = None
     S3_TIMEOUT: int = 120
     S3_PRESIGNED_URL_EXPIRY: int = 3600
+    CONVERSATION_FILE_MAX_UPLOAD_MB: int = 200
 
     # --- Workers ---------------------------------------------------------------
     CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/0", repr=False)

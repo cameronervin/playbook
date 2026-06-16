@@ -1,7 +1,7 @@
 # KB Service Retrieval
 
 This document defines semantic retrieval behavior for shared Playbook KB
-documents.
+documents and private conversation-file context.
 
 ## Search Scope
 
@@ -12,13 +12,16 @@ Search includes only admin-uploaded KB documents that are:
 - visible to the requesting audience,
 - in the configured Playbook collection.
 
-Athlete conversation files are not searched by the KB service in MVP.
+Athlete conversation files are never eligible for shared KB search. The
+conversation-file RAG path uses KB-service private retrieval with a separate
+trusted scope from the backend.
 
 ## Query Flow
 
 1. Main backend receives an athlete chat message.
 2. Chat orchestration decides whether KB retrieval is required.
-3. Main backend calls KB service search with query, organization ID, limit, threshold, and visibility context.
+3. Main backend calls KB service search with query, organization ID, source type
+   scope, limit, threshold, and visibility context.
 4. KB service embeds the query.
 5. KB service runs cosine similarity search against ready vectors.
 6. KB service returns chunk text, score, document IDs, and metadata.
@@ -39,6 +42,17 @@ filtering can be added without changing the API shape.
 Search must also carry a top-level trusted `organization_id`. KB service search
 filters vector metadata with this organization scope before returning chunks;
 vectors without organization metadata are not eligible for retrieval.
+
+Source-type filters are mandatory:
+
+| Source type | Required filters |
+|-------------|------------------|
+| `admin_upload` | `organization_id`, `source_type="admin_upload"`, visibility policy |
+| `conversation_file` | `organization_id`, `source_type="conversation_file"`, `conversation_id`, optional `file_ids` |
+
+If `conversation_file` search omits `conversation_id`, KB-service must return no
+private file chunks. Combined retrieval may return both source types only when
+the backend supplies the trusted private conversation scope.
 
 ## Ranking Signals
 
@@ -67,7 +81,11 @@ Each result must include:
 - `metadata.source_title`,
 - `metadata.source_date`,
 - `metadata.organization_id`,
+- `metadata.source_type`,
 - `metadata.visibility_policy`.
+
+Conversation-file results must also include `metadata.conversation_id`,
+`metadata.conversation_file_id`, and source locator metadata when available.
 
 ## Citation Support
 

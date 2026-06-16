@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import BinaryIO
 from uuid import UUID
 
 import pytest
 
-from app.api.v1.dependencies import get_agent_stream_service
+from app.api.v1.dependencies import (
+    get_agent_stream_service,
+    get_conversation_file_ingest_dispatcher,
+)
+from app.infrastructure.storage import get_storage_provider_dependency
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.repositories.conversations import (
     ConversationFileChunkRepository,
@@ -17,8 +22,63 @@ from app.repositories.conversations import (
     MessageCitationRepository,
 )
 from app.repositories.identity import OrganizationRepository, UserRepository
+from app.schemas.knowledgebase import KBConversationFileIngestRequest
 from app.services.agent_stream_service import AgentStreamService
 from app.workers import tasks as worker_tasks
+
+
+class FakeStorageProvider:
+    """Storage fake that records upload and presign operations."""
+
+    def __init__(self) -> None:
+        self.uploads: list[tuple[str, str, int]] = []
+        self.presigned: list[tuple[str, str | None]] = []
+
+    async def upload_file(self, key: str, file: BinaryIO, content_type: str) -> str:
+        data = file.read()
+        file.seek(0)
+        self.uploads.append((key, content_type, len(data)))
+        return key
+
+    async def download_file(self, key: str) -> bytes:
+        return b"document"
+
+    async def delete_file(self, key: str) -> None:
+        return None
+
+    async def get_presigned_url(
+        self,
+        key: str,
+        expires_in: int = 3600,
+        download_filename: str | None = None,
+    ) -> str:
+        self.presigned.append((key, download_filename))
+        return f"https://storage.example/{key}?filename={download_filename}"
+
+    async def file_exists(self, key: str) -> bool:
+        return True
+
+
+class FakeConversationFileIngestDispatcher:
+    """Recorder for trusted conversation-file ingest requests."""
+
+    def __init__(self) -> None:
+        self.requests: list[KBConversationFileIngestRequest] = []
+
+    async def dispatch(self, request: KBConversationFileIngestRequest) -> None:
+        self.requests.append(request)
+
+
+def _override_file_upload_dependencies(route_client):
+    storage = FakeStorageProvider()
+    dispatcher = FakeConversationFileIngestDispatcher()
+    route_client.app.dependency_overrides[get_storage_provider_dependency] = (
+        lambda: storage
+    )
+    route_client.app.dependency_overrides[get_conversation_file_ingest_dispatcher] = (
+        lambda: dispatcher
+    )
+    return storage, dispatcher
 
 
 @pytest.mark.asyncio
@@ -115,6 +175,229 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
     ]
     assert "storage_key" not in detail_response.json()["files"][0]
     assert "extracted_text_ref" not in detail_response.json()["files"][0]
+
+
+@pytest.mark.asyncio
+async def test_upload_conversation_file_stores_metadata_and_dispatches_private_ingest(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-upload-subject",
+        sport_team="Basketball",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    route_client.authenticate_as(athlete)
+    storage, dispatcher = _override_file_upload_dependencies(route_client)
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={
+            "file": (
+                "nil-contract.pdf",
+                b"%PDF-1.7 contract",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    file_id = UUID(body["id"])
+    assert body["conversation_id"] == str(conversation.id)
+    assert body["message_id"] is None
+    assert body["filename"] == "nil-contract.pdf"
+    assert body["content_type"] == "application/pdf"
+    assert body["size_bytes"] == len(b"%PDF-1.7 contract")
+    assert body["extraction_status"] == "uploaded"
+    assert body["chunk_count"] == 0
+    assert "storage_key" not in body
+    assert "source_uri" not in body
+    assert "extracted_text_ref" not in body
+
+    assert len(storage.uploads) == 1
+    storage_key, content_type, size_bytes = storage.uploads[0]
+    assert storage_key.startswith(
+        f"conversation-files/originals/{organization.id}/{conversation.id}/{file_id}/"
+    )
+    assert storage_key.endswith("/nil-contract.pdf")
+    assert content_type == "application/pdf"
+    assert size_bytes == len(b"%PDF-1.7 contract")
+    assert storage.presigned == [(storage_key, "nil-contract.pdf")]
+
+    persisted = await ConversationFileRepository(db_session).list_by_conversation_and_ids(
+        conversation.id,
+        [file_id],
+    )
+    assert persisted[0].storage_key == storage_key
+    assert persisted[0].extraction_status == "uploaded"
+
+    assert len(dispatcher.requests) == 1
+    request = dispatcher.requests[0]
+    assert request.source_type == "conversation_file"
+    assert request.organization_id == organization.id
+    assert request.conversation_id == conversation.id
+    assert request.conversation_file_id == file_id
+    assert request.filename == "nil-contract.pdf"
+    assert request.source_title == "nil-contract.pdf"
+    assert request.visibility_policy == {"scope": "conversation"}
+    assert request.source_uri.startswith("https://storage.example/")
+    assert "signature" not in response.text
+
+    detail_response = await route_client.client.get(
+        f"/api/v1/conversations/{conversation.id}"
+    )
+
+    assert detail_response.status_code == 200
+    assert detail_response.json()["files"][0]["id"] == str(file_id)
+    assert detail_response.json()["files"][0]["chunk_count"] == 0
+    assert "storage_key" not in detail_response.json()["files"][0]
+    assert "source_uri" not in detail_response.json()["files"][0]
+
+
+@pytest.mark.asyncio
+async def test_upload_conversation_file_is_scoped_to_current_athlete(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    user_repo = UserRepository(db_session)
+    owner = await user_repo.create(
+        organization_id=organization.id,
+        email="owner@example.com",
+        name="Owner Athlete",
+        auth_provider="google",
+        provider_subject="owner-upload-subject",
+    )
+    other = await user_repo.create(
+        organization_id=organization.id,
+        email="other@example.com",
+        name="Other Athlete",
+        auth_provider="google",
+        provider_subject="other-upload-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=owner.id,
+    )
+    route_client.authenticate_as(other)
+    storage, dispatcher = _override_file_upload_dependencies(route_client)
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={"file": ("contract.pdf", b"%PDF-1.7", "application/pdf")},
+        headers={"X-Request-ID": "req-upload-owner"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"] == {
+        "code": "NOT_FOUND",
+        "message": f"Conversation not found: {conversation.id}",
+        "retryable": False,
+        "details": {"request_id": "req-upload-owner"},
+    }
+    assert storage.uploads == []
+    assert dispatcher.requests == []
+
+
+@pytest.mark.asyncio
+async def test_upload_conversation_file_rejects_unsupported_or_mismatched_type(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-upload-type-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    route_client.authenticate_as(athlete)
+    storage, dispatcher = _override_file_upload_dependencies(route_client)
+
+    unsupported = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={"file": ("notes.txt", b"notes", "text/plain")},
+    )
+    mismatched = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={"file": ("contract.pdf", b"%PDF-1.7", "application/octet-stream")},
+    )
+
+    assert unsupported.status_code == 415
+    assert unsupported.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+    assert mismatched.status_code == 415
+    assert mismatched.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+    assert storage.uploads == []
+    assert dispatcher.requests == []
+
+
+@pytest.mark.asyncio
+async def test_upload_conversation_file_rejects_empty_or_oversize_file(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-upload-size-subject",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    route_client.authenticate_as(athlete)
+    storage, dispatcher = _override_file_upload_dependencies(route_client)
+
+    empty = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={"file": ("empty.pdf", b"", "application/pdf")},
+    )
+    oversize = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={
+            "file": (
+                "too-large.pdf",
+                b"0" * (201 * 1024 * 1024),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert empty.status_code == 400
+    assert empty.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert oversize.status_code == 413
+    assert oversize.json()["error"]["code"] == "FILE_TOO_LARGE"
+    assert storage.uploads == []
+    assert dispatcher.requests == []
 
 
 @pytest.mark.asyncio
@@ -574,6 +857,7 @@ async def test_conversation_create_openapi_uses_initial_message(route_client) ->
         "/api/v1/conversations/{conversation_id}/messages/{message_id}/stream"
         in response.json()["paths"]
     )
+    assert "/api/v1/conversations/{conversation_id}/files" in response.json()["paths"]
 
 
 @pytest.mark.asyncio

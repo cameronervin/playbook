@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import BinaryIO
 from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.error_codes import ErrorCode
-from app.core.exceptions import AppError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AppError,
+    FileTooLargeError,
+    NotFoundError,
+    UnsupportedFileTypeError,
+    ValidationError,
+)
+from app.infrastructure.storage.paths import conversation_file_original_key
+from app.infrastructure.storage.provider import StorageProvider
 from app.models.conversations import (
     ConversationFile,
     ConversationMessage,
@@ -32,10 +43,30 @@ from app.schemas.conversations import (
     MessageSubmitRequest,
     MessageSubmitResponse,
 )
+from app.schemas.knowledgebase import KBConversationFileIngestRequest
+from app.services.conversation_file_ingest_dispatcher import (
+    ConversationFileIngestDispatcher,
+)
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import WorkerTaskName
 
 logger = structlog.get_logger(__name__)
+
+SUPPORTED_CONVERSATION_FILE_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
+@dataclass(frozen=True)
+class ConversationFileUpload:
+    """Service input for a multipart conversation-file upload."""
+
+    filename: str
+    content_type: str
+    file: BinaryIO
 
 
 class ConversationService:
@@ -50,6 +81,9 @@ class ConversationService:
         citation_repo: MessageCitationRepository | None = None,
         file_repo: ConversationFileRepository | None = None,
         athlete_chat_dispatcher: AthleteChatTaskDispatcher | None = None,
+        conversation_file_ingest_dispatcher: ConversationFileIngestDispatcher | None = None,
+        storage: StorageProvider | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.session = session
         self.conversation_repo = conversation_repo or ConversationRepository(session)
@@ -59,6 +93,11 @@ class ConversationService:
         self.athlete_chat_dispatcher = (
             athlete_chat_dispatcher or AthleteChatTaskDispatcher()
         )
+        self.conversation_file_ingest_dispatcher = (
+            conversation_file_ingest_dispatcher or ConversationFileIngestDispatcher()
+        )
+        self.storage = storage
+        self.settings = settings
 
     async def list_for_athlete(
         self,
@@ -243,6 +282,78 @@ class ConversationService:
             status=assistant_message.status,
         )
 
+    async def upload_file(
+        self,
+        *,
+        athlete: User,
+        conversation_id: UUID,
+        upload: ConversationFileUpload,
+    ) -> ConversationFileSummaryResponse:
+        """Store a conversation-scoped file original and queue private ingest intent."""
+        conversation = await self.conversation_repo.get_for_athlete(
+            conversation_id=conversation_id,
+            organization_id=athlete.organization_id,
+            athlete_id=athlete.id,
+        )
+        if conversation is None:
+            raise NotFoundError("Conversation", str(conversation_id))
+        if self.storage is None:
+            raise AppError(
+                "Storage provider is not configured",
+                ErrorCode.STORAGE_ERROR,
+                retryable=True,
+            )
+
+        filename = self._validate_filename(upload.filename)
+        content_type = self._validate_content_type(filename, upload.content_type)
+        size_bytes = self._validate_size(filename, upload.file)
+        file_id = uuid4()
+        storage_key = conversation_file_original_key(
+            athlete.organization_id,
+            conversation.id,
+            file_id,
+            filename,
+        )
+
+        upload.file.seek(0)
+        await self.storage.upload_file(storage_key, upload.file, content_type)
+        file = await self.file_repo.create(
+            file_id=file_id,
+            conversation_id=conversation.id,
+            uploaded_by=athlete.id,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            storage_key=storage_key,
+            extraction_status="uploaded",
+        )
+        signed_url = await self.storage.get_presigned_url(
+            storage_key,
+            download_filename=filename,
+        )
+        await self.conversation_file_ingest_dispatcher.dispatch(
+            KBConversationFileIngestRequest(
+                organization_id=athlete.organization_id,
+                conversation_id=conversation.id,
+                conversation_file_id=file.id,
+                source_uri=signed_url,
+                filename=file.filename,
+                content_type=file.content_type,
+                size_bytes=file.size_bytes,
+                source_title=file.filename,
+            )
+        )
+        await self.session.commit()
+        logger.info(
+            "conversation_file_uploaded",
+            athlete_user_id=str(athlete.id),
+            conversation_id=str(conversation.id),
+            conversation_file_id=str(file.id),
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+        )
+        return self._file_response(file, 0)
+
     async def validate_message_stream(
         self,
         *,
@@ -339,3 +450,53 @@ class ConversationService:
             created_at=file.created_at,
             updated_at=file.updated_at,
         )
+
+    @staticmethod
+    def _validate_filename(filename: str) -> str:
+        cleaned = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        if not cleaned:
+            raise ValidationError("Uploaded file must have a filename")
+        if len(cleaned) > 500:
+            raise ValidationError("Uploaded filename is too long")
+        return cleaned
+
+    @staticmethod
+    def _validate_content_type(filename: str, content_type: str) -> str:
+        lowered = filename.lower()
+        extension = next(
+            (
+                supported_extension
+                for supported_extension in SUPPORTED_CONVERSATION_FILE_TYPES
+                if lowered.endswith(supported_extension)
+            ),
+            None,
+        )
+        allowed_types = sorted(SUPPORTED_CONVERSATION_FILE_TYPES.values())
+        if extension is None:
+            raise UnsupportedFileTypeError(filename, content_type, allowed_types)
+
+        expected_content_type = SUPPORTED_CONVERSATION_FILE_TYPES[extension]
+        if content_type != expected_content_type:
+            raise UnsupportedFileTypeError(filename, content_type, allowed_types)
+        return expected_content_type
+
+    def _validate_size(self, filename: str, file: BinaryIO) -> int:
+        position = file.tell()
+        file.seek(0, 2)
+        size = file.tell()
+        file.seek(position)
+        if size <= 0:
+            raise ValidationError("Uploaded file must not be empty")
+
+        max_size = self._max_upload_bytes()
+        if size > max_size:
+            raise FileTooLargeError(filename, size, max_size)
+        return size
+
+    def _max_upload_bytes(self) -> int:
+        max_mb = (
+            self.settings.CONVERSATION_FILE_MAX_UPLOAD_MB
+            if self.settings is not None
+            else 200
+        )
+        return max_mb * 1024 * 1024

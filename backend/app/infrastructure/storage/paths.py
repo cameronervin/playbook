@@ -7,6 +7,7 @@ UPLOADS_PREFIX = "uploads"
 GENERATED_PREFIX = "generated"
 KB_ORIGINALS_PREFIX = "kb/originals"
 CONVERSATION_UPLOADS_PREFIX = "conversations"
+CONVERSATION_FILE_ORIGINALS_PREFIX = "conversation-files/originals"
 
 # Default category folder under generated/.
 CATEGORY_EXPORTS = "exports"
@@ -35,6 +36,19 @@ def conversation_upload_file_key(
     return (
         f"{CONVERSATION_UPLOADS_PREFIX}/{organization_id}/{conversation_id}/"
         f"{uuid4()}/{_safe_filename(filename)}"
+    )
+
+
+def conversation_file_original_key(
+    organization_id: UUID,
+    conversation_id: UUID,
+    conversation_file_id: UUID,
+    filename: str,
+) -> str:
+    """Generate an S3 key for a conversation-file original binary."""
+    return (
+        f"{CONVERSATION_FILE_ORIGINALS_PREFIX}/{organization_id}/"
+        f"{conversation_id}/{conversation_file_id}/{_safe_filename(filename)}"
     )
 
 

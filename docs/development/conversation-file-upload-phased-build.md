@@ -52,6 +52,16 @@ The frontend must never choose `source_type`. Browser callers hit role-scoped
 backend endpoints; the backend derives the KB-service metadata from that route
 and the authenticated principal.
 
+Backend integration direction: Phase 1 uses a no-op conversation-file ingest
+dispatcher as a temporary handoff point while the KB-service private ingest
+contract is unfinished. Long-term, both admin document uploads and conversation
+file uploads should call one backend KB integration seam, such as a generalized
+`BaseKnowledgebaseProvider.ingest_source(KBIngestRequest)`, with the backend
+deriving the trusted `source_type`. Public backend routes should remain separate
+for auth and product semantics; only the internal KB-service ingest path should
+converge. When that provider seam exists, the temporary dispatcher can be
+removed unless the backend intentionally keeps it as an async/event abstraction.
+
 ## Data Model Direction
 
 ### Backend
@@ -131,7 +141,7 @@ LiteLLM docs and virtual keys must be updated so KB-service can call
 `playbook-fast` in addition to `playbook-embed` and, when enabled,
 `playbook-ocr`.
 
-## Phase 0: Scaffolding and Contracts
+## [IMPLEMENTED] Phase 0: Scaffolding and Contracts
 
 Scope:
 
@@ -163,7 +173,7 @@ Do not do yet:
 - Do not implement real parser or embedding behavior.
 - Do not wire the athlete agent.
 
-## Phase 1: Backend Upload Metadata Slice
+## [IMPLEMENTED] Phase 1: Backend Upload Metadata Slice
 
 Scope:
 
@@ -174,6 +184,21 @@ Scope:
   file into memory.
 - Create a `conversation_files` row with `uploaded` status.
 - Dispatch a fake/no-op KB-service ingest request with `source_type=conversation_file`.
+
+Implemented behavior:
+
+- `POST /api/v1/conversations/{conversation_id}/files` accepts one multipart
+  `UploadFile`, authorizes against the current athlete-owned conversation,
+  validates filename, exact extension/content type, non-empty content, and
+  `CONVERSATION_FILE_MAX_UPLOAD_MB` (`200` MB default).
+- The backend streams `UploadFile.file` through the existing S3-compatible
+  storage provider under `conversation-files/originals/...`, persists a safe
+  `conversation_files` metadata row with `uploaded` status, and dispatches a
+  no-op trusted `KBConversationFileIngestRequest` with
+  `source_type="conversation_file"`.
+- Responses and conversation detail include only `ConversationFileSummaryResponse`
+  fields; storage keys, signed URLs, extracted text references, and raw content
+  remain internal.
 
 Acceptance criteria:
 
@@ -199,6 +224,8 @@ Scope:
 - Require `conversation_id` and `conversation_file_id` for `conversation_file`.
 - Persist trusted metadata into KB-service document/vector metadata.
 - Ensure `visibility_policy.scope=conversation` for conversation files.
+- Replace the Phase 1 no-op dispatcher with the generalized KB provider ingest
+  seam once KB-service accepts both source types.
 
 Acceptance criteria:
 
@@ -409,3 +436,5 @@ Do not do yet:
   artifacts.
 - Decide whether backend mirrors only terminal summaries or all in-progress
   parser quality metadata.
+- Decide whether the dispatcher remains as an async/event abstraction or is
+  removed once `BaseKnowledgebaseProvider` owns unified ingestion.

@@ -141,6 +141,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         """Start ingestion through the KB-service semantic document route."""
         config_id = await self.resolve_configuration()
         payload = {
+            "source_type": request.source_type,
             "organization_id": str(request.organization_id),
             "playbook_document_id": str(request.playbook_document_id),
             "configuration_id": config_id,

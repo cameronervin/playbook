@@ -331,6 +331,7 @@ class ConversationFileRepository:
     async def create(
         self,
         *,
+        file_id: UUID | None = None,
         conversation_id: UUID,
         uploaded_by: UUID,
         filename: str,
@@ -347,6 +348,7 @@ class ConversationFileRepository:
     ) -> ConversationFile:
         """Create conversation file metadata without committing."""
         file = ConversationFile(
+            id=file_id,
             conversation_id=conversation_id,
             message_id=message_id,
             uploaded_by=uploaded_by,

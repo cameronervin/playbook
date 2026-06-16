@@ -28,6 +28,9 @@ from app.models.identity import User
 from app.services.agent_stream_service import AgentStreamService
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
+from app.services.conversation_file_ingest_dispatcher import (
+    ConversationFileIngestDispatcher,
+)
 from app.services.conversation_service import ConversationService
 from app.services.kb_document_service import (
     KBDocumentService,
@@ -75,9 +78,35 @@ def get_audit_service(session: SessionDep) -> AuditLogService:
     return AuditLogService(session)
 
 
+def get_conversation_file_ingest_dispatcher() -> ConversationFileIngestDispatcher:
+    """Return conversation-file ingest dispatcher dependency."""
+    return ConversationFileIngestDispatcher()
+
+
+ConversationFileIngestDispatcherDep = Annotated[
+    ConversationFileIngestDispatcher,
+    Depends(get_conversation_file_ingest_dispatcher),
+]
+
+
 def get_conversation_service(session: SessionDep) -> ConversationService:
     """Return conversation service dependency."""
     return ConversationService(session)
+
+
+def get_conversation_file_upload_service(
+    session: SessionDep,
+    storage: StorageProviderDep,
+    settings: SettingsDep,
+    conversation_file_ingest_dispatcher: ConversationFileIngestDispatcherDep,
+) -> ConversationService:
+    """Return conversation service dependency for file-upload operations."""
+    return ConversationService(
+        session,
+        storage=storage,
+        settings=settings,
+        conversation_file_ingest_dispatcher=conversation_file_ingest_dispatcher,
+    )
 
 
 def get_agent_stream_service(
@@ -114,6 +143,10 @@ AuditLogServiceDep = Annotated[AuditLogService, Depends(get_audit_service)]
 ConversationServiceDep = Annotated[
     ConversationService,
     Depends(get_conversation_service),
+]
+ConversationFileUploadServiceDep = Annotated[
+    ConversationService,
+    Depends(get_conversation_file_upload_service),
 ]
 AgentStreamServiceDep = Annotated[
     AgentStreamService,

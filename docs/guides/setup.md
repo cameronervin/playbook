@@ -189,6 +189,7 @@ cp ../deploy/envs/.env.kb-service.local .env
 # CELERY_RESULT_BACKEND=redis://localhost:6380/1
 # LITELLM_BASE_URL=http://localhost:4000
 # S3_ENDPOINT_URL=http://localhost:9000
+# CONVERSATION_FILE_MAX_UPLOAD_MB=200
 # APP_WEBHOOK_URL=http://localhost:8000
 
 uv run alembic upgrade head

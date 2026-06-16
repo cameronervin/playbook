@@ -54,7 +54,7 @@ Provision two virtual keys:
 | Service | Models |
 |---------|--------|
 | Backend | `playbook-chat`, `playbook-fast` |
-| KB-service | `playbook-embed` |
+| KB-service | `playbook-embed`, `playbook-fast` |
 
 Set them here:
 
@@ -93,7 +93,7 @@ curl -s -X POST "http://localhost:4000/key/generate" \
 curl -s -X POST "http://localhost:4000/key/generate" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"key_alias":"playbook-kb-local","models":["playbook-embed"],"metadata":{"service":"kb-service","environment":"local"}}'
+  -d '{"key_alias":"playbook-kb-local","models":["playbook-embed","playbook-fast"],"metadata":{"service":"kb-service","environment":"local"}}'
 ```
 
 After writing generated keys into the app env files, restart app services:

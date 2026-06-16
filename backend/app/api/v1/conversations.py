@@ -5,23 +5,26 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, status
+from fastapi import APIRouter, File, Header, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.api.v1.dependencies import (
     AgentStreamServiceDep,
     AthleteUserDep,
+    ConversationFileUploadServiceDep,
     ConversationServiceDep,
 )
 from app.core.exceptions import ValidationError
 from app.schemas.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
+    ConversationFileSummaryResponse,
     ConversationSummaryResponse,
     MessageSubmitRequest,
     MessageSubmitResponse,
 )
 from app.services.agent_stream_service import AgentStreamService, format_sse_record
+from app.services.conversation_service import ConversationFileUpload
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -67,6 +70,30 @@ async def get_conversation(
         athlete=athlete,
         conversation_id=conversation_id,
         message_limit=message_limit,
+    )
+
+
+@router.post(
+    "/{conversation_id}/files",
+    response_model=ConversationFileSummaryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_conversation_file(
+    conversation_id: UUID,
+    athlete: AthleteUserDep,
+    service: ConversationFileUploadServiceDep,
+    file: Annotated[UploadFile, File()],
+) -> ConversationFileSummaryResponse:
+    """Upload a file scoped to the current athlete's conversation."""
+    upload = ConversationFileUpload(
+        filename=file.filename or "",
+        content_type=file.content_type or "application/octet-stream",
+        file=file.file,
+    )
+    return await service.upload_file(
+        athlete=athlete,
+        conversation_id=conversation_id,
+        upload=upload,
     )
 
 
