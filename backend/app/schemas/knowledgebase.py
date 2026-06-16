@@ -67,6 +67,7 @@ class KBDocumentIngestRequest(BaseModel):
         default_factory=lambda: {"scope": "all_athletes"}
     )
     metadata_tags: dict[str, Any] = Field(default_factory=dict)
+    status_webhook_url: str | None = None
 
 
 class KBDocumentIngestResponse(BaseModel):

@@ -62,6 +62,8 @@ def _metadata_from_ingest_request(req: IngestDocumentRequest) -> dict:
         "metadata_tags": req.metadata_tags,
         "content_type": req.content_type,
         "size_bytes": req.size_bytes,
+        "status_webhook_url": req.status_webhook_url,
+        "webhook_enabled": bool(req.status_webhook_url),
     }
     return _metadata_with_organization(metadata, organization_id=req.organization_id)
 

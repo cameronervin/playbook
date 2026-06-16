@@ -154,6 +154,8 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
             "priority": request.priority,
             "visibility_policy": request.visibility_policy,
             "metadata_tags": request.metadata_tags,
+            "status_webhook_url": request.status_webhook_url
+            or _default_status_webhook_url(self.settings),
         }
         data = await self._post("/api/kb/ingest/document", payload)
         return KBDocumentIngestResponse(
@@ -269,3 +271,7 @@ def _visibility_context(metadata_filter: dict | None) -> dict[str, Any]:
     if isinstance(visibility_policy, dict):
         return {"role": "athlete", "visibility_policy": visibility_policy}
     return {"role": "athlete"}
+
+
+def _default_status_webhook_url(settings: Settings) -> str:
+    return f"{settings.API_PUBLIC_URL.rstrip('/')}/api/v1/kb/webhook"

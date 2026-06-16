@@ -15,10 +15,15 @@ from collections.abc import Coroutine
 from typing import Any, TypeVar
 
 import structlog
-from celery import Celery
-from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
+from celery import Celery, signals as celery_signals
+from celery.signals import (
+    worker_process_init,
+    worker_process_shutdown,
+    worker_ready,
+)
 
 from app.core.config import Settings, get_settings
+from app.core.logging_config import configure_logging, install_secret_redaction_filter
 from app.workers.queues import (
     TASK_QUEUES,
     TASK_ROUTES,
@@ -27,6 +32,8 @@ from app.workers.queues import (
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+settings = get_settings()
+configure_logging(settings.LOG_LEVEL)
 logger = structlog.get_logger(__name__)
 
 _ASYNC_RESULT = TypeVar("_ASYNC_RESULT")
@@ -68,7 +75,20 @@ def create_worker_app(settings: Settings) -> Celery:
     return worker
 
 
-backend_worker = create_worker_app(get_settings())
+backend_worker = create_worker_app(settings)
+
+
+def configure_celery_logging(logger=None, **_: Any) -> None:
+    """Ensure Celery-managed loggers use the shared redaction filter."""
+    configure_logging(settings.LOG_LEVEL)
+    if logger is not None:
+        install_secret_redaction_filter(logger)
+
+
+for _signal_name in ("after_setup_logger", "after_setup_task_logger"):
+    _signal = getattr(celery_signals, _signal_name, None)
+    if _signal is not None:
+        _signal.connect(configure_celery_logging)
 
 _worker_loop: asyncio.AbstractEventLoop | None = None
 _worker_loop_owner_thread: int | None = None

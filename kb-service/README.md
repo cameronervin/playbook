@@ -80,13 +80,27 @@ tests/                     pgvector / celery / splitter shims; repo + worker con
 cd kb-service
 uv sync
 uv run alembic upgrade head          # needs Postgres with the pgvector extension
-uv run python run_dev.py             # uvicorn on :8001
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8001
 # workers (separate terminals):
 uv run celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2
 uv run celery -A app.workers.app worker -Q kb-io  --pool=threads  --concurrency=50
 ```
 
 See `deploy/compose/base.yml` (+ `--profile worker`) to run the whole stack with Docker.
+
+## Smoke test
+
+Once the API, Postgres, Valkey, S3/MinIO, LiteLLM, and KB workers are running:
+
+```bash
+cd kb-service
+uv run python scripts/smoke_kb_service.py
+```
+
+The script creates a tiny DOCX, uploads it to the configured bucket, ingests it,
+waits for the worker pipeline, runs retrieval, and deletes the test artifact by
+default. Use `--keep` to preserve the uploaded object and KB document while
+debugging.
 
 ## Extending
 

@@ -192,7 +192,7 @@ cp ../deploy/envs/.env.kb-service.local .env
 # APP_WEBHOOK_URL=http://localhost:8000
 
 uv run alembic upgrade head
-uv run python run_dev.py             # uvicorn on http://localhost:8001
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
 Run the KB ingest workers in separate terminals from `kb-service/`:

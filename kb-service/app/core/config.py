@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -33,13 +33,13 @@ class Settings(BaseSettings):
     # dedicated ``kb`` schema so this can share a Postgres instance with the
     # main app while staying isolated.
     # -------------------------------------------------------------------------
-    DATABASE_URL: str  # must be provided
+    DATABASE_URL: str = Field(repr=False)  # must be provided
 
     # -------------------------------------------------------------------------
     # Celery / Valkey — dedicated broker + result backend for the ingest pipeline
     # -------------------------------------------------------------------------
-    CELERY_BROKER_URL: str = "redis://kb-valkey:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://kb-valkey:6379/1"
+    CELERY_BROKER_URL: str = Field(default="redis://kb-valkey:6379/0", repr=False)
+    CELERY_RESULT_BACKEND: str = Field(default="redis://kb-valkey:6379/1", repr=False)
 
     # -------------------------------------------------------------------------
     # Embedding provider mode — litellm | direct
@@ -61,12 +61,12 @@ class Settings(BaseSettings):
 
     # direct mode — OPENAI_API_KEY required. The direct model is fixed because
     # normal deployments should configure provider model IDs only in LiteLLM.
-    OPENAI_API_KEY: str = ""
+    OPENAI_API_KEY: str = Field(default="", repr=False)
     DIRECT_EMBED_MODEL: str = "text-embedding-3-small"
 
     # litellm mode — LITELLM_BASE_URL + LITELLM_API_KEY required
     LITELLM_BASE_URL: str = ""
-    LITELLM_API_KEY: str = ""
+    LITELLM_API_KEY: str = Field(default="", repr=False)
     LITELLM_EMBED_MODEL: str = "playbook-embed"
     LITELLM_VLM_MODEL: str = "playbook-ocr"
 
@@ -76,22 +76,22 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str = "playbook-bucket"
     S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
     S3_REGION: str = "us-east-1"
-    S3_ACCESS_KEY_ID: str = ""
-    S3_SECRET_ACCESS_KEY: str = ""
+    S3_ACCESS_KEY_ID: str = Field(default="", repr=False)
+    S3_SECRET_ACCESS_KEY: str = Field(default="", repr=False)
     AWS_PROFILE: str = ""  # named profile; used when explicit keys are not set
 
     # -------------------------------------------------------------------------
     # Webhook — status push from KB → the calling app (HMAC-SHA256 signed)
     # -------------------------------------------------------------------------
     APP_WEBHOOK_URL: str = "http://localhost:8000"  # base URL, no trailing slash
-    KB_WEBHOOK_SECRET: str  # HMAC-SHA256 shared secret; must be provided
+    KB_WEBHOOK_SECRET: str = Field(repr=False)  # HMAC-SHA256 shared secret; must be provided
     KB_WEBHOOK_MAX_RETRIES: int = 5
     KB_WEBHOOK_BACKOFF_BASE: int = 2   # 2s → 8s → 32s → 120s → 120s
 
     # -------------------------------------------------------------------------
     # Service-to-service auth — caller → KB API (Bearer token)
     # -------------------------------------------------------------------------
-    KB_API_SECRET: str  # Bearer token callers must supply; must be provided
+    KB_API_SECRET: str = Field(repr=False)  # Bearer token callers must supply; must be provided
 
     # -------------------------------------------------------------------------
     # Service metadata
@@ -212,7 +212,12 @@ class Settings(BaseSettings):
             raise ValueError("; ".join(errors))
         return self
 
-    model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+        "hide_input_in_errors": True,
+    }
 
 
 settings = Settings()

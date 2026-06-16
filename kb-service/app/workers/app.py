@@ -39,12 +39,18 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import structlog
-from celery import Celery
-from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
+from celery import Celery, signals as celery_signals
+from celery.signals import (
+    worker_process_init,
+    worker_process_shutdown,
+    worker_ready,
+)
 
 from app.core.config import settings
+from app.core.logging_config import configure_logging, install_secret_redaction_filter
 from app.infrastructure.embedders.factory import build_fresh_embed_provider
 
+configure_logging(settings.LOG_LEVEL)
 logger = structlog.get_logger(__name__)
 
 # Public Celery app object. Named ``kb_worker`` and imported by the service
@@ -87,6 +93,19 @@ kb_worker.conf.update(
     result_serializer="json",
     accept_content=["json"],
 )
+
+
+def configure_celery_logging(logger=None, **kwargs) -> None:
+    """Ensure Celery-managed loggers use the shared redaction filter."""
+    configure_logging(settings.LOG_LEVEL)
+    if logger is not None:
+        install_secret_redaction_filter(logger)
+
+
+for _signal_name in ("after_setup_logger", "after_setup_task_logger"):
+    _signal = getattr(celery_signals, _signal_name, None)
+    if _signal is not None:
+        _signal.connect(configure_celery_logging)
 
 
 import app.workers.tasks  # noqa: F401, E402, I001 — must import to register tasks with kb_worker

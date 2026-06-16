@@ -4,13 +4,6 @@ Wires together all components but contains no implementation details.
 Infrastructure lifecycle is owned by the lifespan.
 """
 
-import sys
-
-if sys.platform == "win32":
-    import asyncio
-
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 from contextlib import asynccontextmanager
 
 import structlog
@@ -36,6 +29,7 @@ from app.core.exception_handlers import (
     validation_exception_handler,
 )
 from app.core.exceptions import AppError
+from app.core.logging_config import configure_logging
 from app.infrastructure.checkpointer import (
     cleanup_checkpointer_pool,
     create_checkpointer,
@@ -49,6 +43,7 @@ from app.infrastructure.streaming import cleanup_agent_stream_provider
 from app.middleware import setup_cors, setup_request_context
 from app.observability.agent_trace import verify_tracing_configuration
 
+configure_logging()
 logger = structlog.get_logger(__name__)
 
 API_V1_PREFIX = "/api/v1"
@@ -173,6 +168,7 @@ async def lifespan(app: FastAPI):
 def create_app(app_settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI app."""
     settings = app_settings or get_settings()
+    configure_logging(settings.LOG_LEVEL)
     app = FastAPI(
         title=settings.PROJECT_NAME,
         debug=settings.DEBUG,

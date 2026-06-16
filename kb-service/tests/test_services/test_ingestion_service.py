@@ -57,3 +57,40 @@ def test_ingest_metadata_normalizes_admin_documents_as_official_without_priority
     assert metadata["is_official"] is True
     assert metadata["priority"] == 0
     assert metadata["metadata_tags"] == {"topic": "nil"}
+
+
+def test_ingest_metadata_disables_webhook_when_url_is_omitted() -> None:
+    request = IngestDocumentRequest(
+        organization_id=uuid4(),
+        playbook_document_id=uuid4(),
+        configuration_id=uuid4(),
+        source_uri="s3://bucket/nil.pdf",
+        filename="nil.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="NIL Handbook",
+    )
+
+    metadata = _metadata_from_ingest_request(request)
+
+    assert metadata["webhook_enabled"] is False
+    assert metadata["status_webhook_url"] is None
+
+
+def test_ingest_metadata_enables_webhook_when_url_is_supplied() -> None:
+    request = IngestDocumentRequest(
+        organization_id=uuid4(),
+        playbook_document_id=uuid4(),
+        configuration_id=uuid4(),
+        source_uri="s3://bucket/nil.pdf",
+        filename="nil.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="NIL Handbook",
+        status_webhook_url="http://backend.test/api/v1/kb/webhook",
+    )
+
+    metadata = _metadata_from_ingest_request(request)
+
+    assert metadata["webhook_enabled"] is True
+    assert metadata["status_webhook_url"] == "http://backend.test/api/v1/kb/webhook"

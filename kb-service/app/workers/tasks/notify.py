@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import structlog
 
+from app.core.log_redaction import redact_string
 from app.workers.app import kb_worker
 
 logger = structlog.get_logger(__name__)
+
+_WEBHOOK_PATH = "/api/v1/kb/webhook"
 
 
 def _notify(
@@ -49,10 +53,9 @@ def notify_status_task(
 ) -> None:
     """HMAC-SHA256 sign and POST a status update to the calling app's webhook.
 
-    Posts to ``{settings.APP_WEBHOOK_URL}/api/v1/kb/webhook`` with an
-    ``X-KB-Signature: sha256=<hex>`` header. On permanent failure (all retries
-    exhausted), the delivery is dead-lettered into kb.ingestion_logs so the
-    caller's reconciler can recover terminal events on its next run.
+    Posts to the per-document webhook URL stored at ingest time with an
+    ``X-KB-Signature: sha256=<hex>`` header. Legacy documents without webhook
+    metadata fall back to ``settings.APP_WEBHOOK_URL`` for compatibility.
     """
     import hashlib
     import hmac
@@ -62,6 +65,16 @@ def notify_status_task(
     import httpx
 
     from app.core.config import settings
+
+    url = _load_webhook_url(document_id)
+    if not url:
+        logger.info(
+            "kb_webhook_skipped",
+            document_id=document_id,
+            stage=stage,
+            status=status,
+        )
+        return
 
     payload = {
         "document_id": document_id,
@@ -77,7 +90,6 @@ def notify_status_task(
         hashlib.sha256,
     ).hexdigest()
 
-    url = f"{settings.APP_WEBHOOK_URL.rstrip('/')}/api/v1/kb/webhook"
     headers = {
         "Content-Type": "application/json",
         "X-KB-Signature": f"sha256={signature}",
@@ -102,6 +114,7 @@ def notify_status_task(
         )
         if self.request.retries >= self.max_retries:
             _handle_webhook_dead_letter(self.request.id, document_id, stage, status, exc)
+            return
         raise self.retry(exc=exc) from exc
     except httpx.TransportError as exc:
         logger.warning(
@@ -113,7 +126,58 @@ def notify_status_task(
         )
         if self.request.retries >= self.max_retries:
             _handle_webhook_dead_letter(self.request.id, document_id, stage, status, exc)
+            return
         raise self.retry(exc=exc) from exc
+
+
+def _webhook_url_from_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    fallback_base_url: str,
+) -> str | None:
+    """Resolve the webhook URL from document metadata.
+
+    New documents explicitly store webhook intent. Documents created before this
+    metadata existed are treated as legacy and use APP_WEBHOOK_URL.
+    """
+    metadata = metadata or {}
+    if "webhook_enabled" in metadata:
+        if not metadata.get("webhook_enabled"):
+            return None
+        stored_url = metadata.get("status_webhook_url")
+        return str(stored_url).strip() if stored_url else None
+
+    stored_url = metadata.get("status_webhook_url")
+    if stored_url:
+        return str(stored_url).strip()
+
+    fallback = fallback_base_url.strip().rstrip("/")
+    return f"{fallback}{_WEBHOOK_PATH}" if fallback else None
+
+
+def _load_webhook_url(document_id: str) -> str | None:
+    from app.core.config import settings
+    from app.infrastructure.db.session import get_session_factory
+    from app.repositories.document_repo import DocumentRepository
+    from app.workers.app import run_async
+
+    try:
+        document_uuid = uuid.UUID(document_id)
+    except (TypeError, ValueError):
+        return None
+
+    async def _load() -> str | None:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            doc = await DocumentRepository(session).get(document_uuid)
+            if doc is None:
+                return None
+            return _webhook_url_from_metadata(
+                doc.metadata_ or {},
+                fallback_base_url=settings.APP_WEBHOOK_URL,
+            )
+
+    return run_async(_load())
 
 
 def _handle_webhook_dead_letter(
@@ -128,14 +192,19 @@ def _handle_webhook_dead_letter(
     Called when notify_status_task exhausts all retries. The ERROR log is the
     breadcrumb hook point for future alerting.
     """
+    raw_error = str(exc)
+    sanitized_error = redact_string(raw_error)
+    http_status = getattr(getattr(exc, "response", None), "status_code", None)
+
     logger.error(
         "kb_webhook_dead_lettered",
         task_id=task_id,
         document_id=document_id,
         stage=stage,
         status=status,
-        error=str(exc),
-        exc_info=True,
+        error_type=type(exc).__name__,
+        http_status=http_status,
+        error=raw_error,
     )
 
     if not document_id:
@@ -158,7 +227,9 @@ def _handle_webhook_dead_letter(
                 doc_uuid,
                 stage=stage or "notify",
                 status="DEAD_LETTERED",
-                error_message=f"webhook delivery exhausted retries: {exc}",
+                error_message=(
+                    f"webhook delivery exhausted retries: {sanitized_error}"
+                ),
             )
 
     try:
