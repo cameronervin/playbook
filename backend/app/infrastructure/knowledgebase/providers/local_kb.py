@@ -29,9 +29,11 @@ from app.infrastructure.knowledgebase.context import assemble_context
 from app.infrastructure.knowledgebase.dedup import deduplicate_chunks
 from app.infrastructure.knowledgebase.ranking import rank_retrieved_chunks
 from app.schemas.knowledgebase import (
+    KBConversationFileIngestRequest,
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
     KBDocumentStatusResponse,
+    KBIngestRequest,
     KnowledgebaseResult,
     RetrievedChunk,
 )
@@ -139,29 +141,69 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         request: KBDocumentIngestRequest,
     ) -> KBDocumentIngestResponse:
         """Start ingestion through the KB-service semantic document route."""
+        return await self.ingest_source(request)
+
+    async def ingest_source(
+        self,
+        request: KBIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        """Start ingestion through the KB-service semantic source route."""
         config_id = await self.resolve_configuration()
-        payload = {
+        payload: dict[str, Any] = {
             "source_type": request.source_type,
             "organization_id": str(request.organization_id),
-            "playbook_document_id": str(request.playbook_document_id),
             "configuration_id": config_id,
             "source_uri": request.source_uri,
             "filename": request.filename,
             "content_type": request.content_type,
             "size_bytes": request.size_bytes,
             "source_title": request.source_title,
-            "source_date": request.source_date.isoformat() if request.source_date else None,
-            "is_official": request.is_official,
-            "priority": request.priority,
             "visibility_policy": request.visibility_policy,
             "metadata_tags": request.metadata_tags,
             "status_webhook_url": request.status_webhook_url
             or _default_status_webhook_url(self.settings),
         }
+        if isinstance(request, KBDocumentIngestRequest):
+            payload.update(
+                {
+                    "playbook_document_id": str(request.playbook_document_id),
+                    "source_date": request.source_date.isoformat()
+                    if request.source_date
+                    else None,
+                    "is_official": request.is_official,
+                    "priority": request.priority,
+                }
+            )
+        if isinstance(request, KBConversationFileIngestRequest):
+            payload.update(
+                {
+                    "conversation_id": str(request.conversation_id),
+                    "conversation_file_id": str(request.conversation_file_id),
+                }
+            )
+
         data = await self._post("/api/kb/ingest/document", payload)
         return KBDocumentIngestResponse(
             kb_service_document_id=data["kb_service_document_id"],
-            playbook_document_id=request.playbook_document_id,
+            source_type=data.get("source_type", request.source_type),
+            playbook_document_id=data.get(
+                "playbook_document_id",
+                request.playbook_document_id
+                if isinstance(request, KBDocumentIngestRequest)
+                else None,
+            ),
+            conversation_id=data.get(
+                "conversation_id",
+                request.conversation_id
+                if isinstance(request, KBConversationFileIngestRequest)
+                else None,
+            ),
+            conversation_file_id=data.get(
+                "conversation_file_id",
+                request.conversation_file_id
+                if isinstance(request, KBConversationFileIngestRequest)
+                else None,
+            ),
             task_id=data.get("task_id"),
             status=data.get("status", "pending"),
         )
@@ -185,7 +227,10 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         data = await self._post(f"/api/kb/documents/{kb_service_document_id}/retry", {})
         return KBDocumentIngestResponse(
             kb_service_document_id=data["kb_service_document_id"],
-            playbook_document_id=data["playbook_document_id"],
+            source_type=data.get("source_type", "admin_upload"),
+            playbook_document_id=data.get("playbook_document_id"),
+            conversation_id=data.get("conversation_id"),
+            conversation_file_id=data.get("conversation_file_id"),
             task_id=data.get("task_id"),
             status=data.get("status", "pending"),
         )

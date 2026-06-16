@@ -15,9 +15,11 @@ from app.core.config import Settings
 from app.infrastructure.knowledgebase.context import assemble_context
 from app.infrastructure.knowledgebase.ranking import rank_retrieved_chunks
 from app.schemas.knowledgebase import (
+    KBConversationFileIngestRequest,
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
     KBDocumentStatusResponse,
+    KBIngestRequest,
     KnowledgebaseResult,
     RetrievedChunk,
 )
@@ -107,10 +109,37 @@ class MockProvider(BaseKnowledgebaseProvider):
         self,
         request: KBDocumentIngestRequest,
     ) -> KBDocumentIngestResponse:
+        return await self.ingest_source(request)
+
+    async def ingest_source(
+        self,
+        request: KBIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        if isinstance(request, KBDocumentIngestRequest):
+            external_id = request.playbook_document_id
+            task_id = f"mock-task-{request.playbook_document_id}"
+            return KBDocumentIngestResponse(
+                kb_service_document_id=external_id or uuid4(),
+                source_type=request.source_type,
+                playbook_document_id=request.playbook_document_id,
+                task_id=task_id,
+                status="pending",
+            )
+
+        if isinstance(request, KBConversationFileIngestRequest):
+            return KBDocumentIngestResponse(
+                kb_service_document_id=uuid4(),
+                source_type=request.source_type,
+                conversation_id=request.conversation_id,
+                conversation_file_id=request.conversation_file_id,
+                task_id=f"mock-task-{request.conversation_file_id}",
+                status="pending",
+            )
+
         return KBDocumentIngestResponse(
-            kb_service_document_id=request.playbook_document_id or uuid4(),
-            playbook_document_id=request.playbook_document_id,
-            task_id=f"mock-task-{request.playbook_document_id}",
+            kb_service_document_id=uuid4(),
+            source_type=request.source_type,
+            task_id="mock-task",
             status="pending",
         )
 
@@ -130,6 +159,7 @@ class MockProvider(BaseKnowledgebaseProvider):
     ) -> KBDocumentIngestResponse:
         return KBDocumentIngestResponse(
             kb_service_document_id=uuid4(),
+            source_type="admin_upload",
             playbook_document_id=uuid4(),
             task_id=f"mock-retry-{kb_service_document_id}",
             status="pending",

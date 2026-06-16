@@ -46,29 +46,30 @@ needed.
 
 One row per KB-service ingestion document.
 
-Required MVP fields:
+Current persisted fields:
 - `id`
 - `configuration_id`
-- `source_uri`
-- `source_type`
-- `filename`
-- `content_type`
-- `size_bytes`
-- `md5` or content hash for deduplication
+- `name` / filename
+- `s3_key`
+- `md5` dedupe hash
 - `status`
-- `playbook_document_id`
-- `conversation_id`
-- `conversation_file_id`
 - `metadata`
-- `error_message`
 - `created_at`
 - `updated_at`
 
-`source_type` is `admin_upload` or `conversation_file`. For `admin_upload`,
-`playbook_document_id` maps to main backend `kb_documents.id`, and search
-responses must prefer this identifier as the external `document_id`. For
-`conversation_file`, `conversation_id` and `conversation_file_id` map to backend
-conversation metadata and are required for private retrieval filters.
+Phase 2 stores `source_type`, `playbook_document_id`, `conversation_id`,
+`conversation_file_id`, `content_type`, `size_bytes`, and related source fields
+inside `metadata` JSON rather than first-class columns. `source_uri` and signed
+URLs are not persisted. Admin uploads keep the historical raw content MD5 dedupe
+value; conversation files use a scoped 32-character dedupe hash so identical
+private and shared files remain distinct. The raw content MD5 is retained in
+safe metadata for a later column/backfill migration.
+
+`source_type` is `admin_upload` or `conversation_file`. For `admin_upload`, the
+metadata `playbook_document_id` maps to main backend `kb_documents.id`, and
+search responses must prefer this identifier as the external `document_id`. For
+`conversation_file`, metadata `conversation_id` and `conversation_file_id` map
+to backend conversation metadata and are required for private retrieval filters.
 
 Allowed statuses:
 - `pending`

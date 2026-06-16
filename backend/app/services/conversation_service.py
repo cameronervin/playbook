@@ -19,6 +19,7 @@ from app.core.exceptions import (
     UnsupportedFileTypeError,
     ValidationError,
 )
+from app.infrastructure.knowledgebase.providers.base import BaseKnowledgebaseProvider
 from app.infrastructure.storage.paths import conversation_file_original_key
 from app.infrastructure.storage.provider import StorageProvider
 from app.models.conversations import (
@@ -43,9 +44,9 @@ from app.schemas.conversations import (
     MessageSubmitRequest,
     MessageSubmitResponse,
 )
-from app.schemas.knowledgebase import KBConversationFileIngestRequest
-from app.services.conversation_file_ingest_dispatcher import (
-    ConversationFileIngestDispatcher,
+from app.schemas.knowledgebase import (
+    KBConversationFileIngestRequest,
+    KBDocumentIngestResponse,
 )
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import WorkerTaskName
@@ -81,7 +82,7 @@ class ConversationService:
         citation_repo: MessageCitationRepository | None = None,
         file_repo: ConversationFileRepository | None = None,
         athlete_chat_dispatcher: AthleteChatTaskDispatcher | None = None,
-        conversation_file_ingest_dispatcher: ConversationFileIngestDispatcher | None = None,
+        kb_provider: BaseKnowledgebaseProvider | None = None,
         storage: StorageProvider | None = None,
         settings: Settings | None = None,
     ) -> None:
@@ -93,9 +94,7 @@ class ConversationService:
         self.athlete_chat_dispatcher = (
             athlete_chat_dispatcher or AthleteChatTaskDispatcher()
         )
-        self.conversation_file_ingest_dispatcher = (
-            conversation_file_ingest_dispatcher or ConversationFileIngestDispatcher()
-        )
+        self.kb_provider = kb_provider
         self.storage = storage
         self.settings = settings
 
@@ -331,18 +330,46 @@ class ConversationService:
             storage_key,
             download_filename=filename,
         )
-        await self.conversation_file_ingest_dispatcher.dispatch(
-            KBConversationFileIngestRequest(
-                organization_id=athlete.organization_id,
-                conversation_id=conversation.id,
-                conversation_file_id=file.id,
-                source_uri=signed_url,
-                filename=file.filename,
-                content_type=file.content_type,
-                size_bytes=file.size_bytes,
-                source_title=file.filename,
-            )
+        ingest_request = KBConversationFileIngestRequest(
+            organization_id=athlete.organization_id,
+            conversation_id=conversation.id,
+            conversation_file_id=file.id,
+            source_uri=signed_url,
+            filename=file.filename,
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+            source_title=file.filename,
         )
+        try:
+            if self.kb_provider is None:
+                raise RuntimeError("Knowledgebase provider is not configured")
+            ingest_response = await self.kb_provider.ingest_source(ingest_request)
+            file = await self.file_repo.update_extraction_status(
+                file,
+                extraction_status="extracting",
+                extraction_metadata=self._conversation_file_ingest_metadata(
+                    ingest_request,
+                    ingest_response,
+                ),
+                error_message=None,
+            )
+        except Exception as exc:
+            logger.warning(
+                "conversation_file_ingest_dispatch_failed",
+                athlete_user_id=str(athlete.id),
+                conversation_id=str(conversation.id),
+                conversation_file_id=str(file.id),
+                error_type=type(exc).__name__,
+            )
+            file = await self.file_repo.update_extraction_status(
+                file,
+                extraction_status="failed",
+                extraction_metadata=self._conversation_file_ingest_failure_metadata(
+                    ingest_request,
+                    exc,
+                ),
+                error_message="KB ingestion dispatch failed",
+            )
         await self.session.commit()
         logger.info(
             "conversation_file_uploaded",
@@ -450,6 +477,32 @@ class ConversationService:
             created_at=file.created_at,
             updated_at=file.updated_at,
         )
+
+    @staticmethod
+    def _conversation_file_ingest_metadata(
+        request: KBConversationFileIngestRequest,
+        response: KBDocumentIngestResponse,
+    ) -> dict[str, str | None]:
+        return {
+            "source_type": request.source_type,
+            "conversation_id": str(request.conversation_id),
+            "conversation_file_id": str(request.conversation_file_id),
+            "kb_service_document_id": str(response.kb_service_document_id),
+            "task_id": response.task_id,
+            "kb_status": response.status,
+        }
+
+    @staticmethod
+    def _conversation_file_ingest_failure_metadata(
+        request: KBConversationFileIngestRequest,
+        exc: Exception,
+    ) -> dict[str, str]:
+        return {
+            "source_type": request.source_type,
+            "conversation_id": str(request.conversation_id),
+            "conversation_file_id": str(request.conversation_file_id),
+            "dispatch_error_type": type(exc).__name__,
+        }
 
     @staticmethod
     def _validate_filename(filename: str) -> str:

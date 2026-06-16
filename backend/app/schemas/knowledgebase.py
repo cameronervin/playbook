@@ -105,7 +105,10 @@ class KBDocumentIngestResponse(BaseModel):
     """Semantic backend-to-KB-service document ingest response."""
 
     kb_service_document_id: UUID
-    playbook_document_id: UUID
+    source_type: KBSourceType = "admin_upload"
+    playbook_document_id: UUID | None = None
+    conversation_id: UUID | None = None
+    conversation_file_id: UUID | None = None
     task_id: str | None = None
     status: str = "pending"
 

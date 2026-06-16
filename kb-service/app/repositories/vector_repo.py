@@ -87,12 +87,28 @@ def _normalize_chunk_metadata(
         or _uuid_or_none(chunk_metadata.get("kb_document_id"))
         or document_id
     )
+    chunk_id = _deterministic_chunk_id(kb_service_document_id, chunk_index)
+    if chunk_metadata.get("source_type") == "conversation_file":
+        conversation_file_id = (
+            _uuid_or_none(chunk_metadata.get("conversation_file_id"))
+            or _uuid_or_none(chunk_metadata.get("document_id"))
+            or kb_service_document_id
+        )
+        return {
+            **chunk_metadata,
+            "document_id": str(conversation_file_id),
+            "conversation_file_id": str(conversation_file_id),
+            "kb_service_document_id": str(kb_service_document_id),
+            "kb_document_id": str(kb_service_document_id),
+            "chunk_id": str(chunk_id),
+            "chunk_index": chunk_index,
+        }
+
     playbook_document_id = (
         _uuid_or_none(chunk_metadata.get("playbook_document_id"))
         or _uuid_or_none(chunk_metadata.get("document_id"))
         or kb_service_document_id
     )
-    chunk_id = _deterministic_chunk_id(kb_service_document_id, chunk_index)
 
     return {
         **chunk_metadata,

@@ -25,8 +25,11 @@ documents, stores vectors, and serves retrieval.
 
 The backend calls `kb-service` through
 `backend/app/infrastructure/knowledgebase/providers/local_kb.py`.
-The KB service owns the searchable corpus for admin-uploaded KB documents only.
-Athlete conversation files stay in the main backend.
+The KB service owns document-intelligence ingestion for both admin-uploaded KB
+documents and trusted conversation-scoped files. The main backend still owns
+browser authorization, product metadata, file summaries, and chat orchestration;
+KB-service source identity is backend-derived and stored in JSON metadata during
+Phase 2.
 
 ## API Routing
 
@@ -51,6 +54,7 @@ POST /api/kb/configuration/resolve
 
 POST /api/kb/ingest/document
   -> IngestionService.start_ingest()
+     accepts source_type=admin_upload | conversation_file
 
 POST /api/kb/search
   -> SearchService.search()
@@ -64,10 +68,12 @@ POST /api/kb/ingest/document
   v
 IngestionService.start_ingest()
   -> resolve configuration
-  -> validate trusted metadata
+  -> validate trusted source metadata
+  -> enforce conversation-file visibility_policy.scope=conversation
   -> extract S3 key
   -> HEAD object for size guard
   -> stream object to compute MD5
+  -> keep admin raw-MD5 dedupe or compute scoped conversation-file dedupe hash
   -> create kb.documents row
   -> create kb.ingestion_logs row
   -> dispatch Celery chain

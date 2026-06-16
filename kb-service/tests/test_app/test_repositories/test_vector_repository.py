@@ -177,6 +177,40 @@ def test_chunk_records_store_deterministic_citation_metadata() -> None:
     assert metadata["page_index"] == 1
 
 
+def test_chunk_records_store_conversation_file_identity_without_playbook_document_id() -> None:
+    kb_doc_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+    conversation_file_id = uuid.uuid4()
+    records = _build_chunk_records(
+        document_id=kb_doc_id,
+        collection_id=uuid.uuid4(),
+        chunks=[
+            {
+                "text": "Private contract clause",
+                "metadata": {
+                    "source_type": "conversation_file",
+                    "organization_id": str(ORG_ID),
+                    "conversation_id": str(conversation_id),
+                    "conversation_file_id": str(conversation_file_id),
+                    "source_title": "contract.pdf",
+                    "visibility_policy": {"scope": "conversation"},
+                },
+            }
+        ],
+        embeddings=[[0.1] * 1536],
+    )
+
+    metadata = records[0]["cmetadata"]
+    assert metadata["document_id"] == str(conversation_file_id)
+    assert metadata["conversation_id"] == str(conversation_id)
+    assert metadata["conversation_file_id"] == str(conversation_file_id)
+    assert metadata["kb_service_document_id"] == str(kb_doc_id)
+    assert metadata["kb_document_id"] == str(kb_doc_id)
+    assert metadata["source_type"] == "conversation_file"
+    assert metadata["visibility_policy"] == {"scope": "conversation"}
+    assert "playbook_document_id" not in metadata
+
+
 def test_chunk_records_use_global_index_offset_for_batch_metadata() -> None:
     kb_doc_id = uuid.uuid4()
     records = _build_chunk_records(

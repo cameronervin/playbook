@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.deps.services import get_ingestion_service
-from app.schemas.ingest import IngestDocumentRequest, IngestDocumentResponse
+from app.schemas.ingest import IngestDocumentResponse, IngestSourceRequest
 from app.services.ingestion_service import IngestionService
 
 router = APIRouter()
@@ -18,10 +18,10 @@ router = APIRouter()
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def ingest_document(
-    body: IngestDocumentRequest,
+    body: IngestSourceRequest,
     svc: Annotated[IngestionService, Depends(get_ingestion_service)],
 ) -> Response:
-    """Start ingestion for an admin-uploaded document."""
+    """Start ingestion for an admin upload or trusted conversation file."""
     try:
         result = await svc.start_ingest(body)
         status_code = status.HTTP_200_OK if result.task_id is None else status.HTTP_202_ACCEPTED

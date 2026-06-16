@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import uuid
+from typing import TypeAlias
 
 import structlog
 from fastapi import HTTPException, status
@@ -25,10 +26,15 @@ from app.repositories.configuration_repo import ConfigurationRepository
 from app.repositories.document_repo import DocumentRepository
 from app.repositories.ingestion_log_repo import IngestionLogRepository
 from app.repositories.vector_repo import AsyncVectorRepository
-from app.schemas.ingest import IngestDocumentRequest, IngestDocumentResponse
+from app.schemas.ingest import (
+    IngestConversationFileRequest,
+    IngestDocumentRequest,
+    IngestDocumentResponse,
+)
 from app.schemas.status import DocumentStatusResponse, StageStatus, TaskStatusResponse
 
 logger = structlog.get_logger(__name__)
+IngestRequest: TypeAlias = IngestDocumentRequest | IngestConversationFileRequest
 
 
 def _metadata_with_organization(
@@ -49,16 +55,24 @@ def _metadata_with_organization(
     return normalized
 
 
-def _metadata_from_ingest_request(req: IngestDocumentRequest) -> dict:
+def _metadata_from_ingest_request(req: IngestRequest) -> dict:
+    if (
+        isinstance(req, IngestConversationFileRequest)
+        and req.visibility_policy.get("scope") != "conversation"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                'visibility_policy.scope must be "conversation" for '
+                "conversation_file ingestion"
+            ),
+        )
+
     metadata = {
         **req.metadata_tags,
         "source_type": req.source_type,
         "organization_id": str(req.organization_id),
-        "playbook_document_id": str(req.playbook_document_id),
         "source_title": req.source_title,
-        "source_date": req.source_date.isoformat() if req.source_date else None,
-        "is_official": True,
-        "priority": 0,
         "visibility_policy": req.visibility_policy,
         "metadata_tags": req.metadata_tags,
         "content_type": req.content_type,
@@ -66,7 +80,41 @@ def _metadata_from_ingest_request(req: IngestDocumentRequest) -> dict:
         "status_webhook_url": req.status_webhook_url,
         "webhook_enabled": bool(req.status_webhook_url),
     }
+    if isinstance(req, IngestDocumentRequest):
+        metadata.update(
+            {
+                "playbook_document_id": str(req.playbook_document_id),
+                "source_date": req.source_date.isoformat()
+                if req.source_date
+                else None,
+                "is_official": True,
+                "priority": 0,
+            }
+        )
+    else:
+        metadata.update(
+            {
+                "conversation_id": str(req.conversation_id),
+                "conversation_file_id": str(req.conversation_file_id),
+            }
+        )
     return _metadata_with_organization(metadata, organization_id=req.organization_id)
+
+
+def _dedupe_md5_for_ingest_request(req: IngestRequest, raw_md5: str) -> str:
+    """Return the current kb.documents md5 value for this request.
+
+    Admin uploads keep the raw content MD5 for backward compatibility.
+    Conversation files scope the hash to the trusted private identifiers so the
+    existing unique constraint cannot collapse private uploads into shared docs.
+    """
+    if isinstance(req, IngestDocumentRequest):
+        return raw_md5
+    scoped_value = (
+        f"{req.source_type}:{req.organization_id}:{req.conversation_id}:"
+        f"{req.conversation_file_id}:{raw_md5}"
+    )
+    return hashlib.md5(scoped_value.encode()).hexdigest()  # noqa: S324
 
 
 def _playbook_document_id(metadata: dict | None) -> uuid.UUID | None:
@@ -77,6 +125,50 @@ def _playbook_document_id(metadata: dict | None) -> uuid.UUID | None:
         return uuid.UUID(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _conversation_id(metadata: dict | None) -> uuid.UUID | None:
+    value = (metadata or {}).get("conversation_id")
+    if value in (None, ""):
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _conversation_file_id(metadata: dict | None) -> uuid.UUID | None:
+    value = (metadata or {}).get("conversation_file_id")
+    if value in (None, ""):
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _ingest_response(
+    *,
+    kb_service_document_id: uuid.UUID,
+    metadata: dict | None,
+    task_id: str | None,
+    status_: str,
+    fallback_playbook_document_id: uuid.UUID | None = None,
+) -> IngestDocumentResponse:
+    metadata = metadata or {}
+    source_type = metadata.get("source_type", "admin_upload")
+    playbook_document_id = _playbook_document_id(metadata)
+    if source_type == "admin_upload" and playbook_document_id is None:
+        playbook_document_id = fallback_playbook_document_id
+    return IngestDocumentResponse(
+        kb_service_document_id=kb_service_document_id,
+        source_type=source_type,
+        playbook_document_id=playbook_document_id,
+        conversation_id=_conversation_id(metadata),
+        conversation_file_id=_conversation_file_id(metadata),
+        task_id=task_id,
+        status=status_,
+    )
 
 
 def _delete_s3_object(s3_key: str) -> None:
@@ -176,7 +268,7 @@ class IngestionService:
 
     _IN_PROGRESS_STATUSES = frozenset({"pending", "parsing", "chunking", "embedding", "loading"})
 
-    async def start_ingest(self, req: IngestDocumentRequest) -> IngestDocumentResponse:
+    async def start_ingest(self, req: IngestRequest) -> IngestDocumentResponse:
         from app.infrastructure.io.s3_tempfile import extract_s3_parts
 
         config = await self._config_repo.get(req.configuration_id)
@@ -187,7 +279,9 @@ class IngestionService:
         _, s3_key = extract_s3_parts(req.source_uri)
         # Enforce max document size BEFORE MD5 download — HEAD is cheap, MD5 streams full bytes.
         await self._enforce_max_size(s3_key)
-        md5 = await self._compute_s3_object_md5(s3_key)
+        raw_md5 = await self._compute_s3_object_md5(s3_key)
+        md5 = _dedupe_md5_for_ingest_request(req, raw_md5)
+        metadata["raw_content_md5"] = raw_md5
 
         existing = await self._doc_repo.get_by_config_and_md5(req.configuration_id, md5)
 
@@ -204,11 +298,14 @@ class IngestionService:
                 # Pipeline already running — return existing task_id, don't dispatch a duplicate.
                 log = await self._log_repo.get_by_document(existing.id)
                 logger.info("kb_ingest_skipped_in_progress", doc_id=str(existing.id), doc_status=existing.status)
-                return IngestDocumentResponse(
+                return _ingest_response(
                     kb_service_document_id=existing.id,
-                    playbook_document_id=req.playbook_document_id,
+                    metadata=existing.metadata_,
                     task_id=log.pipeline_task_id if log else None,
-                    status=existing.status,
+                    status_=existing.status,
+                    fallback_playbook_document_id=req.playbook_document_id
+                    if isinstance(req, IngestDocumentRequest)
+                    else None,
                 )
 
             # success or failed — delete the old record and start fresh.
@@ -232,11 +329,11 @@ class IngestionService:
 
         task_id = await self._dispatch_pipeline(doc_id, config, s3_key, req.filename, metadata)
         logger.info("kb_ingest_dispatched", doc_id=str(doc_id), task_id=task_id, s3_key=s3_key)
-        return IngestDocumentResponse(
+        return _ingest_response(
             kb_service_document_id=doc_id,
-            playbook_document_id=req.playbook_document_id,
+            metadata=metadata,
             task_id=task_id,
-            status="pending",
+            status_="pending",
         )
 
     async def _dispatch_pipeline(
@@ -376,11 +473,12 @@ class IngestionService:
             doc.metadata_ or {},
         )
         logger.info("kb_ingest_retry_dispatched", doc_id=str(document_id), task_id=task_id)
-        return IngestDocumentResponse(
+        return _ingest_response(
             kb_service_document_id=document_id,
-            playbook_document_id=_playbook_document_id(doc.metadata_) or document_id,
+            metadata=doc.metadata_,
             task_id=task_id,
-            status="pending",
+            status_="pending",
+            fallback_playbook_document_id=document_id,
         )
 
     async def delete_document(self, document_id: uuid.UUID) -> None:

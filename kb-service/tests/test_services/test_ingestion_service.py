@@ -5,8 +5,9 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.schemas.ingest import IngestDocumentRequest
+from app.schemas.ingest import IngestConversationFileRequest, IngestDocumentRequest
 from app.services.ingestion_service import (
+    _dedupe_md5_for_ingest_request,
     _metadata_from_ingest_request,
     _metadata_with_organization,
 )
@@ -94,3 +95,79 @@ def test_ingest_metadata_enables_webhook_when_url_is_supplied() -> None:
 
     assert metadata["webhook_enabled"] is True
     assert metadata["status_webhook_url"] == "http://backend.test/api/v1/kb/webhook"
+
+
+def test_ingest_metadata_stamps_conversation_file_private_scope_without_source_uri() -> None:
+    request = IngestConversationFileRequest(
+        organization_id=uuid4(),
+        conversation_id=uuid4(),
+        conversation_file_id=uuid4(),
+        configuration_id=uuid4(),
+        source_uri="https://storage.test/contract.pdf?signature=secret",
+        filename="contract.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="Contract",
+    )
+
+    metadata = _metadata_from_ingest_request(request)
+
+    assert metadata["source_type"] == "conversation_file"
+    assert metadata["organization_id"] == str(request.organization_id)
+    assert metadata["conversation_id"] == str(request.conversation_id)
+    assert metadata["conversation_file_id"] == str(request.conversation_file_id)
+    assert metadata["visibility_policy"] == {"scope": "conversation"}
+    assert "playbook_document_id" not in metadata
+    assert "source_uri" not in metadata
+    assert "signature=secret" not in str(metadata)
+
+
+def test_ingest_metadata_rejects_conversation_file_without_conversation_visibility() -> None:
+    request = IngestConversationFileRequest(
+        organization_id=uuid4(),
+        conversation_id=uuid4(),
+        conversation_file_id=uuid4(),
+        configuration_id=uuid4(),
+        source_uri="s3://bucket/contract.pdf",
+        filename="contract.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="Contract",
+        visibility_policy={"scope": "all_athletes"},
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _metadata_from_ingest_request(request)
+
+    assert exc_info.value.status_code == 400
+    assert "visibility_policy.scope" in str(exc_info.value.detail)
+
+
+def test_conversation_file_dedupe_hash_is_scoped_but_admin_hash_stays_raw() -> None:
+    raw_md5 = "f" * 32
+    admin_request = IngestDocumentRequest(
+        organization_id=uuid4(),
+        playbook_document_id=uuid4(),
+        configuration_id=uuid4(),
+        source_uri="s3://bucket/nil.pdf",
+        filename="nil.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="NIL Handbook",
+    )
+    file_request = IngestConversationFileRequest(
+        organization_id=admin_request.organization_id,
+        conversation_id=uuid4(),
+        conversation_file_id=uuid4(),
+        configuration_id=admin_request.configuration_id,
+        source_uri="s3://bucket/contract.pdf",
+        filename="contract.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="Contract",
+    )
+
+    assert _dedupe_md5_for_ingest_request(admin_request, raw_md5) == raw_md5
+    scoped = _dedupe_md5_for_ingest_request(file_request, raw_md5)
+    assert scoped != raw_md5
+    assert len(scoped) == 32

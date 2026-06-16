@@ -52,15 +52,14 @@ The frontend must never choose `source_type`. Browser callers hit role-scoped
 backend endpoints; the backend derives the KB-service metadata from that route
 and the authenticated principal.
 
-Backend integration direction: Phase 1 uses a no-op conversation-file ingest
-dispatcher as a temporary handoff point while the KB-service private ingest
-contract is unfinished. Long-term, both admin document uploads and conversation
-file uploads should call one backend KB integration seam, such as a generalized
+Backend integration direction: both admin document uploads and conversation
+file uploads call the generalized backend KB integration seam,
 `BaseKnowledgebaseProvider.ingest_source(KBIngestRequest)`, with the backend
-deriving the trusted `source_type`. Public backend routes should remain separate
-for auth and product semantics; only the internal KB-service ingest path should
-converge. When that provider seam exists, the temporary dispatcher can be
-removed unless the backend intentionally keeps it as an async/event abstraction.
+deriving the trusted `source_type`. Public backend routes remain separate for
+auth and product semantics; only the internal KB-service ingest path converges.
+The Phase 1 no-op conversation-file ingest dispatcher was removed after this
+provider seam landed because no outbox, retry queue, or async event abstraction
+is part of the current build.
 
 ## Data Model Direction
 
@@ -215,7 +214,7 @@ Do not do yet:
 - Do not expose download URLs.
 - Do not let clients provide `source_type`.
 
-## Phase 2: KB-Service Private Ingest Contract
+## [IMPLEMENTED] Phase 2: KB-Service Private Ingest Contract
 
 Scope:
 
@@ -226,6 +225,27 @@ Scope:
 - Ensure `visibility_policy.scope=conversation` for conversation files.
 - Replace the Phase 1 no-op dispatcher with the generalized KB provider ingest
   seam once KB-service accepts both source types.
+
+Implemented behavior:
+
+- KB-service `POST /api/kb/ingest/document` now accepts the discriminated
+  `admin_upload | conversation_file` ingest request contract and rejects invalid
+  source-specific metadata before worker dispatch.
+- Conversation-file ingest requires trusted `organization_id`,
+  `conversation_id`, and `conversation_file_id` values and enforces
+  `visibility_policy.scope="conversation"`.
+- Source identity is persisted in existing `kb.documents.metadata` and vector
+  `cmetadata` JSON for this phase. Admin uploads keep the existing raw MD5
+  dedupe behavior; conversation files use a scoped 32-character dedupe hash so
+  identical bytes cannot collapse across shared and private sources. The raw
+  content MD5 is retained in safe metadata for a later migration/backfill.
+- Backend `LocalKBProvider.ingest_source(KBIngestRequest)` is the generalized
+  provider seam. `ingest_document()` remains as the admin-upload compatibility
+  wrapper, and conversation file uploads now call `ingest_source()` directly.
+- Successful conversation-file ingest dispatch marks the file `extracting` and
+  stores safe KB task/source metadata in `conversation_files.extraction_metadata`;
+  dispatch failure keeps the file record, marks it `failed`, and stores only a
+  sanitized failure type.
 
 Acceptance criteria:
 
@@ -240,6 +260,9 @@ Do not do yet:
 - Do not expose conversation-file records through shared KB document admin
   routes.
 - Do not make KB-service responsible for end-user authorization.
+- Do not add first-class KB-service source identity columns in this phase; that
+  migration remains a follow-up once private retrieval/status webhook behavior
+  settles.
 
 ## Phase 3: Real Parse, Chunk, and Embed
 
@@ -432,9 +455,10 @@ Do not do yet:
 - Decide whether `conversation_file_chunks` remains temporarily for compatibility
   during migration or is removed in the same schema migration that introduces
   KB-service private retrieval.
+- Add first-class KB-service `source_type`, `playbook_document_id`,
+  `conversation_id`, and `conversation_file_id` columns, with JSON metadata
+  backfill, after the private retrieval and status webhook contracts stabilize.
 - Decide retention policy for original conversation files and extracted
   artifacts.
 - Decide whether backend mirrors only terminal summaries or all in-progress
   parser quality metadata.
-- Decide whether the dispatcher remains as an async/event abstraction or is
-  removed once `BaseKnowledgebaseProvider` owns unified ingestion.

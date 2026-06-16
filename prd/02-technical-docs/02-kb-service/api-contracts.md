@@ -73,11 +73,20 @@ Response:
 ```json
 {
   "kb_service_document_id": "uuid",
+  "source_type": "admin_upload",
   "playbook_document_id": "uuid",
+  "conversation_id": null,
+  "conversation_file_id": null,
   "task_id": "celery-task-id",
   "status": "pending"
 }
 ```
+
+For `source_type="conversation_file"`, `playbook_document_id` is omitted/null
+and `conversation_id` plus `conversation_file_id` identify the private source.
+Phase 2 persists this trusted source identity in KB-service JSON metadata rather
+than first-class columns; a later migration will backfill columns once private
+retrieval and webhook contracts are stable.
 
 ## Status Webhook
 

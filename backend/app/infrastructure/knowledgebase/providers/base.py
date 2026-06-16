@@ -19,6 +19,7 @@ from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
     KBDocumentStatusResponse,
+    KBIngestRequest,
     KnowledgebaseResult,
 )
 
@@ -101,6 +102,13 @@ class BaseKnowledgebaseProvider(ABC):
         request: KBDocumentIngestRequest,
     ) -> KBDocumentIngestResponse:
         """Start ingestion for an admin-uploaded document."""
+        return await self.ingest_source(request)
+
+    async def ingest_source(
+        self,
+        request: KBIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        """Start ingestion for a trusted backend-derived source."""
         raise NotImplementedError
 
     async def get_document_status(self, document_id: str) -> KBDocumentStatusResponse:

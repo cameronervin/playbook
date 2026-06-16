@@ -62,6 +62,9 @@ class IngestDocumentResponse(BaseModel):
     """Response for a KB-service ingestion request."""
 
     kb_service_document_id: uuid.UUID
-    playbook_document_id: uuid.UUID
+    source_type: KBSourceType = "admin_upload"
+    playbook_document_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    conversation_file_id: uuid.UUID | None = None
     task_id: str | None
     status: str
