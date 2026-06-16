@@ -131,6 +131,7 @@ class ConversationFile(Base):
         Index("ix_conversation_files_message_id", "message_id"),
         Index("ix_conversation_files_uploaded_by", "uploaded_by"),
         Index("ix_conversation_files_extraction_status", "extraction_status"),
+        Index("ix_conversation_files_kb_service_document_id", "kb_service_document_id"),
     )
 
     id: Mapped[UUID] = uuid_primary_key()
@@ -158,6 +159,16 @@ class ConversationFile(Base):
         server_default=text("'uploaded'::text"),
         nullable=False,
     )
+    kb_service_document_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=True,
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_count: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False,
+    )
     extracted_text_ref: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     extracted_text_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     extracted_char_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -165,4 +176,3 @@ class ConversationFile(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
-

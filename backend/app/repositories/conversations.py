@@ -376,7 +376,7 @@ class ConversationFileRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[ConversationFile, int]]:
-        """Return conversation files with placeholder KB-service chunk counts."""
+        """Return conversation files with mirrored KB-service chunk counts."""
         result = await self.session.scalars(
             select(ConversationFile)
             .where(ConversationFile.conversation_id == conversation_id)
@@ -384,7 +384,34 @@ class ConversationFileRepository:
             .limit(limit)
             .offset(offset)
         )
-        return [(file, 0) for file in result.all()]
+        return [(file, file.chunk_count) for file in result.all()]
+
+    async def get_for_conversation(
+        self,
+        *,
+        conversation_id: UUID,
+        file_id: UUID,
+    ) -> ConversationFile | None:
+        """Return one file only when it belongs to the expected conversation."""
+        result = await self.session.execute(
+            select(ConversationFile).where(
+                ConversationFile.id == file_id,
+                ConversationFile.conversation_id == conversation_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_kb_service_document_id(
+        self,
+        kb_service_document_id: UUID,
+    ) -> ConversationFile | None:
+        """Return a conversation file by its KB-service document ID."""
+        result = await self.session.execute(
+            select(ConversationFile).where(
+                ConversationFile.kb_service_document_id == kb_service_document_id
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def list_by_conversation_and_ids(
         self,
@@ -428,6 +455,26 @@ class ConversationFileRepository:
             file.extraction_metadata = extraction_metadata
         if not isinstance(error_message, _UnsetType):
             file.error_message = error_message
+
+        await self.session.flush()
+        await self.session.refresh(file)
+        return file
+
+    async def update_ingestion_mirror(
+        self,
+        file: ConversationFile,
+        *,
+        kb_service_document_id: UUID | None | _UnsetType = _UNSET,
+        summary: str | None | _UnsetType = _UNSET,
+        chunk_count: int | _UnsetType = _UNSET,
+    ) -> ConversationFile:
+        """Update safe KB-service derived mirror metadata without committing."""
+        if not isinstance(kb_service_document_id, _UnsetType):
+            file.kb_service_document_id = kb_service_document_id
+        if not isinstance(summary, _UnsetType):
+            file.summary = summary
+        if not isinstance(chunk_count, _UnsetType):
+            file.chunk_count = chunk_count
 
         await self.session.flush()
         await self.session.refresh(file)

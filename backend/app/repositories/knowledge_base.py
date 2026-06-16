@@ -162,6 +162,26 @@ class KBDocumentRepository:
         await self.session.refresh(document)
         return document
 
+    async def update_ingestion_mirror(
+        self,
+        document: KBDocument,
+        *,
+        kb_service_document_id: UUID | None | _UnsetType = _UNSET,
+        summary: str | None | _UnsetType = _UNSET,
+        chunk_count: int | _UnsetType = _UNSET,
+    ) -> KBDocument:
+        """Update safe KB-service derived mirror metadata without committing."""
+        if not isinstance(kb_service_document_id, _UnsetType):
+            document.kb_service_document_id = kb_service_document_id
+        if not isinstance(summary, _UnsetType):
+            document.summary = summary
+        if not isinstance(chunk_count, _UnsetType):
+            document.chunk_count = chunk_count
+
+        await self.session.flush()
+        await self.session.refresh(document)
+        return document
+
     async def link_kb_service_document(
         self,
         document: KBDocument,

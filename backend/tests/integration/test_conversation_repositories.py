@@ -223,7 +223,7 @@ async def test_message_citation_repository_lists_by_messages(db_session):
 
 
 @pytest.mark.asyncio
-async def test_conversation_file_repositories_create_list_with_zero_chunk_count(
+async def test_conversation_file_repositories_create_list_with_mirrored_chunk_count(
     db_session,
 ):
     org_repo = OrganizationRepository(db_session)
@@ -265,11 +265,19 @@ async def test_conversation_file_repositories_create_list_with_zero_chunk_count(
         extracted_char_count=24,
         extraction_metadata={"extractor": "test"},
     )
+    await file_repo.update_ingestion_mirror(
+        file,
+        kb_service_document_id=None,
+        summary="Contract orientation summary.",
+        chunk_count=8,
+    )
 
     files_with_counts = await file_repo.list_by_conversation_with_chunk_counts(
         conversation.id,
     )
 
-    assert files_with_counts == [(file, 0)]
+    assert files_with_counts == [(file, 8)]
     assert file.extraction_status == "ready"
     assert file.extraction_metadata == {"extractor": "test"}
+    assert file.summary == "Contract orientation summary."
+    assert file.chunk_count == 8

@@ -346,7 +346,7 @@ Do not do yet:
 - Do not treat summaries as answer evidence.
 - Do not inject all document summaries into every agent call.
 
-## Phase 5: Status and Summary Sync
+## [IMPLEMENTED] Phase 5: Status and Summary Sync
 
 Scope:
 
@@ -362,11 +362,28 @@ Scope:
   - `kb_documents` for `source_type=admin_upload`
   - `conversation_files` for `source_type=conversation_file`
 
+Implemented behavior:
+
+- Backend `kb_documents` now mirrors internal `summary` and `chunk_count`
+  alongside existing `kb_service_document_id` and `processing_status`.
+- Backend `conversation_files` now mirrors `kb_service_document_id`, internal
+  `summary`, and `chunk_count`; conversation detail still exposes only the safe
+  public file summary fields, with real `chunk_count` replacing the previous
+  placeholder.
+- Signed `/api/v1/kb/webhook` handling routes `source_type="admin_upload"` to
+  admin KB documents and `source_type="conversation_file"` to conversation
+  files scoped by trusted `conversation_id` plus `conversation_file_id`.
+- Legacy admin webhook payloads without `source_type` remain supported.
+- Invalid signatures and stale timestamps are rejected before DB mutation, and
+  failure reasons/metadata are sanitized so signed URLs, raw extracted text,
+  model inputs, and file contents are not persisted or returned.
+
 Acceptance criteria:
 
 - Backend mirrors status and summary for both source types.
-- Conversation history can show file status and summary without querying
-  KB-service.
+- Conversation history can show file status and chunk count without querying
+  KB-service; mirrored summaries are available internally for later context/UI
+  work.
 - Webhook signature verification still rejects invalid or stale events.
 
 Do not do yet:

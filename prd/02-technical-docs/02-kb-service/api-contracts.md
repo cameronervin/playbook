@@ -91,13 +91,15 @@ retrieval and webhook contracts are stable.
 ## Status Webhook
 
 The KB service posts signed status events to the main backend. The main backend
-uses these events to update `kb_documents.processing_status` and append
+uses these events to mirror status, summary, KB-service document linkage, and
+safe count metadata into `kb_documents` for `admin_upload` and
+`conversation_files` for `conversation_file`. Admin-upload events also append
 `kb_document_events`.
 
 ```json
 POST /api/v1/kb/webhook
 {
-  "event_id": "uuid",
+  "document_id": "kb-service-document-uuid",
   "kb_service_document_id": "uuid",
   "source_type": "admin_upload",
   "playbook_document_id": "uuid",
@@ -111,7 +113,7 @@ POST /api/v1/kb/webhook
     "chunk_count": 42,
     "embedding_count": 20
   },
-  "occurred_at": "2026-06-04T12:00:00Z"
+  "timestamp": 1780603200
 }
 ```
 
@@ -124,13 +126,12 @@ or file contents.
 generated or fallen back to a canonical source orientation summary. It is not
 answer evidence; final answers must cite retrieved chunks.
 
-Required signature headers:
-- `X-KB-Timestamp`
+Required signature header:
 - `X-KB-Signature`
 
-The signature is an HMAC-SHA256 over timestamp and raw request body using a
-shared webhook secret. The main backend must reject stale timestamps and invalid
-signatures.
+The signature is an HMAC-SHA256 over the raw request body using a shared webhook
+secret. When `timestamp` is present in the payload body, the main backend rejects
+stale timestamps as well as invalid signatures.
 
 ## Search
 

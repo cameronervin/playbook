@@ -31,8 +31,8 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 | `conversations` | Athlete-owned support conversations |
 | `conversation_messages` | User, assistant, and system messages with safety/topic metadata |
 | `message_citations` | Assistant answer source references |
-| `conversation_files` | Conversation-scoped athlete uploads and extraction status |
-| `kb_documents` | Backend record for admin-uploaded department documents |
+| `conversation_files` | Conversation-scoped athlete uploads, extraction status, KB-service linkage, internal summary, and chunk count |
+| `kb_documents` | Backend record for admin-uploaded department documents with mirrored KB-service status, internal summary, and chunk count |
 | `kb_document_events` | KB document lifecycle/status events |
 | `dashboard_insight_runs` | Nightly/manual dashboard insight generation runs |
 | `dashboard_insights` | Generated admin dashboard insight outputs |
@@ -59,12 +59,12 @@ Phase 1 repository coverage:
 | `UserRepository` | `users` | OAuth subject lookup, org/email lookup, profile updates, role updates, and org-scoped user listing |
 | `OAuthAccountRepository` | `oauth_accounts` | OAuth account lookup plus token/account metadata create/update |
 | `AuditLogRepository` | `audit_logs` | Append-only privileged-action audit creation and super-admin query filters |
-| `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, and org-scoped listing |
+| `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, summary/count mirroring, and org-scoped listing |
 | `KBDocumentEventRepository` | `kb_document_events` | KB ingestion/status lifecycle event append and listing |
 | `ConversationRepository` | `conversations` | Athlete-owned conversation create/list/get and status/timestamp updates |
 | `ConversationMessageRepository` | `conversation_messages` | Message append, ordered history, bounded recent history, and assistant status/content updates |
 | `MessageCitationRepository` | `message_citations` | Assistant citation append and rank-ordered listing |
-| `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list and extraction-status updates |
+| `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list, extraction-status updates, KB-service linking, and summary/count mirroring |
 
 Repositories flush and refresh written models so generated IDs and server
 defaults are visible to callers, but they do not commit transactions. Services

@@ -137,6 +137,9 @@ CREATE TABLE conversation_files (
     size_bytes BIGINT NOT NULL,
     storage_key VARCHAR(1000) NOT NULL,
     extraction_status VARCHAR(40) NOT NULL DEFAULT 'uploaded',
+    kb_service_document_id UUID NULL,
+    summary TEXT NULL,
+    chunk_count INT NOT NULL DEFAULT 0,
     extracted_text_ref VARCHAR(1000) NULL,
     extracted_text_sha256 VARCHAR(64) NULL,
     extracted_char_count INT NULL,
@@ -165,6 +168,9 @@ conversation-file RAG path, the backend owns this athlete-visible metadata while
 KB-service owns parsed chunks, embeddings, summaries, and private retrieval
 state. Backend dispatches the trusted `source_type="conversation_file"` metadata
 after authorizing the athlete; browser callers never choose the source type.
+`kb_service_document_id`, `summary`, and `chunk_count` mirror safe KB-service
+status webhook data. Summaries are internal orientation metadata in this phase;
+athlete responses expose status and chunk count, not summary text.
 
 ### `kb_documents`
 ```sql
@@ -185,6 +191,8 @@ CREATE TABLE kb_documents (
     is_official BOOLEAN NOT NULL DEFAULT false,
     priority INT NOT NULL DEFAULT 0,
     kb_service_document_id UUID NULL,
+    summary TEXT NULL,
+    chunk_count INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
@@ -195,6 +203,10 @@ Processing statuses:
 - `processing`
 - `ready`
 - `failed`
+
+`summary` and `chunk_count` mirror safe terminal KB-service webhook data for
+admin uploads. They are retained for status/debug/context use and are not
+currently exposed through admin document responses.
 
 ### `kb_document_events`
 ```sql
@@ -348,8 +360,8 @@ Checkpoint requirements:
 | `conversations` | Belongs to one athlete and contains messages/files |
 | `conversation_messages` | Stores user/assistant messages, risk labels, and safety outcomes |
 | `message_citations` | Links assistant messages to KB source records |
-| `conversation_files` | Stores original-file metadata and KB-service ingest status for athlete uploads |
-| `kb_documents` | Represents admin-uploaded searchable department documents |
+| `conversation_files` | Stores original-file metadata, KB-service document linkage, mirrored status, internal summary, and chunk count for athlete uploads |
+| `kb_documents` | Represents admin-uploaded searchable department documents with mirrored KB-service status, internal summary, and chunk count |
 | `dashboard_insight_runs` | Tracks nightly/manual dashboard insights agent lifecycle |
 | `dashboard_insights` | Stores agent-curated dashboard insight output |
 | `admin_chat_sessions` | Stores admin-only dashboard side-panel chat sessions |
@@ -369,3 +381,5 @@ Checkpoint requirements:
 - Conversation-file parsed chunks and embeddings live in KB-service private
   metadata and must remain filtered by `conversation_id`/owner and separate from
   the shared KB corpus.
+- KB-service source summaries are orientation metadata only; final answers must
+  cite retrieved chunks, not summaries.

@@ -353,6 +353,10 @@ class ConversationService:
                 ),
                 error_message=None,
             )
+            file = await self.file_repo.update_ingestion_mirror(
+                file,
+                kb_service_document_id=ingest_response.kb_service_document_id,
+            )
         except Exception as exc:
             logger.warning(
                 "conversation_file_ingest_dispatch_failed",
