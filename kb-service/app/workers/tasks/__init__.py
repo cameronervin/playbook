@@ -10,6 +10,7 @@ from app.workers.tasks.embedding import embed_batch_task, embed_task
 from app.workers.tasks.finalize import load_vector_task
 from app.workers.tasks.ingest import chunk_task, parse_task
 from app.workers.tasks.notify import notify_status_task
+from app.workers.tasks.summary import summarize_task
 from app.workers.tasks.watchdog import reconcile_stuck_embeds
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "notify_status_task",
     "parse_task",
     "reconcile_stuck_embeds",
+    "summarize_task",
 ]

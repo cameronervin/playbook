@@ -54,6 +54,7 @@ Current persisted fields:
 - `md5` dedupe hash
 - `status`
 - `metadata`
+- `summary`
 - `created_at`
 - `updated_at`
 
@@ -70,6 +71,10 @@ metadata `playbook_document_id` maps to main backend `kb_documents.id`, and
 search responses must prefer this identifier as the external `document_id`. For
 `conversation_file`, metadata `conversation_id` and `conversation_file_id` map
 to backend conversation metadata and are required for private retrieval filters.
+
+`summary` stores the canonical one- to two-sentence KB-service orientation
+summary generated after chunking. It is useful for status/UI/context
+orientation, but it is not answer evidence and must not be cited as a source.
 
 Allowed statuses:
 - `pending`
@@ -88,6 +93,7 @@ Tracks task IDs, per-stage status, timestamps, and errors for ingestion.
 Required MVP stages:
 - `parse`
 - `chunk`
+- `summarize`
 - `embed`
 - `load_vector`
 - `pipeline`

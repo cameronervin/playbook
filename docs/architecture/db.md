@@ -87,6 +87,10 @@ KB-service private ingest/search; the backend no longer stores
 
 ## Migrations
 
+Backend and KB-service migrations use zero-padded numeric revision IDs and
+filenames, such as `0003_drop_conversation_file_chunks.py`. Keep the Alembic
+`revision` and `down_revision` values in the same numeric chain.
+
 ```bash
 cd backend
 uv run alembic upgrade head

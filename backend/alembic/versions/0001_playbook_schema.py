@@ -1,6 +1,6 @@
 """create playbook product schema
 
-Revision ID: 20260604_0001
+Revision ID: 0001
 Revises: None
 Create Date: 2026-06-04
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "20260604_0001"
+revision: str = "0001"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

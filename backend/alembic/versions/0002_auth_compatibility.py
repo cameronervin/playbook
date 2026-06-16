@@ -1,7 +1,7 @@
 """add auth compatibility fields
 
-Revision ID: 20260605_0002
-Revises: 20260604_0001
+Revision ID: 0002
+Revises: 0001
 Create Date: 2026-06-05
 
 """
@@ -14,8 +14,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "20260605_0002"
-down_revision: str | None = "20260604_0001"
+revision: str = "0002"
+down_revision: str | None = "0001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -6,7 +6,7 @@ Flow of start_ingest:
      download (streams the full object).
   3. Compute MD5 and dedup on (configuration_id, md5).
   4. Create the Document (status=pending) + IngestionLog rows.
-  5. Dispatch the Celery chain parse -> chunk -> embed and record the root id.
+  5. Dispatch the Celery chain parse -> chunk -> summarize -> embed and record the root id.
 
 Heavy / cross-subtree imports (boto3, celery, workers.tasks) are done lazily
 inside the methods so this module stays importable on its own.
@@ -346,7 +346,7 @@ class IngestionService:
     ) -> str:
         # Lazy import: the workers package is built by another agent. Importing
         # it here (not at module top) keeps this module importable on its own.
-        from app.workers.tasks import chunk_task, embed_task, parse_task
+        from app.workers.tasks import chunk_task, embed_task, parse_task, summarize_task
 
         pipeline = parse_task.s(
             document_id=str(document_id),
@@ -356,6 +356,8 @@ class IngestionService:
         ) | chunk_task.s(
             document_id=str(document_id),
             metadata=metadata,
+        ) | summarize_task.s(
+            document_id=str(document_id),
         ) | embed_task.s(
             document_id=str(document_id),
             config_id=str(config.id),
@@ -380,6 +382,7 @@ class IngestionService:
                 stages=[
                     StageStatus(stage="parse", status=None, task_id=None),
                     StageStatus(stage="chunk", status=None, task_id=None),
+                    StageStatus(stage="summarize", status=None, task_id=None),
                     StageStatus(stage="embed", status=None, task_id=None),
                     StageStatus(stage="load_vector", status=None, task_id=None),
                 ],
@@ -399,6 +402,11 @@ class IngestionService:
                     stage="chunk",
                     status=ingestion_log.chunk_status,
                     task_id=ingestion_log.chunk_task_id,
+                ),
+                StageStatus(
+                    stage="summarize",
+                    status=getattr(ingestion_log, "summarize_status", None),
+                    task_id=getattr(ingestion_log, "summarize_task_id", None),
                 ),
                 StageStatus(
                     stage="embed",
@@ -423,6 +431,7 @@ class IngestionService:
         stages = [
             StageStatus(stage="parse", status=None, task_id=None),
             StageStatus(stage="chunk", status=None, task_id=None),
+            StageStatus(stage="summarize", status=None, task_id=None),
             StageStatus(stage="embed", status=None, task_id=None),
             StageStatus(stage="load_vector", status=None, task_id=None),
         ]
@@ -433,6 +442,11 @@ class IngestionService:
             stages = [
                 StageStatus(stage="parse", status=log.parse_status, task_id=log.parse_task_id),
                 StageStatus(stage="chunk", status=log.chunk_status, task_id=log.chunk_task_id),
+                StageStatus(
+                    stage="summarize",
+                    status=getattr(log, "summarize_status", None),
+                    task_id=getattr(log, "summarize_task_id", None),
+                ),
                 StageStatus(stage="embed", status=log.embed_status, task_id=log.embed_task_id),
                 StageStatus(
                     stage="load_vector",
@@ -448,6 +462,7 @@ class IngestionService:
             playbook_document_id=_playbook_document_id(doc.metadata_),
             task_id=task_id,
             status=doc.status,
+            summary=getattr(doc, "summary", None),
             stages=stages,
             error_message=error_message,
             updated_at=updated_at,

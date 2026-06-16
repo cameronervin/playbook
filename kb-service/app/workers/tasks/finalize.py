@@ -334,7 +334,15 @@ def load_vector_task(
                 await doc_repo.update_status(doc.id, "success")
                 await log_repo.update_stage(doc.id, stage="load_vector", status="SUCCESS")
                 _notify(document_id, "load_vector", "SUCCESS")
-                _notify(document_id, "pipeline", "success")
+                _notify(
+                    document_id,
+                    "pipeline",
+                    "success",
+                    metadata={
+                        "chunk_count": expected_count,
+                        "embedding_count": actual_count,
+                    },
+                )
 
             # Clean up staging — chunks now live permanently in pgvector.
             await asyncio.to_thread(_delete_staging_file, document_id)

@@ -82,6 +82,7 @@ Environment-configured values:
 - embedding provider mode (`litellm` by default),
 - LiteLLM base URL and service key,
 - embedding model alias,
+- summary model alias,
 - chunk size and overlap,
 - search default limit and score threshold,
 - maximum upload size.

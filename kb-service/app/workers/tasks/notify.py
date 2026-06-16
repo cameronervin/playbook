@@ -19,6 +19,7 @@ def _notify(
     stage: str,
     status: str,
     error_message: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Fire-and-forget notify dispatch — broker failure must not crash the pipeline task."""
     try:
@@ -27,6 +28,7 @@ def _notify(
             stage=stage,
             status=status,
             error_message=error_message,
+            metadata=metadata,
         )
     except Exception:
         logger.warning(
@@ -50,6 +52,7 @@ def notify_status_task(
     status: str,
     stage: str | None = None,
     error_message: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """HMAC-SHA256 sign and POST a status update to the calling app's webhook.
 
@@ -76,13 +79,17 @@ def notify_status_task(
         )
         return
 
-    payload = {
-        "document_id": document_id,
-        "stage": stage,
-        "status": status,
-        "error_message": error_message,
-        "timestamp": int(_time.time()),
-    }
+    document_metadata, summary = _load_document_payload_context(document_id)
+    payload = _build_status_payload(
+        document_id=document_id,
+        status=status,
+        stage=stage,
+        error_message=error_message,
+        document_metadata=document_metadata,
+        summary=summary,
+        metadata=metadata,
+        timestamp=int(_time.time()),
+    )
     body = json.dumps(payload, separators=(",", ":")).encode()
     signature = hmac.new(
         settings.KB_WEBHOOK_SECRET.encode(),
@@ -155,6 +162,56 @@ def _webhook_url_from_metadata(
     return f"{fallback}{_WEBHOOK_PATH}" if fallback else None
 
 
+def _build_status_payload(
+    *,
+    document_id: str,
+    status: str,
+    stage: str | None,
+    error_message: str | None,
+    document_metadata: dict[str, Any] | None,
+    summary: str | None,
+    metadata: dict[str, Any] | None,
+    timestamp: int,
+) -> dict[str, Any]:
+    """Build a safe signed webhook payload."""
+    document_metadata = document_metadata or {}
+    payload: dict[str, Any] = {
+        "document_id": document_id,
+        "kb_service_document_id": document_id,
+        "source_type": document_metadata.get("source_type"),
+        "playbook_document_id": document_metadata.get("playbook_document_id"),
+        "conversation_id": document_metadata.get("conversation_id"),
+        "conversation_file_id": document_metadata.get("conversation_file_id"),
+        "stage": stage,
+        "status": status,
+        "error_message": error_message,
+        "summary": summary,
+        "metadata": _sanitize_metadata(metadata or {}),
+        "timestamp": timestamp,
+    }
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    sensitive_keys = {
+        "source_uri",
+        "presigned_url",
+        "signed_url",
+        "raw_text",
+        "extracted_text",
+        "file_contents",
+    }
+    sanitized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if key in sensitive_keys:
+            continue
+        if isinstance(value, dict):
+            sanitized[key] = _sanitize_metadata(value)
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
 def _load_webhook_url(document_id: str) -> str | None:
     from app.core.config import settings
     from app.infrastructure.db.session import get_session_factory
@@ -178,6 +235,35 @@ def _load_webhook_url(document_id: str) -> str | None:
             )
 
     return run_async(_load())
+
+
+def _load_document_payload_context(document_id: str) -> tuple[dict[str, Any], str | None]:
+    from app.infrastructure.db.session import get_session_factory
+    from app.repositories.document_repo import DocumentRepository
+    from app.workers.app import run_async
+
+    try:
+        document_uuid = uuid.UUID(document_id)
+    except (TypeError, ValueError):
+        return {}, None
+
+    async def _load() -> tuple[dict[str, Any], str | None]:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            doc = await DocumentRepository(session).get(document_uuid)
+            if doc is None:
+                return {}, None
+            return dict(doc.metadata_ or {}), doc.summary
+
+    try:
+        return run_async(_load())
+    except Exception as exc:
+        logger.warning(
+            "kb_webhook_payload_context_load_failed",
+            document_id=document_id,
+            error_type=type(exc).__name__,
+        )
+        return {}, None
 
 
 def _handle_webhook_dead_letter(

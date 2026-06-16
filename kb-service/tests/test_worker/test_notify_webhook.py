@@ -71,6 +71,36 @@ def test_notify_status_task_posts_to_stored_webhook_url(monkeypatch) -> None:
     assert posted_urls == ["http://stored.test/api/v1/kb/webhook"]
 
 
+def test_build_status_payload_includes_summary_source_identity_and_safe_counts() -> None:
+    payload = notify._build_status_payload(
+        document_id="00000000-0000-0000-0000-000000000001",
+        status="success",
+        stage="pipeline",
+        error_message=None,
+        document_metadata={
+            "source_type": "conversation_file",
+            "conversation_id": "00000000-0000-0000-0000-000000000002",
+            "conversation_file_id": "00000000-0000-0000-0000-000000000003",
+            "source_uri": "https://storage.test/file.pdf?signature=secret",
+        },
+        summary="One-sentence orientation summary.",
+        metadata={
+            "chunk_count": 3,
+            "raw_text": "private contract text",
+            "signed_url": "https://storage.test/secret",
+        },
+        timestamp=123,
+    )
+
+    assert payload["summary"] == "One-sentence orientation summary."
+    assert payload["source_type"] == "conversation_file"
+    assert payload["conversation_id"] == "00000000-0000-0000-0000-000000000002"
+    assert payload["conversation_file_id"] == "00000000-0000-0000-0000-000000000003"
+    assert payload["metadata"] == {"chunk_count": 3}
+    assert "signature=secret" not in repr(payload)
+    assert "private contract text" not in repr(payload)
+
+
 def test_dead_letter_log_redacts_secret_values(monkeypatch) -> None:
     secret_error = (
         "LITELLM_API_KEY=sk-test-secret KB_API_SECRET=super-secret "

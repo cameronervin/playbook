@@ -13,6 +13,7 @@ ingest request
   -> stage text-segment records
   -> chunk text records
   -> stage chunks
+  -> summarize source
   -> embed chunks
   -> write chunk text + vectors
   -> verify vector count
@@ -46,6 +47,17 @@ ingest request
 - Preserve source locators such as page number, slide number, sheet name, row
   range, paragraph range, or Docling layout block.
 - Store chunk metadata needed for citations and conflict ranking.
+
+### Summarize
+
+- Build summary input from safe source metadata, parser telemetry, and
+  deterministic representative chunks from staged `chunks.ndjson`.
+- Use the LiteLLM-routed `playbook-fast` alias from `LITELLM_SUMMARY_MODEL`.
+- Cap input with `KB_SUMMARY_INPUT_MAX_TOKENS` and output with
+  `KB_SUMMARY_MAX_OUTPUT_TOKENS`.
+- Persist the canonical one- to two-sentence summary in `kb.documents.summary`.
+- If model generation fails, use an extractive fallback and continue ingestion.
+- Do not log raw summary inputs, model prompts, signed URLs, or file contents.
 
 ### Embed
 

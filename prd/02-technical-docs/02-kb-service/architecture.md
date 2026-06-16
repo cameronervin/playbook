@@ -42,7 +42,7 @@ POST /api/kb/configuration/resolve
   -> resolve or create the default Playbook KB configuration
 
 POST /api/kb/ingest/document
-  -> parse -> chunk -> embed -> pgvector
+  -> parse -> chunk -> summarize -> embed -> pgvector
 
 POST /api/kb/search
   -> query embedding -> pgvector cosine search -> ranked chunks
@@ -53,7 +53,8 @@ Stack:
 - Celery + Valkey workers.
 - Docling and native Office/PDF parsers.
 - S3-compatible staging.
-- LiteLLM embeddings by default, with direct provider mode only for local or break-glass use.
+- LiteLLM embeddings and source summaries by default, with direct provider mode
+  only for local or break-glass embedding use.
 - PostgreSQL + pgvector.
 
 <!-- V2 CHANGE: Use the existing KB service as the retrieval layer for Playbook athlete chat and admin document ingestion. -->
@@ -66,7 +67,7 @@ Admin upload
   -> main backend creates kb_documents row
   -> main backend calls KB ingest with file URL + Playbook metadata
   -> KB service records kb.documents row
-  -> Celery parses/chunks/embeds
+  -> Celery parses/chunks/summarizes/embeds
   -> KB service stores chunk text + vectors in pgvector
   -> KB service posts signed status events back to main backend
   -> main backend marks kb_documents ready/failed

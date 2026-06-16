@@ -9,6 +9,7 @@ def test_worker_tasks_package_exports_registered_tasks() -> None:
     expected_task_names = {
         "parse_task": "app.workers.tasks.parse_task",
         "chunk_task": "app.workers.tasks.chunk_task",
+        "summarize_task": "app.workers.tasks.summarize_task",
         "embed_task": "app.workers.tasks.embed_task",
         "embed_batch_task": "app.workers.tasks.embed_batch_task",
         "load_vector_task": "app.workers.tasks.load_vector_task",
@@ -20,6 +21,7 @@ def test_worker_tasks_package_exports_registered_tasks() -> None:
 
     for module_name in (
         "ingest",
+        "summary",
         "embedding",
         "finalize",
         "notify",

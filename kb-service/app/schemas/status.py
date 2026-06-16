@@ -27,6 +27,7 @@ class DocumentStatusResponse(BaseModel):
     playbook_document_id: uuid.UUID | None = None
     task_id: str | None = None
     status: str | None = None
+    summary: str | None = None
     stages: list[StageStatus]
     error_message: str | None = None
     updated_at: datetime | None = None

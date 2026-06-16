@@ -1,7 +1,7 @@
 """Celery application for the KB service ingest pipeline.
 
 Worker queues (split CPU vs I/O for optimal throughput):
-  kb-cpu     — parse_task, chunk_task, embed_task dispatcher (CPU-bound)
+  kb-cpu     — parse_task, chunk_task, summarize_task, embed_task dispatcher
                Use prefork pool, --concurrency=2
   kb-io      — embed_batch_task, load_vector_task, reconcile_stuck_embeds
                (I/O-bound: LiteLLM HTTP + per-batch DB writes)
@@ -71,6 +71,7 @@ kb_worker.conf.update(
         # CPU-bound — parse (Docling) and chunk (tiktoken). Routed to kb-cpu.
         "app.workers.tasks.parse_task": {"queue": "kb-cpu"},
         "app.workers.tasks.chunk_task": {"queue": "kb-cpu"},
+        "app.workers.tasks.summarize_task": {"queue": "kb-cpu"},
         "app.workers.tasks.embed_task": {"queue": "kb-cpu"},  # dispatcher only — fans out to kb-io
         # Catch-all fallback.
         "app.workers.tasks.*": {"queue": "kb-cpu"},

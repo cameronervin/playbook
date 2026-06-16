@@ -180,6 +180,38 @@ def _load_chunk_slice_from_s3(document_id: str, chunk_start: int, chunk_end: int
     return out
 
 
+def _load_chunk_indices_from_s3(document_id: str, indices: list[int]) -> list[dict]:
+    """Return selected chunk indices from S3 staging without loading all chunks."""
+    import json
+
+    from app.core.config import settings
+    from app.infrastructure.io.s3_client import build_s3_client
+
+    wanted = set(indices)
+    if not wanted:
+        return []
+
+    response = build_s3_client().get_object(
+        Bucket=settings.S3_BUCKET_NAME, Key=_staging_key(document_id)
+    )
+    body = response["Body"]
+    out: list[dict] = []
+    index = 0
+    max_index = max(wanted)
+    try:
+        for raw_line in body.iter_lines():
+            if not raw_line:
+                continue
+            if index in wanted:
+                out.append(json.loads(raw_line))
+            if index >= max_index:
+                break
+            index += 1
+    finally:
+        body.close()
+    return out
+
+
 def _count_chunks_in_s3(document_id: str) -> int:
     """Count NDJSON lines in the chunk staging file without parsing each line."""
     from app.core.config import settings

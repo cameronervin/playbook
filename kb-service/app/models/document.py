@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -59,6 +60,7 @@ class Document(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )

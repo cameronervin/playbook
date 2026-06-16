@@ -107,6 +107,7 @@ application services.
 | Dashboard insights agent | `playbook-chat` or `playbook-fast` | Nightly/manual insight generation |
 | Admin chat side panel | `playbook-chat` | Analytics-grounded admin answers |
 | KB-service ingestion | `playbook-embed` | Document chunk embeddings |
+| KB-service summaries | `playbook-fast` | Source orientation summaries |
 | Evaluation harness | `playbook-chat`, `playbook-embed` | Release and regression evals |
 
 Gateway responsibilities:

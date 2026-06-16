@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -69,7 +69,21 @@ class DocumentRepository:
         if not doc:
             return None
         doc.status = status
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(doc)
+        return doc
+
+    async def update_summary(
+        self,
+        document_id: uuid.UUID,
+        summary: str | None,
+    ) -> Document | None:
+        doc = await self.get(document_id)
+        if not doc:
+            return None
+        doc.summary = summary
+        doc.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(doc)
         return doc

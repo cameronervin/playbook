@@ -306,7 +306,7 @@ Do not do yet:
 - Do not add semantic retrieval logic to the backend database.
 - Do not duplicate KB-service parser dependencies in backend workers.
 
-## Phase 4: Lightweight Summary Generation
+## [IMPLEMENTED] Phase 4: Lightweight Summary Generation
 
 Scope:
 
@@ -314,8 +314,23 @@ Scope:
 - Use `LITELLM_SUMMARY_MODEL=playbook-fast`.
 - Token-cap summary input at `KB_SUMMARY_INPUT_MAX_TOKENS`.
 - Cap output at `KB_SUMMARY_MAX_OUTPUT_TOKENS`.
-- Store summary as canonical KB-service derived metadata.
+- Store summary as canonical KB-service derived data.
 - Include summary in terminal status webhook payloads.
+
+Implemented behavior:
+
+- KB-service now runs `parse_task -> chunk_task -> summarize_task -> embed_task`
+  for both `admin_upload` and `conversation_file` ingest requests.
+- `summarize_task` samples staged `chunks.ndjson` deterministically, builds a
+  compact token-capped prompt, and calls a single-purpose LangChain/LangGraph
+  `create_agent()` summary agent through `LITELLM_SUMMARY_MODEL=playbook-fast`.
+- Generated summaries are persisted as canonical KB-service metadata in the
+  first-class nullable `kb.documents.summary` column.
+- Summary failures fall back to a cleaned title plus the first meaningful
+  passage and do not block embedding or retrieval readiness.
+- Terminal pipeline success webhooks include `summary`, trusted source identity,
+  and safe count metadata such as `chunk_count`; webhook payloads omit signed
+  URLs, raw extracted text, model inputs, and file contents.
 
 Acceptance criteria:
 

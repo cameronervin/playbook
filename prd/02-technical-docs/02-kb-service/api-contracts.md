@@ -105,7 +105,7 @@ POST /api/v1/kb/webhook
   "conversation_file_id": null,
   "stage": "embed",
   "status": "STARTED",
-  "summary": null,
+  "summary": "One- or two-sentence orientation summary on terminal success.",
   "message": null,
   "metadata": {
     "chunk_count": 42,
@@ -119,6 +119,10 @@ For `source_type="conversation_file"`, `conversation_id` and
 `conversation_file_id` are populated and `playbook_document_id` is omitted.
 Webhook payloads must not include signed URLs, raw extracted text, model inputs,
 or file contents.
+
+`summary` is populated on terminal pipeline success once KB-service has
+generated or fallen back to a canonical source orientation summary. It is not
+answer evidence; final answers must cite retrieved chunks.
 
 Required signature headers:
 - `X-KB-Timestamp`

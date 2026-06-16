@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 
+import app.services.ingestion_service as ingestion_service
+import app.workers.tasks as tasks
 from app.schemas.ingest import IngestConversationFileRequest, IngestDocumentRequest
 from app.services.ingestion_service import (
     _dedupe_md5_for_ingest_request,
@@ -171,3 +174,63 @@ def test_conversation_file_dedupe_hash_is_scoped_but_admin_hash_stays_raw() -> N
     scoped = _dedupe_md5_for_ingest_request(file_request, raw_md5)
     assert scoped != raw_md5
     assert len(scoped) == 32
+
+
+def test_dispatch_pipeline_inserts_summary_stage(monkeypatch) -> None:
+    order: list[str] = []
+
+    class FakeSignature:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def __or__(self, other: "FakeSignature") -> "FakePipeline":
+            return FakePipeline([self, other])
+
+    class FakePipeline:
+        def __init__(self, items: list[FakeSignature]) -> None:
+            self.items = items
+
+        def __or__(self, other: FakeSignature) -> "FakePipeline":
+            self.items.append(other)
+            return self
+
+        def apply_async(self):
+            order.extend(item.name for item in self.items)
+            return type("Result", (), {"id": "pipeline-task"})()
+
+    class FakeTask:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def s(self, *args, **kwargs) -> FakeSignature:
+            return FakeSignature(self.name)
+
+    async def no_root_task_id(self, document_id, root_task_id):
+        return None
+
+    monkeypatch.setattr(tasks, "parse_task", FakeTask("parse"), raising=False)
+    monkeypatch.setattr(tasks, "chunk_task", FakeTask("chunk"), raising=False)
+    monkeypatch.setattr(tasks, "summarize_task", FakeTask("summarize"), raising=False)
+    monkeypatch.setattr(tasks, "embed_task", FakeTask("embed"), raising=False)
+
+    service = ingestion_service.IngestionService.__new__(
+        ingestion_service.IngestionService
+    )
+    service._log_repo = type(
+        "LogRepo",
+        (),
+        {"set_root_task_id": no_root_task_id},
+    )()
+
+    task_id = asyncio.run(
+        service._dispatch_pipeline(
+            uuid4(),
+            type("Config", (), {"id": uuid4()})(),
+            "kb/originals/doc.pdf",
+            "doc.pdf",
+            {"source_type": "admin_upload"},
+        )
+    )
+
+    assert task_id == "pipeline-task"
+    assert order == ["parse", "chunk", "summarize", "embed"]

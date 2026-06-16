@@ -83,7 +83,7 @@ The dispatched chain is defined in
 `kb-service/app/services/ingestion_service.py`:
 
 ```python
-pipeline = parse_task.s(...) | chunk_task.s(...) | embed_task.s(...)
+pipeline = parse_task.s(...) | chunk_task.s(...) | summarize_task.s(...) | embed_task.s(...)
 result = pipeline.apply_async()
 ```
 
@@ -99,6 +99,12 @@ chunk_task
   -> stream pages.ndjson
   -> iter_chunks_from_pages()
   -> stage chunks to S3 as chunks.ndjson
+
+summarize_task
+  -> sample representative chunks from chunks.ndjson
+  -> call the lightweight create_agent() source summary agent
+  -> persist kb.documents.summary
+  -> fall back extractively without blocking embed
 
 embed_task
   -> delete stale vectors for document
