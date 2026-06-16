@@ -486,7 +486,7 @@ Do not do yet:
 - Do not let uploaded file context override safety/refusal policy.
 - Do not cite a summary as if it were the supporting chunk.
 
-## Phase 8: Hardening and Documentation
+## [IMPLEMENTED] Phase 8: Hardening and Documentation
 
 Scope:
 
@@ -500,6 +500,27 @@ Scope:
 - Update PRD/data-model/API/integration docs after implementation.
 - Update LiteLLM docs and env examples for `LITELLM_SUMMARY_MODEL`.
 
+Implemented behavior:
+
+- Backend upload hardening covers storage upload/presign failures before
+  conversation-file metadata is persisted; failures return a sanitized
+  `STORAGE_ERROR` and do not dispatch KB ingest.
+- Backend and KB-service redaction now treats source URIs, signed/presigned
+  URLs, raw/extracted file text, file contents, and model inputs as sensitive
+  log/webhook metadata. KB search response logs no longer include retrieved
+  chunk text previews.
+- KB-service retry/watchdog coverage verifies stale vectors are cleared on
+  retry while source identity is preserved, and stuck embed runs redispatch
+  `load_vector_task` through the watchdog path.
+- The KB-service local smoke script supports `--include-conversation-file` to
+  ingest/search a private file, prove default shared search excludes it, and
+  prove private search retrieves it with trusted conversation/file scope.
+- Athlete chat executor coverage now includes mixed admin-upload and
+  conversation-file citations in one assistant answer.
+- Docs and env examples were reconciled for active summary generation,
+  LiteLLM `playbook-fast` usage, smoke commands, and KB-owned conversation-file
+  chunks/vectors.
+
 Acceptance criteria:
 
 - Backend and KB-service tests pass.
@@ -507,6 +528,10 @@ Acceptance criteria:
 - Docs clearly describe which source types are searchable in which contexts.
 - Known limitations are tracked in `docs/development/tech-debt-tracker.md` if
   any shortcuts remain.
+
+Known limitations:
+
+- No new shortcuts or tech-debt items were introduced in this phase.
 
 Do not do yet:
 

@@ -227,6 +227,9 @@ KB infrastructure definitions:
 2. Confirm the backend health check is reachable.
 3. Confirm LiteLLM health is reachable on port `4000`.
 4. Confirm Playbook migrations apply against the local `playbook` database.
+5. From `kb-service/`, run `uv run python scripts/smoke_kb_service.py` for
+   shared KB ingest/search, or add `--include-conversation-file` to also verify
+   private conversation-file ingest/search isolation.
 
 ## Common Issues
 

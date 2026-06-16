@@ -36,7 +36,14 @@ SMOKE_TEXT = (
     "KB smoke test policy. Athletes must disclose NIL deals before signing. "
     "Compliance review is required before agreements are finalized."
 )
+PRIVATE_SMOKE_TITLE = "KB Smoke Private Contract Test"
+PRIVATE_SMOKE_FILENAME = "kb-smoke-private-contract.docx"
+PRIVATE_SMOKE_TEXT = (
+    "Private conversation file clause. The uploaded NIL contract requires "
+    "department approval before signing."
+)
 MATCH_TERMS = ("nil", "disclose", "compliance")
+PRIVATE_MATCH_TERMS = ("private", "approval", "contract")
 TERMINAL_SUCCESS_STATUSES = {"success", "completed", "complete"}
 TERMINAL_FAILURE_STATUSES = {"failed", "error"}
 
@@ -90,12 +97,16 @@ def _stage_summary(status_payload: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else "no stages reported"
 
 
-def _matching_results(search_payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _matching_results(
+    search_payload: dict[str, Any],
+    *,
+    terms: tuple[str, ...] = MATCH_TERMS,
+) -> list[dict[str, Any]]:
     matches = []
     for result in search_payload.get("results") or []:
         text = str(result.get("text") or "")
         normalized = text.lower()
-        if any(term in normalized for term in MATCH_TERMS):
+        if any(term in normalized for term in terms):
             matches.append(result)
     return matches
 
@@ -125,13 +136,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Keep the uploaded object and KB document for debugging.",
     )
+    parser.add_argument(
+        "--include-conversation-file",
+        action="store_true",
+        help=(
+            "Also ingest and search a conversation_file source, verifying it is "
+            "excluded from default shared search and included by private scope."
+        ),
+    )
     return parser.parse_args(argv)
 
 
-def _create_docx(path: Path) -> None:
+def _create_docx(
+    path: Path,
+    *,
+    title: str = SMOKE_TITLE,
+    text: str = SMOKE_TEXT,
+) -> None:
     document = Document()
-    document.add_heading(SMOKE_TITLE, level=1)
-    document.add_paragraph(SMOKE_TEXT)
+    document.add_heading(title, level=1)
+    document.add_paragraph(text)
     document.save(path)
 
 
@@ -245,18 +269,31 @@ def _run_smoke(args: argparse.Namespace) -> None:
     playbook_document_id = uuid.uuid4()
     smoke_run_id = uuid.uuid4()
     s3_key = f"kb-smoke/{smoke_run_id}/{SMOKE_FILENAME}"
+    private_s3_key = f"kb-smoke/{smoke_run_id}/{PRIVATE_SMOKE_FILENAME}"
     kb_document_id: str | None = None
+    private_kb_document_id: str | None = None
+    private_conversation_id = uuid.uuid4()
+    private_conversation_file_id = uuid.uuid4()
     cleanup_done = False
     source_uri = _build_source_uri(runtime_settings, s3_key)
+    private_source_uri = _build_source_uri(runtime_settings, private_s3_key)
 
     _emit("KB smoke test starting")
     _emit(f"  api={args.base_url.rstrip('/')}")
     _emit(f"  bucket={runtime_settings.S3_BUCKET_NAME}")
     _emit(f"  object_key={s3_key}")
+    if args.include_conversation_file:
+        _emit(f"  private_object_key={private_s3_key}")
 
     with tempfile.TemporaryDirectory(prefix="kb-smoke-") as tmp_dir:
         docx_path = Path(tmp_dir) / SMOKE_FILENAME
+        private_docx_path = Path(tmp_dir) / PRIVATE_SMOKE_FILENAME
         _create_docx(docx_path)
+        _create_docx(
+            private_docx_path,
+            title=PRIVATE_SMOKE_TITLE,
+            text=PRIVATE_SMOKE_TEXT,
+        )
 
         with httpx.Client(
             base_url=args.base_url.rstrip("/"),
@@ -343,15 +380,126 @@ def _run_smoke(args: argparse.Namespace) -> None:
                     )
                 _emit(f"  search_results={search.get('total', len(search.get('results') or []))}")
 
+                private_search_total = None
+                if args.include_conversation_file:
+                    private_size_bytes = _upload_smoke_docx(
+                        private_docx_path,
+                        private_s3_key,
+                        runtime_settings,
+                    )
+                    _emit(f"  private_uploaded_bytes={private_size_bytes}")
+
+                    private_ingest = _request_json(
+                        client,
+                        "POST",
+                        "/api/kb/ingest/document",
+                        expected_statuses={httpx.codes.OK, httpx.codes.ACCEPTED},
+                        headers=headers,
+                        json={
+                            "source_type": "conversation_file",
+                            "organization_id": str(organization_id),
+                            "conversation_id": str(private_conversation_id),
+                            "conversation_file_id": str(private_conversation_file_id),
+                            "configuration_id": config_id,
+                            "source_uri": private_source_uri,
+                            "filename": PRIVATE_SMOKE_FILENAME,
+                            "content_type": (
+                                "application/vnd.openxmlformats-officedocument."
+                                "wordprocessingml.document"
+                            ),
+                            "size_bytes": private_size_bytes,
+                            "source_title": PRIVATE_SMOKE_TITLE,
+                            "visibility_policy": {"scope": "conversation"},
+                            "metadata_tags": {"smoke_test": True},
+                        },
+                    )
+                    private_kb_document_id = str(
+                        private_ingest["kb_service_document_id"]
+                    )
+                    _emit(f"  private_kb_service_document_id={private_kb_document_id}")
+
+                    _wait_for_ingest_success(
+                        client,
+                        headers,
+                        private_kb_document_id,
+                        args.timeout_seconds,
+                    )
+
+                    shared_scope_private_query = _request_json(
+                        client,
+                        "POST",
+                        "/api/kb/search",
+                        expected_statuses={httpx.codes.OK},
+                        headers=headers,
+                        json={
+                            "query": "Does the private contract require approval?",
+                            "organization_id": str(organization_id),
+                            "visibility_context": {"role": "athlete"},
+                            "limit": 5,
+                            "score_threshold": 0.0,
+                        },
+                    )
+                    leaked_private_matches = _matching_results(
+                        shared_scope_private_query,
+                        terms=PRIVATE_MATCH_TERMS,
+                    )
+                    if leaked_private_matches:
+                        raise SmokeTestError(
+                            "default shared search returned conversation-file text"
+                        )
+
+                    private_search = _request_json(
+                        client,
+                        "POST",
+                        "/api/kb/search",
+                        expected_statuses={httpx.codes.OK},
+                        headers=headers,
+                        json={
+                            "query": "Does the private contract require approval?",
+                            "organization_id": str(organization_id),
+                            "source_types": ["conversation_file"],
+                            "conversation_id": str(private_conversation_id),
+                            "file_ids": [str(private_conversation_file_id)],
+                            "limit": 5,
+                            "score_threshold": 0.0,
+                        },
+                    )
+                    private_matches = _matching_results(
+                        private_search,
+                        terms=PRIVATE_MATCH_TERMS,
+                    )
+                    if not private_matches:
+                        raise SmokeTestError(
+                            "private conversation-file search returned no smoke-text match"
+                        )
+                    private_search_total = private_search.get(
+                        "total",
+                        len(private_search.get("results") or []),
+                    )
+                    _emit(f"  private_search_results={private_search_total}")
+
                 cleanup_status = "kept"
                 if not args.keep:
                     deleted_doc = _delete_document(client, headers, kb_document_id)
+                    deleted_private_doc = (
+                        True
+                        if private_kb_document_id is None
+                        else _delete_document(client, headers, private_kb_document_id)
+                    )
                     deleted_object = (
                         True
                         if deleted_doc
                         else _delete_smoke_object(s3_key, runtime_settings)
                     )
-                    cleanup_done = deleted_doc or deleted_object
+                    deleted_private_object = (
+                        True
+                        if private_kb_document_id is None or deleted_private_doc
+                        else _delete_smoke_object(private_s3_key, runtime_settings)
+                    )
+                    cleanup_done = (
+                        (deleted_doc or deleted_object)
+                        and (deleted_private_doc or deleted_private_object)
+                    )
                     cleanup_status = (
                         "deleted" if cleanup_done else "delete_failed"
                     )
@@ -360,6 +508,7 @@ def _run_smoke(args: argparse.Namespace) -> None:
                     "PASS "
                     f"document_id={kb_document_id} "
                     f"result_count={search.get('total', len(search.get('results') or []))} "
+                    f"private_result_count={private_search_total} "
                     f"cleanup={cleanup_status}"
                 )
             finally:
@@ -368,6 +517,10 @@ def _run_smoke(args: argparse.Namespace) -> None:
                         _delete_document(client, headers, kb_document_id)
                     else:
                         _delete_smoke_object(s3_key, runtime_settings)
+                    if private_kb_document_id is not None:
+                        _delete_document(client, headers, private_kb_document_id)
+                    elif args.include_conversation_file:
+                        _delete_smoke_object(private_s3_key, runtime_settings)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -16,6 +16,7 @@ from app.core.exceptions import (
     AppError,
     FileTooLargeError,
     NotFoundError,
+    StorageError,
     UnsupportedFileTypeError,
     ValidationError,
 )
@@ -314,8 +315,22 @@ class ConversationService:
             filename,
         )
 
-        upload.file.seek(0)
-        await self.storage.upload_file(storage_key, upload.file, content_type)
+        try:
+            upload.file.seek(0)
+            await self.storage.upload_file(storage_key, upload.file, content_type)
+            signed_url = await self.storage.get_presigned_url(
+                storage_key,
+                download_filename=filename,
+            )
+        except Exception as exc:
+            logger.warning(
+                "conversation_file_storage_failed",
+                athlete_user_id=str(athlete.id),
+                conversation_id=str(conversation.id),
+                error_type=type(exc).__name__,
+            )
+            raise StorageError("Conversation file storage failed") from exc
+
         file = await self.file_repo.create(
             file_id=file_id,
             conversation_id=conversation.id,
@@ -325,10 +340,6 @@ class ConversationService:
             size_bytes=size_bytes,
             storage_key=storage_key,
             extraction_status="uploaded",
-        )
-        signed_url = await self.storage.get_presigned_url(
-            storage_key,
-            download_filename=filename,
         )
         ingest_request = KBConversationFileIngestRequest(
             organization_id=athlete.organization_id,

@@ -135,6 +135,7 @@ async def test_kb_webhook_mirrors_conversation_file_status_summary_and_counts(
             "chunk_count": 7,
             "source_uri": "https://storage.example/contract.pdf?signature=secret",
             "raw_text": "private contract text",
+            "model_input": "private summary prompt",
         },
     }
     body, signature = _signed_body(payload, "webhook-secret")
@@ -168,6 +169,7 @@ async def test_kb_webhook_mirrors_conversation_file_status_summary_and_counts(
     assert "storage_key" not in file_summary
     assert "source_uri" not in file_summary
     assert "raw_text" not in response.text
+    assert "private summary prompt" not in response.text
     assert "signature=secret" not in response.text
 
 
@@ -216,6 +218,7 @@ async def test_kb_webhook_marks_conversation_file_failed_with_sanitized_error(
         "metadata": {
             "signed_url": "https://storage.example/contract.pdf?signature=secret",
             "file_contents": "private contract text",
+            "model_inputs": ["private model batch"],
         },
     }
     body, signature = _signed_body(payload, "webhook-secret")
@@ -236,6 +239,7 @@ async def test_kb_webhook_marks_conversation_file_failed_with_sanitized_error(
     assert "storage.example" not in file.error_message
     assert "signature=secret" not in file.error_message
     assert "private contract text" not in response.text
+    assert "private model batch" not in response.text
 
 
 @pytest.mark.asyncio

@@ -9,9 +9,13 @@ from app.core.log_redaction import redact_secrets
 def test_redact_secrets_masks_nested_secret_values() -> None:
     payload = {
         "LITELLM_API_KEY": "sk-litellm-secret",
+        "presigned_url": "https://storage.test/file.pdf?signature=source-secret",
+        "model_inputs": ["private summary prompt"],
         "nested": {
             "KB_WEBHOOK_SECRET": "webhook-secret",
             "items": [{"Authorization": "Bearer token-secret"}],
+            "extracted_text": "full extracted source text",
+            "file_contents": "binary-ish private file contents",
         },
         "message": "DATABASE_URL=postgresql://user:pass@localhost/db",
     }
@@ -20,6 +24,10 @@ def test_redact_secrets_masks_nested_secret_values() -> None:
     rendered = repr(redacted)
 
     assert "sk-litellm-secret" not in rendered
+    assert "source-secret" not in rendered
+    assert "private summary prompt" not in rendered
+    assert "full extracted source text" not in rendered
+    assert "binary-ish private file contents" not in rendered
     assert "webhook-secret" not in rendered
     assert "token-secret" not in rendered
     assert "user:pass" not in rendered

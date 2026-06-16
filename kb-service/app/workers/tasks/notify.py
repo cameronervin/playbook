@@ -200,6 +200,8 @@ def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "raw_text",
         "extracted_text",
         "file_contents",
+        "model_input",
+        "model_inputs",
     }
     sanitized: dict[str, Any] = {}
     for key, value in metadata.items():

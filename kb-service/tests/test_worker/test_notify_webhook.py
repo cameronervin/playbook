@@ -88,6 +88,8 @@ def test_build_status_payload_includes_summary_source_identity_and_safe_counts()
             "chunk_count": 3,
             "raw_text": "private contract text",
             "signed_url": "https://storage.test/secret",
+            "model_input": "private summary prompt",
+            "model_inputs": ["private model batch"],
         },
         timestamp=123,
     )
@@ -99,6 +101,8 @@ def test_build_status_payload_includes_summary_source_identity_and_safe_counts()
     assert payload["metadata"] == {"chunk_count": 3}
     assert "signature=secret" not in repr(payload)
     assert "private contract text" not in repr(payload)
+    assert "private summary prompt" not in repr(payload)
+    assert "private model batch" not in repr(payload)
 
 
 def test_dead_letter_log_redacts_secret_values(monkeypatch) -> None:

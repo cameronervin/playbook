@@ -30,11 +30,17 @@ from app.workers import tasks as worker_tasks
 class FakeStorageProvider:
     """Storage fake that records upload and presign operations."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, fail_upload: bool = False, fail_presign: bool = False) -> None:
         self.uploads: list[tuple[str, str, int]] = []
         self.presigned: list[tuple[str, str | None]] = []
+        self.fail_upload = fail_upload
+        self.fail_presign = fail_presign
 
     async def upload_file(self, key: str, file: BinaryIO, content_type: str) -> str:
+        if self.fail_upload:
+            raise RuntimeError(
+                "upload failed for https://storage.example/private.pdf?signature=secret"
+            )
         data = file.read()
         file.seek(0)
         self.uploads.append((key, content_type, len(data)))
@@ -52,6 +58,10 @@ class FakeStorageProvider:
         expires_in: int = 3600,
         download_filename: str | None = None,
     ) -> str:
+        if self.fail_presign:
+            raise RuntimeError(
+                "presign failed for https://storage.example/private.pdf?signature=secret"
+            )
         self.presigned.append((key, download_filename))
         return f"https://storage.example/{key}?filename={download_filename}"
 
@@ -83,8 +93,17 @@ class FakeConversationFileIngestProvider:
         )
 
 
-def _override_file_upload_dependencies(route_client, *, fail_dispatch: bool = False):
-    storage = FakeStorageProvider()
+def _override_file_upload_dependencies(
+    route_client,
+    *,
+    fail_dispatch: bool = False,
+    fail_storage_upload: bool = False,
+    fail_storage_presign: bool = False,
+):
+    storage = FakeStorageProvider(
+        fail_upload=fail_storage_upload,
+        fail_presign=fail_storage_presign,
+    )
     kb_provider = FakeConversationFileIngestProvider(fail=fail_dispatch)
     route_client.app.dependency_overrides[get_storage_provider_dependency] = (
         lambda: storage
@@ -334,6 +353,74 @@ async def test_upload_conversation_file_marks_failed_when_kb_dispatch_fails(
     assert "storage.example" not in str(persisted[0].extraction_metadata)
     assert "storage.example" not in (persisted[0].error_message or "")
     assert len(kb_provider.requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fail_storage_upload", "fail_storage_presign"),
+    [(True, False), (False, True)],
+)
+async def test_upload_conversation_file_storage_failure_is_sanitized_and_not_persisted(
+    route_client,
+    db_session,
+    fail_storage_upload: bool,
+    fail_storage_presign: bool,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug=f"playbook-storage-failure-{fail_storage_upload}-{fail_storage_presign}",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email=f"athlete-storage-{fail_storage_upload}-{fail_storage_presign}@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject=f"athlete-storage-{fail_storage_upload}-{fail_storage_presign}",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    route_client.authenticate_as(athlete)
+    storage, kb_provider = _override_file_upload_dependencies(
+        route_client,
+        fail_storage_upload=fail_storage_upload,
+        fail_storage_presign=fail_storage_presign,
+    )
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        files={
+            "file": (
+                "nil-contract.pdf",
+                b"%PDF-1.7 contract",
+                "application/pdf",
+            )
+        },
+        headers={"X-Request-ID": "req-storage-failure"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["error"] == {
+        "code": "STORAGE_ERROR",
+        "message": "Conversation file storage failed",
+        "retryable": True,
+        "details": {"request_id": "req-storage-failure"},
+    }
+    assert "storage.example" not in response.text
+    assert "signature=secret" not in response.text
+    assert kb_provider.requests == []
+
+    files = await ConversationFileRepository(
+        db_session
+    ).list_by_conversation_with_chunk_counts(conversation.id)
+    assert files == []
+    if fail_storage_upload:
+        assert storage.uploads == []
+        assert storage.presigned == []
+    else:
+        assert len(storage.uploads) == 1
+        assert storage.presigned == []
 
 
 @pytest.mark.asyncio

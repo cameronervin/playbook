@@ -215,6 +215,33 @@ class FileContextChain:
         }
 
 
+class MixedSourceChain:
+    def __init__(self, tool) -> None:
+        self.tool = tool
+
+    async def ainvoke(
+        self,
+        input: dict,
+    ) -> dict[str, AthleteChatStructuredResponse]:
+        tool_result = await self.tool.ainvoke({"query": "nil disclosure"})
+        admin_source_key = tool_result.split("]", maxsplit=1)[0].lstrip("[")
+        rendered_file_context = str(input.get("conversation_file_context", ""))
+        file_match = re.search(r"\[(S-[^\]]+)\]", rendered_file_context)
+        assert file_match is not None
+        return {
+            "structured_response": AthleteChatStructuredResponse(
+                answer=(
+                    "Disclose the NIL deal first, and get approval for the uploaded "
+                    "contract clause."
+                ),
+                answer_type="grounded_answer",
+                cited_source_keys=[admin_source_key, file_match.group(1)],
+                topic_labels=["nil"],
+                risk_labels=["compliance"],
+            )
+        }
+
+
 def fake_chain_with_tool(*, tools: list, **_: object) -> ToolCallingChain:
     return ToolCallingChain(tools[0])
 
@@ -229,6 +256,10 @@ def fake_chain_that_fails(**_: object) -> FailIfInvokedChain:
 
 def fake_file_context_chain(**_: object) -> FileContextChain:
     return FileContextChain()
+
+
+def fake_mixed_source_chain(*, tools: list, **_: object) -> MixedSourceChain:
+    return MixedSourceChain(tools[0])
 
 
 @pytest.mark.asyncio
@@ -559,6 +590,106 @@ async def test_athlete_chat_executor_retrieves_attached_ready_file_and_persists_
         "type": "page",
         "page_number": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_executor_persists_mixed_admin_and_file_citations(
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        chains_builder,
+        "create_athlete_chat_chain",
+        fake_mixed_source_chain,
+    )
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-agent-mixed",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-mixed@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-mixed",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    user_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="Can I sign this NIL deal if the uploaded contract mentions approval?",
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={"task_id": "task-mixed", "user_message_id": str(user_message.id)},
+    )
+    file_repo = ConversationFileRepository(db_session)
+    file = await file_repo.create(
+        conversation_id=conversation.id,
+        uploaded_by=athlete.id,
+        filename="nil-contract.pdf",
+        content_type="application/pdf",
+        size_bytes=123,
+        storage_key="conversation-files/originals/nil-contract.pdf",
+        extraction_status="ready",
+    )
+    await file_repo.update_ingestion_mirror(file, chunk_count=1)
+    kb_provider = FakeKnowledgebaseProvider()
+    kb_provider.conversation_file_chunks = [
+        RetrievedChunk(
+            text="The uploaded contract requires department approval before signing.",
+            similarity_score=0.95,
+            metadata={
+                "source_type": "conversation_file",
+                "organization_id": str(organization.id),
+                "conversation_id": str(conversation.id),
+                "conversation_file_id": str(file.id),
+                "document_id": str(file.id),
+                "kb_service_document_id": "00000000-0000-0000-0000-000000000091",
+                "chunk_id": "00000000-0000-0000-0000-000000000092",
+                "chunk_index": 1,
+                "source_title": "nil-contract.pdf",
+            },
+        )
+    ]
+
+    result = await AthleteChatExecutor(
+        session=db_session,
+        chat_model=object(),
+        knowledgebase_provider=kb_provider,
+        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
+        settings=test_settings,
+    ).execute(
+        task_id="task-mixed",
+        conversation_id=conversation.id,
+        athlete_user_id=athlete.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant_message.id,
+        organization_id=organization.id,
+        attached_file_ids=[file.id],
+    )
+
+    citations = await MessageCitationRepository(db_session).list_by_message(
+        assistant_message.id
+    )
+
+    assert result["answer_type"] == "grounded_answer"
+    assert len(citations) == 2
+    assert citations[0].source_title == "NIL Handbook"
+    assert citations[0].document_id == UUID("00000000-0000-0000-0000-000000000011")
+    assert citations[0].source_metadata.get("source_type") != "conversation_file"
+    assert citations[1].source_title == "nil-contract.pdf"
+    assert citations[1].document_id == file.id
+    assert citations[1].chunk_id == UUID("00000000-0000-0000-0000-000000000092")
+    assert citations[1].source_metadata["source_type"] == "conversation_file"
+    assert citations[1].source_metadata["conversation_file_id"] == str(file.id)
 
 
 @pytest.mark.asyncio

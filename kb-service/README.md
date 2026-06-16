@@ -22,6 +22,8 @@ POST /api/kb/ingest/document ───────▶ IngestionService ─▶ Ce
                                                             │  └─ stages page text to S3 (NDJSON)
                                                           chunk_task   (tiktoken recursive splitter)
                                                             │  └─ stages chunks to S3 (NDJSON)
+                                                          summarize_task (playbook-fast source summary)
+                                                            │  └─ persists kb.documents.summary
                                                           embed_task   (fan-out dispatcher)
                                                             └─▶ group(embed_batch_task)  (OpenAI / LiteLLM embeddings)
                                                                   └─ writes vectors → pgvector (kb.langchain_pg_embedding)
@@ -95,12 +97,15 @@ Once the API, Postgres, Valkey, S3/MinIO, LiteLLM, and KB workers are running:
 ```bash
 cd kb-service
 uv run python scripts/smoke_kb_service.py
+uv run python scripts/smoke_kb_service.py --include-conversation-file
 ```
 
 The script creates a tiny DOCX, uploads it to the configured bucket, ingests it,
 waits for the worker pipeline, runs retrieval, and deletes the test artifact by
-default. Use `--keep` to preserve the uploaded object and KB document while
-debugging.
+default. The optional `--include-conversation-file` flag also ingests a private
+conversation-file DOCX and verifies shared search excludes it while private
+conversation-scoped search can retrieve it. Use `--keep` to preserve uploaded
+objects and KB documents while debugging.
 
 ## Extending
 

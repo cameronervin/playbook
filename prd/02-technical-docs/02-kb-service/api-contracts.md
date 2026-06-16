@@ -16,7 +16,7 @@ All non-health endpoints require service-to-service bearer authentication.
 | GET | `/status/documents/{document_id}` | Return KB-service document status |
 | POST | `/documents/{document_id}/retry` | Retry ingestion for an existing KB-service document |
 | DELETE | `/documents/{document_id}` | Delete/archive a KB-service document and its vectors |
-| POST | `/search` | Search ready shared KB chunks |
+| POST | `/search` | Search ready shared KB chunks and trusted conversation-file chunks when explicitly scoped |
 
 The KB service exposes these semantic endpoints directly. Older scaffold route
 names are not part of the supported contract.

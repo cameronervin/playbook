@@ -95,6 +95,8 @@ def _strip_sensitive_metadata(value: dict[str, Any]) -> dict[str, Any]:
         "raw_text",
         "extracted_text",
         "file_contents",
+        "model_input",
+        "model_inputs",
     }
     sanitized: dict[str, Any] = {}
     for key, item in value.items():

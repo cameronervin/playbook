@@ -124,8 +124,9 @@ class SearchService:
             results=[
                 {
                     "document_id": str(c.document_id),
+                    "chunk_id": str(c.chunk_id) if c.chunk_id else None,
+                    "source_type": c.metadata.get("source_type"),
                     "score": round(c.score, 4),
-                    "text_preview": c.text[:200],
                 }
                 for c in response_results[:5]
             ],

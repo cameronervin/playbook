@@ -9,9 +9,13 @@ from app.core.log_redaction import redact_secrets
 def test_redact_secrets_masks_nested_secret_values() -> None:
     payload = {
         "OPENAI_API_KEY": "sk-openai-secret",
+        "source_uri": "https://storage.test/file.pdf?signature=source-secret",
+        "model_input": "private prompt with file text",
         "nested": {
             "KB_API_SECRET": "kb-secret",
             "headers": {"Authorization": "Bearer token-secret"},
+            "raw_text": "full private extracted text",
+            "file_contents": "binary-ish private file contents",
         },
         "message": "DATABASE_URL=postgresql://user:pass@localhost/db",
     }
@@ -21,6 +25,10 @@ def test_redact_secrets_masks_nested_secret_values() -> None:
 
     assert "sk-openai-secret" not in rendered
     assert "kb-secret" not in rendered
+    assert "source-secret" not in rendered
+    assert "private prompt" not in rendered
+    assert "full private extracted text" not in rendered
+    assert "binary-ish private file contents" not in rendered
     assert "token-secret" not in rendered
     assert "user:pass" not in rendered
     assert "[REDACTED]" in rendered

@@ -20,6 +20,14 @@ _SENSITIVE_KEY_PARTS = (
     "db_url",
     "access_key",
     "private_key",
+    "source_uri",
+    "presigned_url",
+    "signed_url",
+    "raw_text",
+    "extracted_text",
+    "file_contents",
+    "model_input",
+    "model_inputs",
 )
 
 _ASSIGNMENT_RE = re.compile(

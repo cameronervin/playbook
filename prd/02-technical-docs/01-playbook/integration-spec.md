@@ -143,8 +143,8 @@ separately from athlete conversations and must not expose athlete owner identity
 |------|---------|
 | Admin KB originals | S3-compatible storage |
 | Conversation file originals | S3-compatible storage |
-| Conversation extracted text/page JSON | S3-compatible storage |
-| Conversation file chunks | Main backend PostgreSQL |
+| Conversation extracted text/page JSON | KB-service S3 staging |
+| Conversation file chunks | KB-service PostgreSQL + pgvector |
 | Parsed/chunked staging | KB service S3 staging |
 | KB document vectors/chunk text | KB service PostgreSQL + pgvector |
 | Conversations/analytics/audit/admin chat | Main backend PostgreSQL |

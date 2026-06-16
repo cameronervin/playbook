@@ -103,8 +103,9 @@ When implementation differs from a task row, log it in `phase-{N}-*.deviations.m
 - MVP is a single-tenant prototype, designed for future multi-college expansion.
 - Athlete-uploaded files are conversation-scoped and retained in history.
 - Admin KB documents are visible to all athletes for MVP.
-- KB document chunks and vectors are owned by the KB service; conversation file
-  chunks are owned by the main backend and remain conversation-scoped.
+- KB document chunks, conversation-file chunks, and vectors are owned by the KB
+  service; conversation file retrieval remains conversation-scoped through
+  trusted backend metadata.
 - Metadata tags are preferred over a fixed document category taxonomy.
 - Admin analytics may show query text but should anonymize athlete identity.
 - No explicit university affiliation claims should appear in product copy or code identifiers.

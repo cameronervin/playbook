@@ -88,3 +88,35 @@ def test_extract_matching_results_finds_smoke_text_case_insensitively() -> None:
     )
 
     assert results == [{"text": "Athletes must DISCLOSE NIL deals.", "score": 0.8}]
+
+
+def test_extract_matching_results_accepts_private_terms() -> None:
+    smoke = _load_smoke_module()
+
+    results = smoke._matching_results(
+        {
+            "results": [
+                {"text": "Shared NIL disclosure policy.", "score": 0.9},
+                {
+                    "text": "Private approval clause requires department review.",
+                    "score": 0.8,
+                },
+            ],
+        },
+        terms=("private", "approval", "clause"),
+    )
+
+    assert results == [
+        {
+            "text": "Private approval clause requires department review.",
+            "score": 0.8,
+        }
+    ]
+
+
+def test_parse_args_supports_conversation_file_smoke_flag() -> None:
+    smoke = _load_smoke_module()
+
+    args = smoke._parse_args(["--include-conversation-file"])
+
+    assert args.include_conversation_file is True

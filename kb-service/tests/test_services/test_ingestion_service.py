@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
+from typing import Any
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -234,3 +237,125 @@ def test_dispatch_pipeline_inserts_summary_stage(monkeypatch) -> None:
 
     assert task_id == "pipeline-task"
     assert order == ["parse", "chunk", "summarize", "embed"]
+
+
+@dataclass
+class _RetryDocument:
+    id: UUID
+    configuration_id: UUID
+    s3_key: str
+    name: str
+    metadata_: dict[str, Any]
+
+
+@dataclass
+class _RetryConfig:
+    id: UUID
+
+
+class _RetryDocumentRepo:
+    def __init__(self, document: _RetryDocument) -> None:
+        self.document = document
+        self.status_updates: list[tuple[UUID, str]] = []
+
+    async def get(self, document_id: UUID) -> _RetryDocument | None:
+        return self.document if document_id == self.document.id else None
+
+    async def update_status(self, document_id: UUID, status: str) -> None:
+        self.status_updates.append((document_id, status))
+
+
+class _RetryConfigRepo:
+    def __init__(self, config: _RetryConfig) -> None:
+        self.config = config
+
+    async def get(self, config_id: UUID) -> _RetryConfig | None:
+        return self.config if config_id == self.config.id else None
+
+
+class _RetryLogRepo:
+    def __init__(self) -> None:
+        self.created: list[UUID] = []
+
+    async def get_by_document(self, document_id: UUID) -> object | None:
+        return None
+
+    async def create(self, document_id: UUID) -> None:
+        self.created.append(document_id)
+
+
+class _RetryVectorRepo:
+    def __init__(self) -> None:
+        self.deleted: list[UUID] = []
+
+    async def delete_document_embeddings(self, document_id: UUID) -> int:
+        self.deleted.append(document_id)
+        return 4
+
+
+@pytest.mark.asyncio
+async def test_retry_document_preserves_conversation_file_identity_and_deletes_vectors() -> None:
+    document_id = uuid4()
+    config = _RetryConfig(id=uuid4())
+    conversation_id = uuid4()
+    conversation_file_id = uuid4()
+    document = _RetryDocument(
+        id=document_id,
+        configuration_id=config.id,
+        s3_key="conversation-files/originals/contract.pdf",
+        name="contract.pdf",
+        metadata_={
+            "source_type": "conversation_file",
+            "organization_id": str(uuid4()),
+            "conversation_id": str(conversation_id),
+            "conversation_file_id": str(conversation_file_id),
+            "visibility_policy": {"scope": "conversation"},
+        },
+    )
+    service = ingestion_service.IngestionService.__new__(
+        ingestion_service.IngestionService
+    )
+    service._doc_repo = _RetryDocumentRepo(document)
+    service._config_repo = _RetryConfigRepo(config)
+    service._log_repo = _RetryLogRepo()
+    service._vector_repo = _RetryVectorRepo()
+    dispatched: dict[str, Any] = {}
+
+    async def fake_dispatch_pipeline(
+        document_id: UUID,
+        config: _RetryConfig,
+        s3_key: str,
+        filename: str,
+        metadata: dict[str, Any],
+    ) -> str:
+        dispatched.update(
+            {
+                "document_id": document_id,
+                "config_id": config.id,
+                "s3_key": s3_key,
+                "filename": filename,
+                "metadata": metadata,
+            }
+        )
+        return "retry-task-id"
+
+    service._dispatch_pipeline = fake_dispatch_pipeline
+
+    response = await service.retry_document(document_id)
+
+    assert service._vector_repo.deleted == [document_id]
+    assert service._doc_repo.status_updates == [(document_id, "pending")]
+    assert service._log_repo.created == [document_id]
+    assert dispatched == {
+        "document_id": document_id,
+        "config_id": config.id,
+        "s3_key": "conversation-files/originals/contract.pdf",
+        "filename": "contract.pdf",
+        "metadata": document.metadata_,
+    }
+    assert response.kb_service_document_id == document_id
+    assert response.source_type == "conversation_file"
+    assert response.conversation_id == conversation_id
+    assert response.conversation_file_id == conversation_file_id
+    assert response.task_id == "retry-task-id"
+    assert response.status == "pending"
