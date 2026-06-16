@@ -127,6 +127,38 @@ def test_map_search_row_uses_embedding_row_id_as_legacy_chunk_id_fallback() -> N
     assert mapped["metadata"]["chunk_index"] == 2
 
 
+def test_map_search_row_includes_source_summary_when_selected() -> None:
+    conversation_file_id = uuid.uuid4()
+    kb_doc_id = uuid.uuid4()
+    chunk_id = uuid.uuid4()
+
+    mapped = _map_search_row(
+        {
+            "document_id": conversation_file_id,
+            "kb_service_document_id": kb_doc_id,
+            "chunk_id": chunk_id,
+            "chunk_index": 3,
+            "document": "Private contract clause.",
+            "source_summary": "A short orientation summary for the contract.",
+            "cmetadata": {
+                "source_type": "conversation_file",
+                "conversation_id": str(uuid.uuid4()),
+                "conversation_file_id": str(conversation_file_id),
+                "source_locator": {"type": "page", "page_number": 4},
+            },
+            "score": 0.89,
+        }
+    )
+
+    assert mapped is not None
+    assert mapped["metadata"]["source_type"] == "conversation_file"
+    assert mapped["metadata"]["conversation_file_id"] == str(conversation_file_id)
+    assert mapped["metadata"]["source_locator"] == {"type": "page", "page_number": 4}
+    assert mapped["metadata"]["source_summary"] == (
+        "A short orientation summary for the contract."
+    )
+
+
 def test_chunk_records_store_deterministic_citation_metadata() -> None:
     kb_doc_id = uuid.uuid4()
     playbook_doc_id = uuid.uuid4()
@@ -259,6 +291,38 @@ def test_search_statement_requires_organization_scope_without_metadata_filter() 
     compiled = statement.compile(dialect=postgresql.dialect())
     assert "cmetadata @>" in str(compiled)
     assert {"organization_id": str(ORG_ID)} in compiled.params.values()
+
+
+def test_search_statement_applies_or_scoped_source_filters() -> None:
+    conversation_id = uuid.uuid4()
+    metadata_filters = [
+        {
+            "source_type": "admin_upload",
+            "visibility_policy": {"scope": "all_athletes"},
+        },
+        {
+            "source_type": "conversation_file",
+            "conversation_id": str(conversation_id),
+            "visibility_policy": {"scope": "conversation"},
+        },
+    ]
+
+    statement = _build_search_statement(
+        collection_id=uuid.uuid4(),
+        query_vector=[0.1] * 1536,
+        max_docs=10,
+        score_threshold=0.7,
+        organization_id=ORG_ID,
+        metadata_filter=None,
+        metadata_filters=metadata_filters,
+    )
+
+    compiled = statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert " OR " in sql
+    assert {"organization_id": str(ORG_ID)} in compiled.params.values()
+    assert metadata_filters[0] in compiled.params.values()
+    assert metadata_filters[1] in compiled.params.values()
 
 
 def test_search_statement_only_selects_successful_document_rows() -> None:

@@ -392,7 +392,7 @@ Do not do yet:
   lists.
 - Do not log raw summary input, extracted text, signed URLs, or file contents.
 
-## Phase 6: Private Retrieval
+## [IMPLEMENTED] Phase 6: Private Retrieval
 
 Scope:
 
@@ -409,6 +409,19 @@ Scope:
   - source title
   - source summary
   - locator metadata
+
+Implemented behavior:
+
+- `POST /api/kb/search` accepts `source_types`, defaulting to
+  `["admin_upload"]` so existing shared-KB callers cannot accidentally retrieve
+  private conversation-file chunks.
+- Conversation-file search requires trusted `conversation_id` at schema
+  validation time and can be narrowed by optional `file_ids`.
+- KB-service search builds source-scope metadata filters for shared
+  `admin_upload` results and private `conversation_file` results, then applies
+  those filters as an OR group after the mandatory organization filter.
+- Vector search results include citation-ready source metadata already present
+  on chunks plus `source_summary` from `kb.documents.summary` when available.
 
 Acceptance criteria:
 

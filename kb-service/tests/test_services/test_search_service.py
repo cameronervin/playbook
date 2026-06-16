@@ -78,6 +78,12 @@ async def test_search_resolves_default_configuration_before_vector_search() -> N
     assert response.total == 0
     assert config_service.resolve_calls == 1
     assert vector_repo.requests[0]["configuration_id"] == config_service.config.id
+    assert vector_repo.requests[0]["metadata_filters"] == [
+        {
+            "source_type": "admin_upload",
+            "visibility_policy": {"scope": "all_athletes"},
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -99,3 +105,108 @@ async def test_search_returns_zero_results_for_fresh_default_without_vectors() -
     assert response.total == 0
     assert config_service.resolve_calls == 1
     assert vector_repo.requests == []
+
+
+@pytest.mark.asyncio
+async def test_search_builds_private_conversation_file_filter() -> None:
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+    )
+    conversation_id = uuid4()
+
+    await service.search(
+        SearchRequest(
+            query="contract approval",
+            organization_id=uuid4(),
+            source_types=["conversation_file"],
+            conversation_id=conversation_id,
+        )
+    )
+
+    assert vector_repo.requests[0]["metadata_filters"] == [
+        {
+            "source_type": "conversation_file",
+            "conversation_id": str(conversation_id),
+            "visibility_policy": {"scope": "conversation"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_builds_file_narrowed_private_filters() -> None:
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+    )
+    conversation_id = uuid4()
+    file_a = uuid4()
+    file_b = uuid4()
+
+    await service.search(
+        SearchRequest(
+            query="contract approval",
+            organization_id=uuid4(),
+            source_types=["conversation_file"],
+            conversation_id=conversation_id,
+            file_ids=[file_a, file_b],
+        )
+    )
+
+    assert vector_repo.requests[0]["metadata_filters"] == [
+        {
+            "source_type": "conversation_file",
+            "conversation_id": str(conversation_id),
+            "conversation_file_id": str(file_a),
+            "visibility_policy": {"scope": "conversation"},
+        },
+        {
+            "source_type": "conversation_file",
+            "conversation_id": str(conversation_id),
+            "conversation_file_id": str(file_b),
+            "visibility_policy": {"scope": "conversation"},
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_builds_combined_shared_and_private_filters() -> None:
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+    )
+    conversation_id = uuid4()
+
+    await service.search(
+        SearchRequest(
+            query="nil contract approval",
+            organization_id=uuid4(),
+            source_types=["admin_upload", "conversation_file"],
+            conversation_id=conversation_id,
+            visibility_context={"role": "athlete"},
+        )
+    )
+
+    assert vector_repo.requests[0]["metadata_filters"] == [
+        {
+            "source_type": "admin_upload",
+            "visibility_policy": {"scope": "all_athletes"},
+        },
+        {
+            "source_type": "conversation_file",
+            "conversation_id": str(conversation_id),
+            "visibility_policy": {"scope": "conversation"},
+        },
+    ]

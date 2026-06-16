@@ -241,6 +241,9 @@ def _map_search_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "kb_document_id": str(kb_service_document_id),
         "score": score,
     }
+    source_summary = row.get("source_summary")
+    if source_summary is not None and "source_summary" not in metadata:
+        metadata["source_summary"] = source_summary
     if chunk_id is not None:
         metadata["chunk_id"] = str(chunk_id)
     if chunk_index is not None:
@@ -265,6 +268,7 @@ def _build_search_statement(
     score_threshold: float,
     organization_id: uuid.UUID | str,
     metadata_filter: dict[str, Any] | None,
+    metadata_filters: list[dict[str, Any]] | None = None,
 ):
     """Build the cosine-distance similarity SELECT shared by both repos.
 
@@ -303,7 +307,16 @@ def _build_search_statement(
             {"organization_id": str(organization_id)}
         )
     )
-    if metadata_filter:
+    if metadata_filters:
+        conditions.append(
+            or_(
+                *(
+                    VectorEmbedding.cmetadata.contains(filter_item)
+                    for filter_item in metadata_filters
+                )
+            )
+        )
+    elif metadata_filter:
         conditions.append(VectorEmbedding.cmetadata.contains(metadata_filter))
 
     score_expr = (1.0 - distance_expr).label("score")
@@ -315,6 +328,7 @@ def _build_search_statement(
             chunk_id_expr.label("chunk_id"),
             chunk_index_expr.label("chunk_index"),
             VectorEmbedding.document.label("document"),
+            Document.summary.label("source_summary"),
             VectorEmbedding.cmetadata.label("cmetadata"),
             score_expr,
         )
@@ -494,6 +508,7 @@ class VectorRepository:
         score_threshold: float,
         organization_id: uuid.UUID | str,
         metadata_filter: dict[str, Any] | None = None,
+        metadata_filters: list[dict[str, Any]] | None = None,
     ) -> list[dict]:
         if max_docs <= 0:
             return []
@@ -505,6 +520,7 @@ class VectorRepository:
             score_threshold=score_threshold,
             organization_id=organization_id,
             metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
         )
         with self._pg_engine.begin() as conn:
             rows = conn.execute(statement).mappings().all()
@@ -574,6 +590,7 @@ class AsyncVectorRepository:
         score_threshold: float,
         organization_id: uuid.UUID | str,
         metadata_filter: dict[str, Any] | None = None,
+        metadata_filters: list[dict[str, Any]] | None = None,
     ) -> list[dict]:
         if max_docs <= 0:
             return []
@@ -587,6 +604,7 @@ class AsyncVectorRepository:
             score_threshold=score_threshold,
             organization_id=organization_id,
             metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
         )
         result = await self._session.execute(statement)
         rows = result.mappings().all()

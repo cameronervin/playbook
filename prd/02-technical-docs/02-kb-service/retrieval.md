@@ -50,9 +50,10 @@ Source-type filters are mandatory:
 | `admin_upload` | `organization_id`, `source_type="admin_upload"`, visibility policy |
 | `conversation_file` | `organization_id`, `source_type="conversation_file"`, `conversation_id`, optional `file_ids` |
 
-If `conversation_file` search omits `conversation_id`, KB-service must return no
-private file chunks. Combined retrieval may return both source types only when
-the backend supplies the trusted private conversation scope.
+If `source_types` is omitted, KB-service searches only `admin_upload` chunks.
+If `conversation_file` search omits `conversation_id`, KB-service rejects the
+request before vector search. Combined retrieval may return both source types
+only when the backend supplies the trusted private conversation scope.
 
 ## Ranking Signals
 
@@ -82,6 +83,7 @@ Each result must include:
 - `metadata.source_date`,
 - `metadata.organization_id`,
 - `metadata.source_type`,
+- `metadata.source_summary` when the KB-service document has a summary,
 - `metadata.visibility_policy`.
 
 Conversation-file results must also include `metadata.conversation_id`,

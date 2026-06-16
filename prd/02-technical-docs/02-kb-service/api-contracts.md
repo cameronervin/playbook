@@ -150,6 +150,9 @@ POST /api/kb/search
 }
 ```
 
+If omitted, `source_types` defaults to `["admin_upload"]` so existing backend
+shared-KB retrieval cannot accidentally include conversation-file chunks.
+
 Private conversation-file retrieval requires trusted backend scope:
 
 ```json
@@ -178,8 +181,11 @@ Response:
       "score": 0.82,
       "metadata": {
         "source_title": "NIL Handbook",
+        "source_summary": "Short orientation summary for the source.",
         "source_date": "2026-01-15",
+        "source_type": "admin_upload",
         "organization_id": "uuid",
+        "source_locator": { "type": "page", "page_number": 3 },
         "visibility_policy": { "scope": "all_athletes" }
       }
     }

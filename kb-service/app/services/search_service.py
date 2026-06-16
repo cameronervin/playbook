@@ -29,6 +29,39 @@ def _metadata_filter_from_visibility_context(
     return {"visibility_policy": {"scope": "all_athletes"}}
 
 
+def _metadata_filters_from_search_request(req: SearchRequest) -> list[dict[str, object]]:
+    filters: list[dict[str, object]] = []
+
+    if "admin_upload" in req.source_types:
+        filters.append(
+            {
+                "source_type": "admin_upload",
+                **_metadata_filter_from_visibility_context(req.visibility_context),
+            }
+        )
+
+    if "conversation_file" in req.source_types:
+        if req.conversation_id is None:
+            return filters
+        private_filter: dict[str, object] = {
+            "source_type": "conversation_file",
+            "conversation_id": str(req.conversation_id),
+            "visibility_policy": {"scope": "conversation"},
+        }
+        if req.file_ids:
+            filters.extend(
+                {
+                    **private_filter,
+                    "conversation_file_id": str(file_id),
+                }
+                for file_id in req.file_ids
+            )
+        else:
+            filters.append(private_filter)
+
+    return filters
+
+
 class SearchService:
     def __init__(
         self,
@@ -42,9 +75,7 @@ class SearchService:
 
     async def search(self, req: SearchRequest) -> SearchResponse:
         config = await self._config_service.resolve()
-        metadata_filter = _metadata_filter_from_visibility_context(
-            req.visibility_context
-        )
+        metadata_filters = _metadata_filters_from_search_request(req)
 
         logger.info(
             "kb_embed_search_request",
@@ -55,6 +86,8 @@ class SearchService:
             limit=req.limit,
             score_threshold=req.score_threshold,
             visibility_context=req.visibility_context,
+            source_types=req.source_types,
+            has_file_filter=bool(req.file_ids),
         )
 
         # embed() is a sync, network-bound call. Run it in a worker thread so we
@@ -78,7 +111,7 @@ class SearchService:
             query_vector=query_vector,
             max_docs=req.limit,
             score_threshold=req.score_threshold,
-            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
         )
         response_results = [SearchResult(**chunk) for chunk in chunk_results]
         logger.info(

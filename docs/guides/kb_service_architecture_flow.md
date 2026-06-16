@@ -214,7 +214,7 @@ KB service search:
 ```text
 SearchService.search()
   -> ConfigurationService.resolve()
-  -> build visibility metadata filter
+  -> build source-scope metadata filters
   -> embed query
   -> AsyncVectorRepository.search()
   -> map rows into SearchResult
@@ -226,11 +226,18 @@ The pgvector query filters before ranking:
 collection_id matches resolved config
 AND kb.documents.status = 'success'
 AND vector metadata contains organization_id
-AND vector metadata contains visibility_policy
+AND (
+  vector metadata contains source_type=admin_upload + visibility_policy
+  OR vector metadata contains source_type=conversation_file + conversation_id
+)
 AND cosine score >= threshold
 ORDER BY cosine distance ASC
 LIMIT request.limit
 ```
+
+`source_types` defaults to `["admin_upload"]`. Private conversation-file search
+requires backend-supplied `conversation_id` and can be narrowed by `file_ids`;
+browser callers never choose these KB-service filters directly.
 
 Current ranking is vector-similarity first from KB-service, then the backend
 keeps semantic relevance bands and prefers newer `source_date` within
