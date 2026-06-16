@@ -67,6 +67,24 @@ class MockProvider(BaseKnowledgebaseProvider):
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
+        return await self.search_admin_uploads(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            configuration_id=configuration_id,
+        )
+
+    async def search_admin_uploads(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        max_docs: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
         start = time.monotonic()
         resolved_max_docs = max_docs if max_docs is not None else self.settings.KB_MAX_DOCS
         resolved_score_threshold = (
@@ -96,6 +114,27 @@ class MockProvider(BaseKnowledgebaseProvider):
             sources=chunks,
             confidence=chunks[0].similarity_score if chunks else None,
             zero_hit=len(chunks) == 0,
+            latency_ms=latency_ms,
+        )
+
+    async def search_conversation_files(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        conversation_id: UUID | str,
+        file_ids: list[UUID | str] | None = None,
+        max_docs: int | None = None,
+        score_threshold: float | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        start = time.monotonic()
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return KnowledgebaseResult(
+            query=query,
+            context="",
+            sources=[],
+            confidence=None,
+            zero_hit=True,
             latency_ms=latency_ms,
         )
 

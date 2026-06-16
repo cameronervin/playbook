@@ -6,6 +6,8 @@ from app.agents.tools.knowledgebase import (
     ATHLETE_KB_TOOL_PROFILE,
     KnowledgebaseToolProfile,
     create_knowledgebase_search_tool,
+    format_conversation_file_context,
+    register_knowledgebase_sources,
 )
 from app.infrastructure.knowledgebase.providers.local_kb import LocalKBProvider
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
@@ -19,6 +21,7 @@ class FakeKnowledgebaseProvider:
     def __init__(self, result: KnowledgebaseResult | None = None) -> None:
         self.result = result
         self.requests: list[dict[str, object]] = []
+        self.admin_upload_requests: list[dict[str, object]] = []
 
     async def search(
         self,
@@ -46,6 +49,26 @@ class FakeKnowledgebaseProvider:
             zero_hit=True,
             latency_ms=1,
         )
+
+    async def search_admin_uploads(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        max_docs: int = 10,
+        score_threshold: float = 0.7,
+        metadata_filter: dict | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        result = await self.search(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            configuration_id=configuration_id,
+        )
+        self.admin_upload_requests.append(self.requests[-1])
+        return result
 
     async def health_check(self) -> bool:
         return True
@@ -334,6 +357,7 @@ async def test_athlete_kb_tool_filters_by_visibility_policy_scope() -> None:
 
     await _invoke_tool(tool, "nil disclosure")
 
+    assert provider.admin_upload_requests == provider.requests
     assert provider.requests == [
         {
             "query": "nil disclosure",
@@ -344,6 +368,62 @@ async def test_athlete_kb_tool_filters_by_visibility_policy_scope() -> None:
             "configuration_id": None,
         }
     ]
+
+
+async def test_knowledgebase_tool_uses_admin_upload_provider_method() -> None:
+    provider = FakeKnowledgebaseProvider()
+    tool = create_knowledgebase_search_tool(
+        ATHLETE_KB_TOOL_PROFILE,
+        provider=provider,
+    )
+
+    await _invoke_tool(tool, "compliance")
+
+    assert len(provider.admin_upload_requests) == 1
+    assert provider.admin_upload_requests[0]["metadata_filter"] == {
+        "visibility_policy": {"scope": "all_athletes"}
+    }
+
+
+def test_conversation_file_context_registers_sources_and_redacts_sensitive_metadata() -> None:
+    registry = {}
+    result = KnowledgebaseResult(
+        query="approval",
+        context="context",
+        sources=[
+            RetrievedChunk(
+                text="The contract requires department approval before signing.",
+                similarity_score=0.92,
+                metadata={
+                    "source_type": "conversation_file",
+                    "document_id": "00000000-0000-0000-0000-000000000031",
+                    "conversation_id": "00000000-0000-0000-0000-000000000041",
+                    "conversation_file_id": "00000000-0000-0000-0000-000000000031",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000051",
+                    "chunk_id": "00000000-0000-0000-0000-000000000061",
+                    "chunk_index": 7,
+                    "source_title": "contract.pdf",
+                    "source_summary": "A summary that orients the file.",
+                    "source_locator": {"type": "page", "page_number": 3},
+                    "source_uri": "https://storage.test/file.pdf?signature=secret",
+                    "raw_text": "full private file text",
+                },
+            )
+        ],
+        confidence=0.92,
+        zero_hit=False,
+        latency_ms=3,
+    )
+
+    sources = register_knowledgebase_sources(result, registry=registry)
+    context = format_conversation_file_context(sources)
+
+    assert sources[0].source_key in registry
+    assert sources[0].metadata["source_type"] == "conversation_file"
+    assert "signature=secret" not in context
+    assert "full private file text" not in context
+    assert "Source summary (orientation only)" in context
+    assert "Excerpt: The contract requires department approval" in context
 
 
 async def test_knowledgebase_tool_profiles_can_be_reused_for_distinct_agents() -> None:

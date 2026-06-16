@@ -60,6 +60,7 @@ def compose_athlete_chat_dependencies(
     chains = create_athlete_chat_chain_set(
         chat_model=chat_model,
         tools=athlete_tools,
+        settings=app_settings,
     )
     logger.info("agent_chains_created", count=len(chains), scope="athlete_chat")
     nodes = create_athlete_chat_node_set(
@@ -68,6 +69,7 @@ def compose_athlete_chat_dependencies(
         settings=app_settings,
         stream_service=stream_service,
         source_registry=source_registry,
+        knowledgebase_provider=knowledgebase_provider,
     )
     logger.info("agent_nodes_created", count=len(nodes), scope="athlete_chat")
     return GraphDependencies(

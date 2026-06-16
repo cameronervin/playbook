@@ -26,9 +26,9 @@ def create_athlete_chat_middleware(settings: Settings | None = None) -> Callable
     """Create middleware for the structured athlete chat agent.
 
     The athlete workflow intentionally keeps the bounded history loaded by the
-    graph's ``load_state`` node. This middleware only removes blank message
-    noise, applies the loop guard, and appends compact runtime flags that help
-    the model understand the current turn without injecting KB or file content.
+    graph's ``load_state`` node. This middleware removes blank message noise,
+    applies the loop guard, and appends compact runtime flags plus any
+    pre-retrieved conversation-file snippets prepared by the graph.
     """
 
     @wrap_model_call
@@ -61,8 +61,11 @@ def create_athlete_chat_middleware(settings: Settings | None = None) -> Callable
                 filtered_count=filtered_count,
             )
 
-        runtime_context = _build_runtime_context(state)
-        messages = [*valid_messages, HumanMessage(content=runtime_context)]
+        appended_context = [HumanMessage(content=_build_runtime_context(state))]
+        file_context = _build_conversation_file_context(state)
+        if file_context:
+            appended_context.append(HumanMessage(content=file_context))
+        messages = [*valid_messages, *appended_context]
         return await handler(request.override(messages=messages))
 
     return athlete_chat_context
@@ -109,6 +112,12 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
             f"Attached file IDs: {_csv_or_none(attached_file_ids)}",
         ]
     )
+
+
+def _build_conversation_file_context(state: dict[str, Any]) -> str:
+    """Return pre-retrieved private file snippets for model-call injection."""
+    context = _string_value(state.get("conversation_file_context"))
+    return context
 
 
 def _content_has_text(content: Any) -> bool:

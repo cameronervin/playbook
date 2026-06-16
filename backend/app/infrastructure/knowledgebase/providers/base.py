@@ -67,6 +67,38 @@ class BaseKnowledgebaseProvider(ABC):
         """
         ...
 
+    async def search_admin_uploads(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        max_docs: int = DEFAULT_KB_MAX_DOCS,
+        score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
+        metadata_filter: dict | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        """Search shared, athlete-visible admin uploads."""
+        return await self.search(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            configuration_id=configuration_id,
+        )
+
+    async def search_conversation_files(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        conversation_id: UUID | str,
+        file_ids: list[UUID | str] | None = None,
+        max_docs: int = DEFAULT_KB_MAX_DOCS,
+        score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        """Search private conversation-scoped file chunks."""
+        raise NotImplementedError
+
     @abstractmethod
     async def health_check(self) -> bool:
         """Check whether the underlying provider is reachable.

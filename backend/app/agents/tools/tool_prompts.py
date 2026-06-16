@@ -28,6 +28,11 @@ admin-official. If comparable sources conflict, prefer the newest applicable
 source_date. Do not invent source keys. If tool results are missing or do not
 support the answer, use answer_type "unsupported" and direct the athlete to the
 athletic department.
+
+Athlete chat middleware may also append a "Conversation File Context" section
+for uploaded files in this conversation. Those source keys are valid citation
+keys. Use the excerpt text as evidence; source summaries are orientation only
+and must not be cited as supporting evidence.
 </tools>
 """
 

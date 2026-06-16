@@ -12,12 +12,14 @@ from app.agents.chains.athlete_chat_chain import create_athlete_chat_chain
 from app.agents.context.prompt_composers.athlete_chat_prompt_composer import (
     build_athlete_chat_prompts,
 )
+from app.core.config import Settings
 
 
 def create_athlete_chat_chain_set(
     *,
     chat_model: BaseChatModel,
     tools: Sequence[BaseTool],
+    settings: Settings,
 ) -> dict[str, Any]:
     """Create the chains required by the athlete chat workflow."""
     prompts = build_athlete_chat_prompts([tool.name for tool in tools])
@@ -26,6 +28,7 @@ def create_athlete_chat_chain_set(
             chat_model=chat_model,
             tools=tools,
             system_prompt=prompts["athlete_chat"],
+            settings=settings,
         ),
     }
 
@@ -34,11 +37,13 @@ def create_all_chains(
     *,
     chat_model: BaseChatModel,
     tools: Sequence[BaseTool],
+    settings: Settings,
 ) -> dict[str, Any]:
     """Create all chain sets for the active agent subsystem."""
     return {
         **create_athlete_chat_chain_set(
             chat_model=chat_model,
             tools=tools,
+            settings=settings,
         )
     }

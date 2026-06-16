@@ -34,7 +34,9 @@ Three active components:
 
 1. **Graph state** — bounded messages and JSON-safe runtime fields loaded by graph nodes.
 2. **Middleware** — filters message noise, enforces loop guardrails, and appends compact flags.
-3. **Tools** — retrieve large or authoritative context just in time.
+3. **Deterministic retrieval nodes** — preload trusted private context that the
+   model must not scope for itself.
+4. **Tools** — retrieve large or authoritative shared context just in time.
 
 ## 1. Athlete Middleware
 
@@ -45,21 +47,48 @@ Athlete chat uses `create_athlete_chat_middleware()` in the nested
 - drops blank human/AI messages while preserving system messages, AI tool calls,
   and tool results;
 - applies `assert_message_loop_bounded(...)`;
-- appends only compact runtime context: current question, KB-support flag,
-  topic/risk labels, and attached-file IDs/count.
+- appends compact runtime context: current question, KB-support flag,
+  topic/risk labels, and attached-file IDs/count;
+- appends prepared conversation-file snippets as the final model-call context
+  message when the graph has retrieved them for the current turn.
 
 It must not inject KB search results, extracted uploaded-file text, secrets, or
-citation metadata. The model gets official guidance through
-`search_playbook_knowledgebase`, and `save_state` validates/persists citations.
+citation metadata. The model gets official shared guidance through
+`search_playbook_knowledgebase`, private uploaded-file snippets through
+middleware-appended state prepared by the graph, and `save_state`
+validates/persists citations.
 
-## 2. Policy Utilities
+## 2. Conversation-File Context Preparation
+
+Athlete chat runs `prepare_conversation_file_snippets` after deterministic safety
+checks and before model generation. The graph node:
+
+- skips safety-bypass turns;
+- selects only `conversation_files` rows with `extraction_status="ready"` and
+  `chunk_count > 0`;
+- narrows to attached `file_ids` when present, otherwise searches all ready
+  files in the conversation;
+- calls `search_conversation_files(...)` with trusted backend
+  `organization_id`, `conversation_id`, and selected file IDs;
+- registers returned chunks in the shared source registry;
+- stores a bounded `conversation_file_context` string in graph state with
+  snippets, source keys, summaries as orientation only, and locator metadata.
+
+The middleware appends that prepared context at model-call time after the
+compact runtime context. Retrieval stays outside middleware so tool loops do not
+repeat private KB searches.
+
+The model never receives whole uploaded documents, storage keys, signed URLs, or
+raw extracted-text artifacts.
+
+## 3. Policy Utilities
 
 For future workflows, a policy can be the single source of truth for what
 context a step gets. `policies.py` defines `ContextField` and
 `PhaseContextPolicy`; the registry is intentionally empty until another
 workflow needs declarative context injection.
 
-## 3. Serializers
+## 4. Serializers
 
 Serializers turn state objects into text at a chosen level of detail. Use tiers
 to spend tokens only where they matter.
@@ -101,9 +130,12 @@ def get_serializer(field_name: str, tier: str):
   `load_state` and passed as bounded LangChain messages. The athlete-specific
   middleware preserves that history, filters blank message entries, applies the
   message-loop guard, and appends a compact runtime context with the current
-  question, KB-support flag, labels, and attached-file IDs/count only. KB context
-  is loaded just-in-time through the `search_playbook_knowledgebase` tool, and
-  citation metadata is captured from tool results rather than injected wholesale.
+  question, KB-support flag, labels, and attached-file IDs/count only. Shared KB
+  context is loaded just-in-time through the `search_playbook_knowledgebase`
+  tool. Conversation-file context is prepared deterministically by the graph
+  because the model must not choose private source scope, then appended by
+  middleware on model call. Citation metadata is captured from registered
+  sources rather than injected wholesale.
 
 ## Prompt Caching
 

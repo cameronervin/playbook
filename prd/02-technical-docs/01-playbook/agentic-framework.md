@@ -90,7 +90,9 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
 4. Classify topic/risk labels for analytics.
 5. Run safety pre-check for emergency, medical, legal, mental-health, harassment/reporting, recruiting, NIL, and compliance risk.
 6. Retrieve KB context using organization and visibility filters.
-7. Retrieve conversation file context if file IDs are present.
+7. Retrieve conversation file context from ready, nonempty files. Attached file
+   IDs narrow retrieval; when no files are attached, search all ready files in
+   the conversation.
 8. Rank context using semantic relevance and freshness metadata.
 9. Generate answer chunks and publish stream events to Valkey Streams under `task_id`.
 10. Attach bottom citations for grounded answers.

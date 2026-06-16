@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.nodes.athlete_chat import create_athlete_chat_nodes
 from app.agents.tools.knowledgebase import SourceRegistry
 from app.core.config import Settings
+from app.infrastructure.knowledgebase import BaseKnowledgebaseProvider
 from app.services.agent_stream_service import AgentStreamService
 
 
@@ -19,6 +20,7 @@ def create_athlete_chat_node_set(
     settings: Settings,
     stream_service: AgentStreamService,
     source_registry: SourceRegistry,
+    knowledgebase_provider: BaseKnowledgebaseProvider,
 ) -> dict[str, Any]:
     """Create the node set for the athlete chat workflow."""
     return {
@@ -28,6 +30,7 @@ def create_athlete_chat_node_set(
             settings=settings,
             stream_service=stream_service,
             source_registry=source_registry,
+            knowledgebase_provider=knowledgebase_provider,
         )
     }
 
@@ -39,6 +42,7 @@ def create_all_nodes(
     settings: Settings,
     stream_service: AgentStreamService,
     source_registry: SourceRegistry,
+    knowledgebase_provider: BaseKnowledgebaseProvider,
 ) -> dict[str, Any]:
     """Create all node sets for the active agent subsystem."""
     return {
@@ -48,5 +52,6 @@ def create_all_nodes(
             settings=settings,
             stream_service=stream_service,
             source_registry=source_registry,
+            knowledgebase_provider=knowledgebase_provider,
         )
     }

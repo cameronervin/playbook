@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -73,6 +74,16 @@ class KnowledgebaseSource:
 
 
 SourceRegistry = dict[str, KnowledgebaseSource]
+SENSITIVE_SOURCE_METADATA_KEYS = {
+    "source_uri",
+    "presigned_url",
+    "signed_url",
+    "raw_text",
+    "extracted_text",
+    "file_contents",
+    "model_input",
+    "model_inputs",
+}
 
 ATHLETE_KB_TOOL_PROFILE = KnowledgebaseToolProfile(
     tool_name="search_playbook_knowledgebase",
@@ -136,7 +147,7 @@ def create_knowledgebase_search_tool(
         )
 
         try:
-            result = await kb_provider.search(
+            result = await kb_provider.search_admin_uploads(
                 query=query,
                 organization_id=organization_id,
                 max_docs=resolved_max_docs,
@@ -189,17 +200,84 @@ def _format_search_result(
     if result.zero_hit or not result.sources:
         return profile.no_results_message
 
-    sections: list[str] = []
+    sources = register_knowledgebase_sources(result, registry=registry)
+    return "\n\n".join(
+        _format_source(source, rank=rank)
+        for rank, source in enumerate(sources, start=1)
+    )
+
+
+def register_knowledgebase_sources(
+    result: KnowledgebaseResult,
+    *,
+    registry: SourceRegistry,
+) -> list[KnowledgebaseSource]:
+    """Register citation-ready chunks and return their source records."""
+    if result.zero_hit or not result.sources:
+        return []
+
+    sources: list[KnowledgebaseSource] = []
     for rank, chunk in enumerate(result.sources, start=1):
         source = _source_from_chunk(chunk, rank=rank)
         registry[source.source_key] = source
-        sections.append(_format_source(source, rank=rank))
+        sources.append(source)
+    return sources
 
-    return "\n\n".join(sections)
+
+def format_conversation_file_context(
+    sources: list[KnowledgebaseSource],
+) -> str:
+    """Format deterministic private file context for the athlete chat model."""
+    if not sources:
+        return ""
+
+    sections: list[str] = []
+    for rank, source in enumerate(sources, start=1):
+        meta = source.metadata
+        lines = [
+            f"[{source.source_key}] {source.source_title}",
+            f"Rank: {rank}",
+            "Source type: conversation_file",
+        ]
+        for key, label in (
+            ("conversation_file_id", "Conversation file ID"),
+            ("conversation_id", "Conversation ID"),
+            ("kb_service_document_id", "KB Service Document ID"),
+            ("chunk_id", "Chunk ID"),
+            ("chunk_index", "Chunk index"),
+        ):
+            if meta.get(key) is not None:
+                lines.append(f"{label}: {meta[key]}")
+        if meta.get("source_locator") is not None:
+            lines.append(
+                "Locator: "
+                + json.dumps(meta["source_locator"], sort_keys=True, default=str)
+            )
+        if meta.get("source_summary"):
+            lines.append(
+                "Source summary (orientation only): "
+                + str(meta["source_summary"])
+            )
+        if source.similarity_score is not None:
+            lines.append(f"Similarity: {source.similarity_score:.3f}")
+        lines.append(f"Excerpt: {source.text}")
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(
+        [
+            "## Conversation File Context",
+            (
+                "Use the excerpts below as evidence for this conversation only. "
+                "Source summaries are orientation only and must not be cited as "
+                "evidence."
+            ),
+            *sections,
+        ]
+    )
 
 
 def _source_from_chunk(chunk: RetrievedChunk, *, rank: int) -> KnowledgebaseSource:
-    metadata = dict(chunk.metadata or {})
+    metadata = _sanitize_source_metadata(dict(chunk.metadata or {}))
     source_title = str(
         metadata.get("source_title")
         or metadata.get("doc_title")
@@ -208,7 +286,9 @@ def _source_from_chunk(chunk: RetrievedChunk, *, rank: int) -> KnowledgebaseSour
     )
     key_basis = "|".join(
         [
+            str(metadata.get("source_type", "")),
             str(metadata.get("document_id", "")),
+            str(metadata.get("conversation_file_id", "")),
             str(metadata.get("chunk_id", "")),
             str(rank),
             chunk.text[:120],
@@ -230,6 +310,7 @@ def _format_source(source: KnowledgebaseSource, *, rank: int) -> str:
         f"Rank: {rank}",
     ]
     for key, label in (
+        ("source_type", "Source type"),
         ("document_id", "Document ID"),
         ("kb_service_document_id", "KB Service Document ID"),
         ("chunk_id", "Chunk ID"),
@@ -242,3 +323,15 @@ def _format_source(source: KnowledgebaseSource, *, rank: int) -> str:
         lines.append(f"Similarity: {source.similarity_score:.3f}")
     lines.append(f"Excerpt: {source.text}")
     return "\n".join(lines)
+
+
+def _sanitize_source_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if key in SENSITIVE_SOURCE_METADATA_KEYS:
+            continue
+        if isinstance(value, dict):
+            sanitized[key] = _sanitize_source_metadata(value)
+        else:
+            sanitized[key] = value
+    return sanitized

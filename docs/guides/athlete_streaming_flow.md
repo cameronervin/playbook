@@ -151,6 +151,7 @@ return StreamingResponse(
 ```python
 await stream_service.publish_progress(task_id, status="loading_context")
 await stream_service.publish_progress(task_id, status="checking_safety")
+await stream_service.publish_progress(task_id, status="retrieving_file_context")
 await stream_service.publish_progress(task_id, status="running_agent")
 await stream_service.publish_chunk(task_id, content="Final assistant text")
 await stream_service.publish_complete(

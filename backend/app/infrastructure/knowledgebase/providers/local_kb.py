@@ -68,22 +68,95 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
-        start = time.monotonic()
+        """Compatibility shared-KB search path."""
+        return await self.search_admin_uploads(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            configuration_id=configuration_id,
+        )
+
+    async def search_admin_uploads(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        max_docs: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        """Search shared admin-uploaded KB sources only."""
+        payload = self._search_payload(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+        )
+        payload.update(
+            {
+                "source_types": ["admin_upload"],
+                "visibility_context": _visibility_context(metadata_filter),
+            }
+        )
+        return await self._search_with_payload(query=query, payload=payload)
+
+    async def search_conversation_files(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        conversation_id: UUID | str,
+        file_ids: list[UUID | str] | None = None,
+        max_docs: int | None = None,
+        score_threshold: float | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        """Search private chunks for one trusted conversation scope."""
+        payload = self._search_payload(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+        )
+        payload.update(
+            {
+                "source_types": ["conversation_file"],
+                "conversation_id": str(conversation_id),
+                "file_ids": [str(file_id) for file_id in file_ids or []],
+                "visibility_context": {"role": "athlete"},
+            }
+        )
+        return await self._search_with_payload(query=query, payload=payload)
+
+    def _search_payload(
+        self,
+        *,
+        query: str,
+        organization_id: UUID | str,
+        max_docs: int | None,
+        score_threshold: float | None,
+    ) -> dict[str, Any]:
         resolved_max_docs = max_docs if max_docs is not None else self.settings.KB_MAX_DOCS
         resolved_score_threshold = (
             score_threshold
             if score_threshold is not None
             else self.settings.KB_SCORE_THRESHOLD
         )
-
-        payload: dict[str, Any] = {
+        return {
             "query": query,
             "organization_id": str(organization_id),
             "limit": resolved_max_docs,
             "score_threshold": resolved_score_threshold,
-            "visibility_context": _visibility_context(metadata_filter),
         }
 
+    async def _search_with_payload(
+        self,
+        *,
+        query: str,
+        payload: dict[str, Any],
+    ) -> KnowledgebaseResult:
+        start = time.monotonic()
         data = await self._post("/api/kb/search", payload)
 
         raw_items = data.get("results", []) if isinstance(data, dict) else []
@@ -306,6 +379,13 @@ def _chunk_metadata(item: dict[str, Any]) -> dict[str, Any]:
         "visibility_policy",
         "metadata_tags",
         "content_type",
+        "source_type",
+        "organization_id",
+        "playbook_document_id",
+        "conversation_id",
+        "conversation_file_id",
+        "source_summary",
+        "source_locator",
     ):
         if key in item and key not in metadata:
             metadata[key] = item[key]

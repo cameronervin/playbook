@@ -435,7 +435,7 @@ Do not do yet:
 - Do not let frontend callers send arbitrary KB-service search filters.
 - Do not rely on source summaries alone for answer grounding.
 
-## Phase 7: Agent Context and Citations
+## [IMPLEMENTED] Phase 7: Agent Context and Citations
 
 Scope:
 
@@ -449,6 +449,29 @@ Scope:
 - Inject retrieved snippets plus compact source summaries into model context.
 - Persist citations with `source_type=admin_upload` or
   `source_type=conversation_file`.
+
+Implemented behavior:
+
+- Backend knowledgebase providers now expose separate
+  `search_admin_uploads(...)` and `search_conversation_files(...)` methods.
+  The local provider sends explicit `source_types=["admin_upload"]` for shared
+  retrieval and `source_types=["conversation_file"]` plus trusted
+  `conversation_id` and backend-selected `file_ids` for private retrieval.
+- Athlete chat runs a deterministic `prepare_conversation_file_snippets` graph
+  node after safety checks and before generation. The node skips safety-bypass
+  turns, selects only ready files with `chunk_count > 0`, narrows to attached
+  file IDs when present, and otherwise searches all ready files in the
+  conversation.
+- Retrieved conversation-file chunks are registered in the same citation source
+  registry as shared KB tool results. The graph stores bounded snippets in
+  state, and athlete chat middleware appends them at model-call time with
+  source keys, source summaries as orientation only, and locator metadata. The
+  model never receives whole documents, storage keys, signed URLs, or raw
+  extracted artifacts.
+- `save_state` persists mixed citations through `message_citations`. Shared KB
+  citations keep Playbook document IDs, while conversation-file citations store
+  the backend conversation file ID in `document_id` and retain trusted private
+  source identity plus locator metadata in `source_metadata`.
 
 Acceptance criteria:
 

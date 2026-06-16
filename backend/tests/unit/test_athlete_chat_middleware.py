@@ -123,6 +123,45 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
 
 
 @pytest.mark.asyncio
+async def test_athlete_chat_middleware_appends_file_context_after_runtime_context() -> None:
+    messages = await _capture_messages(
+        _request(
+            messages=[HumanMessage(content="Does this contract require approval?")],
+            state={
+                "task_id": "task-123",
+                "conversation_id": "conversation-123",
+                "user_message_content": "Does this contract require approval?",
+                "attached_file_ids": ["file-1"],
+                "conversation_file_context": "## Conversation File Context\n[S-file] Contract",
+                "conversation_file_source_count": 1,
+                "conversation_file_ready_file_ids": ["file-1"],
+            },
+        )
+    )
+
+    assert "## Athlete Chat Runtime Context" in messages[-2].content
+    assert messages[-1].content == "## Conversation File Context\n[S-file] Contract"
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_middleware_skips_empty_file_context() -> None:
+    messages = await _capture_messages(
+        _request(
+            messages=[HumanMessage(content="Does this contract require approval?")],
+            state={
+                "task_id": "task-123",
+                "conversation_id": "conversation-123",
+                "user_message_content": "Does this contract require approval?",
+                "conversation_file_context": "   ",
+            },
+        )
+    )
+
+    assert len(messages) == 2
+    assert "## Athlete Chat Runtime Context" in messages[-1].content
+
+
+@pytest.mark.asyncio
 async def test_athlete_chat_middleware_uses_loop_guard() -> None:
     settings = SimpleNamespace(AGENT_MAX_MESSAGES_PER_LLM_CALL=1)
     middleware = create_athlete_chat_middleware(settings=settings)  # type: ignore[arg-type]

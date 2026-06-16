@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.context.token_budget import truncate_to_token_budget
 from app.agents.guardrails.safety import evaluate_athlete_message_safety
 from app.agents.states.athlete_chat_state import (
     AthleteChatState,
@@ -19,11 +20,15 @@ from app.agents.states.athlete_chat_state import (
 from app.agents.tools.knowledgebase import (
     KnowledgebaseSource,
     SourceRegistry,
+    format_conversation_file_context,
     knowledgebase_organization_context,
+    register_knowledgebase_sources,
 )
 from app.core.config import Settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import KnowledgebaseError, NotFoundError
+from app.infrastructure.knowledgebase import BaseKnowledgebaseProvider
 from app.repositories.conversations import (
+    ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
     MessageCitationRepository,
@@ -45,11 +50,13 @@ def create_athlete_chat_nodes(
     settings: Settings,
     stream_service: AgentStreamService,
     source_registry: SourceRegistry,
+    knowledgebase_provider: BaseKnowledgebaseProvider,
 ) -> dict[str, Any]:
     """Create all nodes needed by the athlete chat graph."""
     conversation_repo = ConversationRepository(session)
     message_repo = ConversationMessageRepository(session)
     citation_repo = MessageCitationRepository(session)
+    file_repo = ConversationFileRepository(session)
 
     async def load_state(state: AthleteChatState) -> dict[str, Any]:
         """Validate task ownership and load bounded conversation history."""
@@ -148,6 +155,84 @@ def create_athlete_chat_nodes(
             "safety_outcome": decision.safety_outcome,
         }
 
+    async def prepare_conversation_file_snippets(
+        state: AthleteChatState,
+    ) -> dict[str, Any]:
+        """Prepare trusted private conversation-file snippets for middleware."""
+        if state.get("should_bypass_agent", False):
+            return _empty_conversation_file_context()
+
+        task_id = state["task_id"]
+        conversation_id = UUID(state["conversation_id"])
+        organization_id = UUID(state["organization_id"])
+        attached_file_ids = _uuid_list(state.get("attached_file_ids", []))
+        await stream_service.publish_progress(
+            task_id,
+            status="retrieving_file_context",
+            metadata={
+                "conversation_id": str(conversation_id),
+                "attached_file_count": len(attached_file_ids),
+            },
+        )
+
+        if attached_file_ids:
+            ready_files = await file_repo.list_ready_by_conversation_and_ids(
+                conversation_id,
+                attached_file_ids,
+            )
+        else:
+            ready_files = await file_repo.list_ready_by_conversation(conversation_id)
+        ready_file_ids = [file.id for file in ready_files]
+        if not ready_file_ids:
+            return _empty_conversation_file_context()
+
+        try:
+            result = await knowledgebase_provider.search_conversation_files(
+                query=state.get("user_message_content", ""),
+                organization_id=organization_id,
+                conversation_id=conversation_id,
+                file_ids=ready_file_ids,
+                max_docs=settings.KB_MAX_DOCS,
+                score_threshold=settings.KB_SCORE_THRESHOLD,
+            )
+        except KnowledgebaseError as exc:
+            logger.warning(
+                "athlete_chat_conversation_file_context_unavailable",
+                task_id=task_id,
+                conversation_id=str(conversation_id),
+                error_type=type(exc).__name__,
+            )
+            return _empty_conversation_file_context()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "athlete_chat_conversation_file_context_error",
+                task_id=task_id,
+                conversation_id=str(conversation_id),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+            return _empty_conversation_file_context()
+
+        sources = register_knowledgebase_sources(result, registry=source_registry)
+        context = format_conversation_file_context(sources)
+        if not context:
+            return _empty_conversation_file_context()
+        context = truncate_to_token_budget(context, settings.KB_CONTEXT_MAX_TOKENS)
+        logger.info(
+            "athlete_chat_conversation_file_context_loaded",
+            task_id=task_id,
+            conversation_id=str(conversation_id),
+            ready_file_count=len(ready_file_ids),
+            source_count=len(sources),
+        )
+        return {
+            "conversation_file_context": context,
+            "conversation_file_source_count": len(sources),
+            "conversation_file_ready_file_ids": [
+                str(file_id) for file_id in ready_file_ids
+            ],
+        }
+
     async def run_agent(state: AthleteChatState) -> dict[str, Any]:
         """Invoke the structured athlete chat agent."""
         task_id = state["task_id"]
@@ -160,6 +245,18 @@ def create_athlete_chat_nodes(
                     "conversation_id": state["conversation_id"],
                     "user_message_content": state.get("user_message_content", ""),
                     "attached_file_ids": state.get("attached_file_ids", []),
+                    "conversation_file_context": state.get(
+                        "conversation_file_context",
+                        "",
+                    ),
+                    "conversation_file_source_count": state.get(
+                        "conversation_file_source_count",
+                        0,
+                    ),
+                    "conversation_file_ready_file_ids": state.get(
+                        "conversation_file_ready_file_ids",
+                        [],
+                    ),
                     "requires_kb_support": state.get("requires_kb_support", False),
                     "topic_labels": state.get("topic_labels", []),
                     "risk_labels": state.get("risk_labels", []),
@@ -228,7 +325,7 @@ def create_athlete_chat_nodes(
         for rank, source in enumerate(limited_sources, start=1):
             await citation_repo.create(
                 message_id=assistant_message.id,
-                document_id=_uuid_or_none(source.metadata.get("document_id")),
+                document_id=_citation_document_id(source),
                 chunk_id=_uuid_or_none(source.metadata.get("chunk_id")),
                 source_title=source.source_title,
                 source_metadata=source.metadata,
@@ -250,6 +347,7 @@ def create_athlete_chat_nodes(
     return {
         "load_state": load_state,
         "safety_check": safety_check,
+        "prepare_conversation_file_snippets": prepare_conversation_file_snippets,
         "run_agent": run_agent,
         "save_state": save_state,
     }
@@ -295,6 +393,35 @@ def _merge_labels(primary: Sequence[str], secondary: Sequence[str]) -> list[str]
         if label and label not in labels:
             labels.append(label)
     return labels
+
+
+def _empty_conversation_file_context() -> dict[str, object]:
+    return {
+        "conversation_file_context": "",
+        "conversation_file_source_count": 0,
+        "conversation_file_ready_file_ids": [],
+    }
+
+
+def _uuid_list(values: Sequence[str] | None) -> list[UUID]:
+    resolved: list[UUID] = []
+    for value in values or []:
+        try:
+            resolved.append(UUID(str(value)))
+        except ValueError:
+            continue
+    return resolved
+
+
+def _citation_document_id(source: KnowledgebaseSource) -> UUID | None:
+    metadata = source.metadata
+    if metadata.get("source_type") == "conversation_file":
+        return _uuid_or_none(metadata.get("conversation_file_id")) or _uuid_or_none(
+            metadata.get("document_id")
+        )
+    return _uuid_or_none(metadata.get("playbook_document_id")) or _uuid_or_none(
+        metadata.get("document_id")
+    )
 
 
 def _uuid_or_none(value: Any) -> UUID | None:

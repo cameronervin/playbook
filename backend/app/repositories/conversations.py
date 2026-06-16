@@ -432,6 +432,43 @@ class ConversationFileRepository:
         )
         return list(result.all())
 
+    async def list_ready_by_conversation(
+        self,
+        conversation_id: UUID,
+    ) -> list[ConversationFile]:
+        """Return ready files with mirrored chunks for one conversation."""
+        result = await self.session.scalars(
+            select(ConversationFile)
+            .where(
+                ConversationFile.conversation_id == conversation_id,
+                ConversationFile.extraction_status == "ready",
+                ConversationFile.chunk_count > 0,
+            )
+            .order_by(ConversationFile.created_at.asc(), ConversationFile.id.asc())
+        )
+        return list(result.all())
+
+    async def list_ready_by_conversation_and_ids(
+        self,
+        conversation_id: UUID,
+        file_ids: list[UUID],
+    ) -> list[ConversationFile]:
+        """Return ready requested files scoped to one conversation."""
+        if not file_ids:
+            return []
+
+        result = await self.session.scalars(
+            select(ConversationFile)
+            .where(
+                ConversationFile.conversation_id == conversation_id,
+                ConversationFile.id.in_(file_ids),
+                ConversationFile.extraction_status == "ready",
+                ConversationFile.chunk_count > 0,
+            )
+            .order_by(ConversationFile.created_at.asc(), ConversationFile.id.asc())
+        )
+        return list(result.all())
+
     async def update_extraction_status(
         self,
         file: ConversationFile,
