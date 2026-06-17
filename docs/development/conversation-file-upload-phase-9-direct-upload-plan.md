@@ -27,7 +27,7 @@ Primary source documents:
 Phase 9 moves admin KB document uploads and athlete conversation-file uploads
 to a two-step direct-to-S3-compatible-storage flow:
 
-- Backend creates an upload intent after authorization and metadata validation.
+- Backend creates an upload request after authorization and metadata validation.
 - Backend returns a presigned upload contract and the backend document/file ID.
 - Browser uploads the binary directly to object storage with progress and
   client-side retry.
@@ -61,27 +61,27 @@ should keep these behavioral contracts stable.
 Admin KB document upload:
 
 - `POST /api/v1/admin/kb/documents`
-  - Request: JSON metadata for an upload intent, including `filename`,
+  - Request: JSON metadata for an upload request, including `filename`,
     `content_type`, `size_bytes`, and optional admin metadata such as `title`,
     `metadata_tags`, and `source_date`.
   - Response: safe `KBDocumentResponse`-compatible resource plus an upload
-    contract containing `upload_intent_id`, `method="POST"`, `url`, `fields`,
+    contract containing `upload_request_id`, `method="POST"`, `url`, `fields`,
     and `expires_at`.
 - `POST /api/v1/admin/kb/documents/{document_id}/upload-complete`
-  - Request: `{ "upload_intent_id": "uuid" }`.
+  - Request: `{ "upload_request_id": "uuid" }`.
   - Response: safe `KBDocumentResponse`.
 
 Athlete conversation-file upload:
 
 - `POST /api/v1/conversations/{conversation_id}/files`
-  - Request: JSON metadata for an upload intent, including `filename`,
+  - Request: JSON metadata for an upload request, including `filename`,
     `content_type`, `size_bytes`, and optional `message_id` if the product
     chooses to attach uploads to a message at creation time.
   - Response: safe `ConversationFileSummaryResponse` plus an upload contract
-    containing `upload_intent_id`, `method="POST"`, `url`, `fields`, and
+    containing `upload_request_id`, `method="POST"`, `url`, `fields`, and
     `expires_at`.
 - `POST /api/v1/conversations/{conversation_id}/files/{file_id}/upload-complete`
-  - Request: `{ "upload_intent_id": "uuid" }`.
+  - Request: `{ "upload_request_id": "uuid" }`.
   - Response: safe `ConversationFileSummaryResponse`.
 
 Do not expose storage keys, source URLs, presigned URLs, or signed download URLs
@@ -92,14 +92,14 @@ intent has been created.
 
 Scope:
 
-- Add request/response schemas for direct upload intents, upload completion,
+- Add request/response schemas for direct upload requests, upload completion,
   and safe upload contract responses.
 - Add backend upload lifecycle statuses:
   - Admin KB documents: `upload_pending`, `uploaded`, `processing`, `ready`,
     `failed`.
   - Conversation files: `upload_pending`, `uploaded`, `extracting`, `ready`,
     `failed`.
-- Add an `upload_intents` table for direct-upload lifecycle data.
+- Add an `upload_requests` table for direct-upload lifecycle data.
 - Add a `kb_ingest_outbox` table for durable KB-service handoff.
 - Add repositories for intent lookup, completion, stale intent queries, outbox
   enqueueing, row locking, retry scheduling, and terminal state updates.
@@ -129,7 +129,7 @@ Acceptance criteria:
 Relevant tests:
 
 - Unit model metadata tests.
-- Repository integration tests for `upload_intents`.
+- Repository integration tests for `upload_requests`.
 - Repository integration tests for `kb_ingest_outbox` idempotency and row
   locking.
 - Alembic upgrade/downgrade smoke.
@@ -203,7 +203,7 @@ Do not do yet:
 - Do not rely on checksum verification unless storage exposes trustworthy
   checksum metadata.
 
-## Phase 9C: Intent Creation and Completion Services
+## [COMPLETED] Phase 9C: Intent Creation and Completion Services
 
 Scope:
 
@@ -216,10 +216,34 @@ Scope:
   - Conversation routes authorize current-athlete ownership.
 - Create backend resource rows at `upload_pending`.
 - Generate deterministic storage keys using the backend resource ID.
-- On completion, verify the upload intent, call storage `HEAD`, compare expected
+- On completion, verify the upload request, call storage `HEAD`, compare expected
   size/content type, mark the resource `uploaded`, and enqueue exactly one
   outbox row.
 - Make repeated completion calls idempotent.
+
+Implemented behavior:
+
+- Admin KB document upload now accepts JSON metadata, creates
+  `kb_documents.processing_status="upload_pending"`, returns a safe document
+  summary plus a presigned POST contract, and no longer streams browser file
+  bytes through FastAPI on the public upload route.
+- Athlete conversation-file upload now accepts JSON metadata, validates
+  current-athlete conversation ownership, creates
+  `conversation_files.extraction_status="upload_pending"`, returns a safe file
+  summary plus a presigned POST contract, and no longer dispatches KB ingest
+  from the request handler.
+- Completion endpoints verify the scoped `upload_requests` row, use storage
+  object verification before changing resource status, mark successful uploads
+  `uploaded`, and enqueue a single `kb_ingest_outbox` row.
+- Duplicate completion calls are idempotent through resource-scoped outbox
+  enqueueing.
+- Admin storage keys are deterministic by backend document ID:
+  `kb/originals/{organization_id}/{document_id}/{filename}`.
+- Browser-provided metadata cannot set reserved source/storage/KB-service
+  identifiers such as `source_type`, `organization_id`, `source_uri`, or
+  `kb_service_document_id`.
+- Unlinked direct-upload document retry requests re-queue the outbox instead of
+  bypassing reliable handoff with a direct KB-service ingest call.
 
 Suggested files:
 
@@ -359,7 +383,7 @@ Do not do yet:
 
 Scope:
 
-- Add maintenance logic for expired pending upload intents.
+- Add maintenance logic for expired pending upload requests.
 - Mark expired resources failed with a safe user-facing reason.
 - Clean up orphaned objects only when they belong to expired known intents.
 - Add observability for stuck upload-pending resources and outbox backlog.
@@ -373,12 +397,12 @@ Suggested files:
 - `backend/app/repositories/conversations.py`
 - `backend/app/services/kb_document_service.py`
 - `backend/app/services/conversation_service.py`
-- `backend/tests/integration/test_upload_intent_reconciliation.py`
+- `backend/tests/integration/test_upload_request_reconciliation.py`
 - `docs/development/tech-debt-tracker.md`
 
 Acceptance criteria:
 
-- Expired upload intents transition resources out of `upload_pending`.
+- Expired upload requests transition resources out of `upload_pending`.
 - Orphan cleanup deletes only keys tied to known expired intents.
 - Safe failure reasons do not include storage keys, signed URLs, or secrets.
 - Maintenance task is retryable and safe to run repeatedly.
@@ -449,6 +473,7 @@ Do not do yet:
 Scope:
 
 - Update docs after implementation agents complete the runtime work.
+- Create concise upload flow architecture markdown document located in docs/architecture with ASCII diagrams
 - Do not update API/spec docs before implementation as though Phase 9 is live.
 - Add smoke instructions for local MinIO, backend worker, KB-service, and
   frontend upload validation.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
@@ -35,10 +35,13 @@ from app.repositories.conversations import (
     ConversationRepository,
     MessageCitationRepository,
 )
+from app.repositories.uploads import KBIngestOutboxRepository, UploadRequestRepository
 from app.schemas.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationFileSummaryResponse,
+    ConversationFileUploadRequest,
+    ConversationFileUploadRequestResponse,
     ConversationMessageResponse,
     ConversationSummaryResponse,
     MessageCitationResponse,
@@ -49,6 +52,7 @@ from app.schemas.knowledgebase import (
     KBConversationFileIngestRequest,
     KBDocumentIngestResponse,
 )
+from app.schemas.uploads import DirectUploadContract, UploadCompleteRequest
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import WorkerTaskName
 
@@ -82,6 +86,8 @@ class ConversationService:
         message_repo: ConversationMessageRepository | None = None,
         citation_repo: MessageCitationRepository | None = None,
         file_repo: ConversationFileRepository | None = None,
+        upload_request_repo: UploadRequestRepository | None = None,
+        outbox_repo: KBIngestOutboxRepository | None = None,
         athlete_chat_dispatcher: AthleteChatTaskDispatcher | None = None,
         kb_provider: BaseKnowledgebaseProvider | None = None,
         storage: StorageProvider | None = None,
@@ -92,6 +98,10 @@ class ConversationService:
         self.message_repo = message_repo or ConversationMessageRepository(session)
         self.citation_repo = citation_repo or MessageCitationRepository(session)
         self.file_repo = file_repo or ConversationFileRepository(session)
+        self.upload_request_repo = upload_request_repo or UploadRequestRepository(
+            session
+        )
+        self.outbox_repo = outbox_repo or KBIngestOutboxRepository(session)
         self.athlete_chat_dispatcher = (
             athlete_chat_dispatcher or AthleteChatTaskDispatcher()
         )
@@ -396,6 +406,177 @@ class ConversationService:
         )
         return self._file_response(file, 0)
 
+    async def create_file_upload_request(
+        self,
+        *,
+        athlete: User,
+        conversation_id: UUID,
+        request: ConversationFileUploadRequest,
+    ) -> ConversationFileUploadRequestResponse:
+        """Create a direct-upload request for a conversation-scoped file."""
+        conversation = await self.conversation_repo.get_for_athlete(
+            conversation_id=conversation_id,
+            organization_id=athlete.organization_id,
+            athlete_id=athlete.id,
+        )
+        if conversation is None:
+            raise NotFoundError("Conversation", str(conversation_id))
+        if self.storage is None:
+            raise AppError(
+                "Storage provider is not configured",
+                ErrorCode.STORAGE_ERROR,
+                retryable=True,
+            )
+
+        filename = self._validate_filename(request.filename)
+        content_type = self._validate_content_type(filename, request.content_type)
+        self._validate_declared_size(filename, request.size_bytes)
+        await self._validate_message_attachment(
+            conversation_id=conversation.id,
+            message_id=request.message_id,
+        )
+
+        file_id = uuid4()
+        storage_key = conversation_file_original_key(
+            athlete.organization_id,
+            conversation.id,
+            file_id,
+            filename,
+        )
+        try:
+            presigned = await self.storage.create_presigned_post(
+                key=storage_key,
+                content_type=content_type,
+                max_size_bytes=request.size_bytes,
+            )
+        except Exception as exc:
+            logger.warning(
+                "conversation_file_presign_failed",
+                athlete_user_id=str(athlete.id),
+                conversation_id=str(conversation.id),
+                conversation_file_id=str(file_id),
+                error_type=type(exc).__name__,
+            )
+            raise StorageError("Conversation file storage failed") from exc
+
+        file = await self.file_repo.create(
+            file_id=file_id,
+            conversation_id=conversation.id,
+            uploaded_by=athlete.id,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=request.size_bytes,
+            storage_key=storage_key,
+            message_id=request.message_id,
+            extraction_status="upload_pending",
+        )
+        upload_request = await self.upload_request_repo.create(
+            organization_id=athlete.organization_id,
+            requested_by=athlete.id,
+            source_type="conversation_file",
+            filename=file.filename,
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+            storage_key=storage_key,
+            expires_at=presigned.expires_at,
+            conversation_file_id=file.id,
+        )
+        await self.session.commit()
+        logger.info(
+            "conversation_file_upload_requested",
+            athlete_user_id=str(athlete.id),
+            conversation_id=str(conversation.id),
+            conversation_file_id=str(file.id),
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+        )
+        return ConversationFileUploadRequestResponse(
+            file=self._file_response(file, 0),
+            upload=DirectUploadContract(
+                upload_request_id=upload_request.id,
+                url=presigned.url,
+                fields=presigned.fields,
+                expires_at=presigned.expires_at,
+            ),
+        )
+
+    async def complete_file_upload(
+        self,
+        *,
+        athlete: User,
+        conversation_id: UUID,
+        file_id: UUID,
+        request: UploadCompleteRequest,
+    ) -> ConversationFileSummaryResponse:
+        """Verify a direct conversation-file upload and queue private ingest."""
+        conversation = await self.conversation_repo.get_for_athlete(
+            conversation_id=conversation_id,
+            organization_id=athlete.organization_id,
+            athlete_id=athlete.id,
+        )
+        if conversation is None:
+            raise NotFoundError("Conversation", str(conversation_id))
+        if self.storage is None:
+            raise AppError(
+                "Storage provider is not configured",
+                ErrorCode.STORAGE_ERROR,
+                retryable=True,
+            )
+
+        file = await self.file_repo.get_for_conversation(
+            conversation_id=conversation.id,
+            file_id=file_id,
+        )
+        if file is None:
+            raise NotFoundError("Conversation file", str(file_id))
+
+        upload_request = await self.upload_request_repo.get_for_conversation_file(
+            upload_request_id=request.upload_request_id,
+            conversation_file_id=file.id,
+            for_update=True,
+        )
+        if upload_request is None:
+            raise NotFoundError("Upload request", str(request.upload_request_id))
+
+        if upload_request.status == "completed":
+            await self.outbox_repo.enqueue(
+                organization_id=athlete.organization_id,
+                source_type="conversation_file",
+                conversation_file_id=file.id,
+            )
+            await self.session.commit()
+            return self._file_response(file, file.chunk_count)
+
+        self._validate_pending_upload_request(upload_request.expires_at)
+        verification = await self.storage.verify_object(
+            key=upload_request.storage_key,
+            expected_size_bytes=upload_request.size_bytes,
+            expected_content_type=upload_request.content_type,
+        )
+        self._raise_for_verification_failure(verification.status)
+
+        await self.upload_request_repo.mark_completed(upload_request)
+        file = await self.file_repo.update_extraction_status(
+            file,
+            extraction_status="uploaded",
+            error_message=None,
+        )
+        await self.outbox_repo.enqueue(
+            organization_id=athlete.organization_id,
+            source_type="conversation_file",
+            conversation_file_id=file.id,
+        )
+        await self.session.commit()
+        logger.info(
+            "conversation_file_upload_completed",
+            athlete_user_id=str(athlete.id),
+            conversation_id=str(conversation.id),
+            conversation_file_id=str(file.id),
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+        )
+        return self._file_response(file, file.chunk_count)
+
     async def validate_message_stream(
         self,
         *,
@@ -439,6 +620,18 @@ class ConversationService:
             raise ValidationError(
                 "One or more file_ids are not available for this conversation"
             )
+
+    async def _validate_message_attachment(
+        self,
+        *,
+        conversation_id: UUID,
+        message_id: UUID | None,
+    ) -> None:
+        if message_id is None:
+            return
+        message = await self.message_repo.get(message_id)
+        if message is None or message.conversation_id != conversation_id:
+            raise ValidationError("message_id is not available for this conversation")
 
     async def _message_response(
         self,
@@ -560,6 +753,27 @@ class ConversationService:
         if size > max_size:
             raise FileTooLargeError(filename, size, max_size)
         return size
+
+    def _validate_declared_size(self, filename: str, size: int) -> None:
+        if size <= 0:
+            raise ValidationError("Uploaded file must not be empty")
+
+        max_size = self._max_upload_bytes()
+        if size > max_size:
+            raise FileTooLargeError(filename, size, max_size)
+
+    @staticmethod
+    def _validate_pending_upload_request(expires_at) -> None:
+        if expires_at <= datetime.now(UTC):
+            raise ValidationError("Upload request has expired")
+
+    @staticmethod
+    def _raise_for_verification_failure(status: str) -> None:
+        if status == "valid":
+            return
+        if status == "missing":
+            raise ValidationError("Uploaded object is missing")
+        raise ValidationError("Uploaded object does not match request metadata")
 
     def _max_upload_bytes(self) -> int:
         max_mb = (

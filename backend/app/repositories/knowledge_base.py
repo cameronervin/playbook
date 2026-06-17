@@ -84,6 +84,7 @@ class KBDocumentRepository:
     async def create(
         self,
         *,
+        document_id: UUID | None = None,
         organization_id: UUID,
         uploaded_by: UUID,
         title: str,
@@ -91,6 +92,7 @@ class KBDocumentRepository:
         content_type: str,
         size_bytes: int,
         storage_key: str,
+        processing_status: str = "uploaded",
         visibility_policy: dict[str, Any] | None = None,
         metadata_tags: dict[str, Any] | None = None,
         source_date: date | None = None,
@@ -99,6 +101,7 @@ class KBDocumentRepository:
     ) -> KBDocument:
         """Create a KB document metadata record without committing."""
         document = KBDocument(
+            id=document_id,
             organization_id=organization_id,
             uploaded_by=uploaded_by,
             title=title,
@@ -106,6 +109,7 @@ class KBDocumentRepository:
             content_type=content_type,
             size_bytes=size_bytes,
             storage_key=storage_key,
+            processing_status=processing_status,
             source_date=source_date,
             is_official=is_official,
             priority=priority,

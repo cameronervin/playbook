@@ -19,10 +19,15 @@ def _safe_filename(filename: str) -> str:
     return cleaned or "upload.bin"
 
 
-def kb_original_file_key(organization_id: UUID, filename: str) -> str:
+def kb_original_file_key(
+    organization_id: UUID,
+    filename: str,
+    document_id: UUID | None = None,
+) -> str:
     """Generate an S3 key for an admin-uploaded KB original."""
+    resource_id = document_id or uuid4()
     return (
-        f"{KB_ORIGINALS_PREFIX}/{organization_id}/{uuid4()}/"
+        f"{KB_ORIGINALS_PREFIX}/{organization_id}/{resource_id}/"
         f"{_safe_filename(filename)}"
     )
 

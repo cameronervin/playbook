@@ -48,11 +48,13 @@ Example error response:
 | GET | `/conversations` | List current athlete conversations |
 | POST | `/conversations` | Create a current-athlete conversation from the initial message |
 | GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations/files |
-| POST | `/conversations/{conversation_id}/files` | Upload a conversation-scoped file, store original metadata, and enqueue private ingest intent |
+| POST | `/conversations/{conversation_id}/files` | Create a conversation-scoped direct-upload request and return a presigned POST contract |
+| POST | `/conversations/{conversation_id}/files/{file_id}/upload-complete` | Verify direct-uploaded object metadata and queue private ingest handoff |
 | POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message, enqueue the Celery agent task, and return `202` with `task_id` stream metadata |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream validated assistant response events as SSE from the Valkey stream for `task_id` |
 | GET | `/admin/kb/documents` | List KB documents and status |
-| POST | `/admin/kb/documents` | Upload KB document and request KB-service ingestion |
+| POST | `/admin/kb/documents` | Create a KB document direct-upload request and return a presigned POST contract |
+| POST | `/admin/kb/documents/{document_id}/upload-complete` | Verify direct-uploaded object metadata and queue KB-service ingest handoff |
 | GET | `/admin/kb/documents/{document_id}` | Get document metadata/status |
 | PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags and source date |
 | POST | `/admin/kb/documents/{document_id}/retry` | Retry document ingestion |

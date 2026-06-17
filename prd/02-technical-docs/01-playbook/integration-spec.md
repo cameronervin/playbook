@@ -31,13 +31,15 @@ Implementation notes:
 
 ### Admin Document Flow
 
-1. Admin uploads document through main backend.
-2. Main backend stores original file in configured storage.
-3. Main backend creates `kb_documents` record with `uploaded` status.
-4. Main backend calls KB service ingestion endpoint or dispatches ingestion worker.
-5. KB service parses, chunks, embeds, and writes vectors.
-6. Main backend updates status to `processing`, `ready`, or `failed`.
-7. Ready documents become eligible for chat retrieval.
+1. Admin submits document metadata to the main backend.
+2. Main backend creates a `kb_documents` record with `upload_pending` status and returns a presigned POST contract.
+3. Browser uploads the original file directly to configured storage.
+4. Browser calls the backend completion endpoint.
+5. Main backend verifies the object with storage `HEAD`, marks the document `uploaded`, and enqueues durable KB ingest handoff.
+6. KB ingest worker calls KB service ingestion with trusted `source_type="admin_upload"` metadata.
+7. KB service parses, chunks, embeds, and writes vectors.
+8. Main backend mirrors status to `processing`, `ready`, or `failed`.
+9. Ready documents become eligible for chat retrieval.
 
 ### Search Flow
 
@@ -56,15 +58,18 @@ chat orchestration. KB-service owns document intelligence for the private RAG
 path: parsing, chunking, embeddings, canonical summaries, vector metadata, and
 retrieval.
 
-1. Athlete uploads supported file to conversation.
-2. Original file is stored securely in configured blob storage and associated with conversation.
-3. Backend dispatches KB-service ingestion with trusted
+1. Athlete submits supported file metadata to an owned conversation.
+2. Backend creates a `conversation_files` row with `upload_pending` status and returns a presigned POST contract.
+3. Browser uploads the original file directly to configured blob storage.
+4. Browser calls the backend completion endpoint.
+5. Backend verifies the object with storage `HEAD`, marks the file `uploaded`, and queues private ingest handoff.
+6. Backend dispatches KB-service ingestion with trusted
    `source_type="conversation_file"`, `organization_id`, `conversation_id`, and
    `conversation_file_id`; the frontend never supplies `source_type`.
-4. KB-service parses, chunks, embeds, and summarizes the file under
+7. KB-service parses, chunks, embeds, and summarizes the file under
    `visibility_policy.scope="conversation"`.
-5. Backend mirrors safe status/summary metadata for conversation history.
-6. File is not added to shared KB in MVP.
+8. Backend mirrors safe status/summary metadata for conversation history.
+9. File is not added to shared KB in MVP.
 
 Conversation-file chunks are private to the owning conversation. The chat agent may
 include selected chunks when the current message references uploaded files, but
@@ -166,7 +171,7 @@ Recommended logical prefixes:
 Storage rules:
 1. Store only object keys in PostgreSQL, not signed URLs.
 2. Keep buckets private and deny public ACLs.
-3. Apply upload size limits and content-type allowlists before object creation.
+3. Apply upload size limits and content-type allowlists before issuing upload contracts.
 4. Do not log object contents, signed URLs, provider keys, or extracted text.
 5. Use lifecycle policy for failed/stale staging artifacts.
 6. Keep athlete conversation uploads private to the owning conversation.

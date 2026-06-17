@@ -8,12 +8,14 @@ from typing import BinaryIO
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
 from app.api.v1.dependencies import get_agent_stream_service
 from app.infrastructure.knowledgebase import get_kb_provider_dependency
 from app.infrastructure.storage import get_storage_provider_dependency
 from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjectMetadata
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
+from app.models.uploads import KBIngestOutbox, UploadRequest
 from app.repositories.conversations import (
     ConversationFileRepository,
     ConversationMessageRepository,
@@ -35,8 +37,10 @@ class FakeStorageProvider:
     def __init__(self, *, fail_upload: bool = False, fail_presign: bool = False) -> None:
         self.uploads: list[tuple[str, str, int]] = []
         self.presigned: list[tuple[str, str | None]] = []
+        self.presigned_posts: list[tuple[str, str, int]] = []
         self.fail_upload = fail_upload
         self.fail_presign = fail_presign
+        self.objects: dict[str, StoredObjectMetadata | None] = {}
 
     async def upload_file(self, key: str, file: BinaryIO, content_type: str) -> str:
         if self.fail_upload:
@@ -75,6 +79,11 @@ class FakeStorageProvider:
         max_size_bytes: int,
         expires_in: int | None = None,
     ) -> PresignedPostUpload:
+        if self.fail_presign:
+            raise RuntimeError(
+                "presign failed for https://storage.example/private.pdf?signature=secret"
+            )
+        self.presigned_posts.append((key, content_type, max_size_bytes))
         return PresignedPostUpload(
             url="https://storage.example/upload",
             fields={"key": key, "Content-Type": content_type},
@@ -82,11 +91,28 @@ class FakeStorageProvider:
         )
 
     async def get_object_metadata(self, key: str) -> StoredObjectMetadata | None:
-        return StoredObjectMetadata(
-            key=key,
-            content_length=123,
-            content_type="application/pdf",
-        )
+        return self.objects.get(key)
+
+    async def verify_object(
+        self,
+        *,
+        key: str,
+        expected_size_bytes: int,
+        expected_content_type: str,
+    ):
+        from app.infrastructure.storage.provider import ObjectVerificationResult
+
+        metadata = await self.get_object_metadata(key)
+        if metadata is None:
+            return ObjectVerificationResult(status="missing")
+        if metadata.content_length != expected_size_bytes:
+            return ObjectVerificationResult(status="size_mismatch", metadata=metadata)
+        if metadata.content_type != expected_content_type:
+            return ObjectVerificationResult(
+                status="content_type_mismatch",
+                metadata=metadata,
+            )
+        return ObjectVerificationResult(status="valid", metadata=metadata)
 
     async def file_exists(self, key: str) -> bool:
         return True
@@ -227,7 +253,7 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
 
 
 @pytest.mark.asyncio
-async def test_upload_conversation_file_stores_metadata_and_dispatches_private_ingest(
+async def test_upload_conversation_file_creates_intent_and_completes_once(
     route_client,
     db_session,
 ) -> None:
@@ -252,63 +278,80 @@ async def test_upload_conversation_file_stores_metadata_and_dispatches_private_i
 
     response = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={
-            "file": (
-                "nil-contract.pdf",
-                b"%PDF-1.7 contract",
-                "application/pdf",
-            )
+        json={
+            "filename": "nil-contract.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 17,
         },
     )
 
     assert response.status_code == 201
     body = response.json()
-    file_id = UUID(body["id"])
-    assert body["conversation_id"] == str(conversation.id)
-    assert body["message_id"] is None
-    assert body["filename"] == "nil-contract.pdf"
-    assert body["content_type"] == "application/pdf"
-    assert body["size_bytes"] == len(b"%PDF-1.7 contract")
-    assert body["extraction_status"] == "extracting"
-    assert body["chunk_count"] == 0
-    assert "storage_key" not in body
-    assert "source_uri" not in body
-    assert "extracted_text_ref" not in body
+    file_summary = body["file"]
+    file_id = UUID(file_summary["id"])
+    upload_request_id = UUID(body["upload"]["upload_request_id"])
+    storage_key = body["upload"]["fields"]["key"]
+    assert file_summary["conversation_id"] == str(conversation.id)
+    assert file_summary["message_id"] is None
+    assert file_summary["filename"] == "nil-contract.pdf"
+    assert file_summary["content_type"] == "application/pdf"
+    assert file_summary["size_bytes"] == 17
+    assert file_summary["extraction_status"] == "upload_pending"
+    assert file_summary["chunk_count"] == 0
+    assert "storage_key" not in file_summary
+    assert "source_uri" not in file_summary
+    assert "extracted_text_ref" not in file_summary
 
-    assert len(storage.uploads) == 1
-    storage_key, content_type, size_bytes = storage.uploads[0]
+    assert storage.uploads == []
     assert storage_key.startswith(
         f"conversation-files/originals/{organization.id}/{conversation.id}/{file_id}/"
     )
     assert storage_key.endswith("/nil-contract.pdf")
-    assert content_type == "application/pdf"
-    assert size_bytes == len(b"%PDF-1.7 contract")
-    assert storage.presigned == [(storage_key, "nil-contract.pdf")]
+    assert storage.presigned == []
+    assert storage.presigned_posts == [(storage_key, "application/pdf", 17)]
 
     persisted = await ConversationFileRepository(db_session).list_by_conversation_and_ids(
         conversation.id,
         [file_id],
     )
     assert persisted[0].storage_key == storage_key
-    assert persisted[0].extraction_status == "extracting"
-    assert persisted[0].extraction_metadata["source_type"] == "conversation_file"
-    assert persisted[0].extraction_metadata["conversation_id"] == str(conversation.id)
-    assert persisted[0].extraction_metadata["conversation_file_id"] == str(file_id)
-    assert persisted[0].extraction_metadata["task_id"] == "kb-file-task-1"
-    assert "kb_service_document_id" in persisted[0].extraction_metadata
-    assert "source_uri" not in persisted[0].extraction_metadata
+    assert persisted[0].extraction_status == "upload_pending"
+    assert persisted[0].extraction_metadata == {}
+    assert kb_provider.requests == []
 
-    assert len(kb_provider.requests) == 1
-    request = kb_provider.requests[0]
-    assert request.source_type == "conversation_file"
-    assert request.organization_id == organization.id
-    assert request.conversation_id == conversation.id
-    assert request.conversation_file_id == file_id
-    assert request.filename == "nil-contract.pdf"
-    assert request.source_title == "nil-contract.pdf"
-    assert request.visibility_policy == {"scope": "conversation"}
-    assert request.source_uri.startswith("https://storage.example/")
-    assert "signature" not in response.text
+    upload_request = await db_session.get(UploadRequest, upload_request_id)
+    assert upload_request is not None
+    assert upload_request.conversation_file_id == file_id
+    assert upload_request.status == "pending"
+
+    storage.objects[storage_key] = StoredObjectMetadata(
+        key=storage_key,
+        content_length=17,
+        content_type="application/pdf",
+    )
+    complete = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files/{file_id}/upload-complete",
+        json={"upload_request_id": str(upload_request_id)},
+    )
+
+    assert complete.status_code == 200
+    completed = complete.json()
+    assert completed["extraction_status"] == "uploaded"
+    assert "storage_key" not in completed
+    assert kb_provider.requests == []
+    outbox_rows = list((await db_session.scalars(select(KBIngestOutbox))).all())
+    assert len(outbox_rows) == 1
+    assert outbox_rows[0].source_type == "conversation_file"
+    assert outbox_rows[0].conversation_file_id == file_id
+
+    duplicate = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files/{file_id}/upload-complete",
+        json={"upload_request_id": str(upload_request_id)},
+    )
+
+    assert duplicate.status_code == 200
+    assert duplicate.json()["extraction_status"] == "uploaded"
+    assert len((await db_session.scalars(select(KBIngestOutbox))).all()) == 1
 
     detail_response = await route_client.client.get(
         f"/api/v1/conversations/{conversation.id}"
@@ -316,14 +359,14 @@ async def test_upload_conversation_file_stores_metadata_and_dispatches_private_i
 
     assert detail_response.status_code == 200
     assert detail_response.json()["files"][0]["id"] == str(file_id)
-    assert detail_response.json()["files"][0]["extraction_status"] == "extracting"
+    assert detail_response.json()["files"][0]["extraction_status"] == "uploaded"
     assert detail_response.json()["files"][0]["chunk_count"] == 0
     assert "storage_key" not in detail_response.json()["files"][0]
     assert "source_uri" not in detail_response.json()["files"][0]
 
 
 @pytest.mark.asyncio
-async def test_upload_conversation_file_marks_failed_when_kb_dispatch_fails(
+async def test_complete_conversation_file_rejects_missing_storage_object(
     route_client,
     db_session,
 ) -> None:
@@ -343,62 +386,104 @@ async def test_upload_conversation_file_marks_failed_when_kb_dispatch_fails(
         athlete_id=athlete.id,
     )
     route_client.authenticate_as(athlete)
-    _storage, kb_provider = _override_file_upload_dependencies(
-        route_client,
-        fail_dispatch=True,
-    )
+    storage, kb_provider = _override_file_upload_dependencies(route_client)
 
     response = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={
-            "file": (
-                "nil-contract.pdf",
-                b"%PDF-1.7 contract",
-                "application/pdf",
-            )
+        json={
+            "filename": "nil-contract.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 17,
         },
     )
 
     assert response.status_code == 201
     body = response.json()
-    file_id = UUID(body["id"])
-    assert body["extraction_status"] == "failed"
-    assert "signed URL" not in response.text
-    assert "storage.example" not in response.text
+    file_id = UUID(body["file"]["id"])
+    upload_request_id = UUID(body["upload"]["upload_request_id"])
+    assert storage.objects == {}
+
+    complete = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files/{file_id}/upload-complete",
+        json={"upload_request_id": str(upload_request_id)},
+        headers={"X-Request-ID": "req-missing-object"},
+    )
+
+    assert complete.status_code == 400
+    assert complete.json()["error"] == {
+        "code": "VALIDATION_ERROR",
+        "message": "Uploaded object is missing",
+        "retryable": False,
+        "details": {"request_id": "req-missing-object"},
+    }
 
     persisted = await ConversationFileRepository(db_session).list_by_conversation_and_ids(
         conversation.id,
         [file_id],
     )
-    assert persisted[0].extraction_status == "failed"
-    assert persisted[0].extraction_metadata["source_type"] == "conversation_file"
-    assert persisted[0].extraction_metadata["dispatch_error_type"] == "RuntimeError"
-    assert "storage.example" not in str(persisted[0].extraction_metadata)
-    assert "storage.example" not in (persisted[0].error_message or "")
-    assert len(kb_provider.requests) == 1
+    assert persisted[0].extraction_status == "upload_pending"
+    assert kb_provider.requests == []
+    assert list((await db_session.scalars(select(KBIngestOutbox))).all()) == []
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("fail_storage_upload", "fail_storage_presign"),
-    [(True, False), (False, True)],
-)
-async def test_upload_conversation_file_storage_failure_is_sanitized_and_not_persisted(
+async def test_upload_conversation_file_accepts_message_id_in_same_conversation(
     route_client,
     db_session,
-    fail_storage_upload: bool,
-    fail_storage_presign: bool,
 ) -> None:
     organization = await OrganizationRepository(db_session).create(
         name="Playbook Athletics",
-        slug=f"playbook-storage-failure-{fail_storage_upload}-{fail_storage_presign}",
+        slug="playbook-message-file",
     )
     athlete = await UserRepository(db_session).create(
         organization_id=organization.id,
-        email=f"athlete-storage-{fail_storage_upload}-{fail_storage_presign}@example.com",
+        email="athlete-message-file@example.com",
         name="Jordan Athlete",
         auth_provider="google",
-        provider_subject=f"athlete-storage-{fail_storage_upload}-{fail_storage_presign}",
+        provider_subject="athlete-message-file",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="Use this contract.",
+    )
+    route_client.authenticate_as(athlete)
+    _storage, kb_provider = _override_file_upload_dependencies(route_client)
+
+    response = await route_client.client.post(
+        f"/api/v1/conversations/{conversation.id}/files",
+        json={
+            "filename": "nil-contract.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 17,
+            "message_id": str(message.id),
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["file"]["message_id"] == str(message.id)
+    assert kb_provider.requests == []
+
+
+@pytest.mark.asyncio
+async def test_upload_conversation_file_storage_failure_is_sanitized_and_not_persisted(
+    route_client,
+    db_session,
+) -> None:
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-storage-failure",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-storage@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-storage-failure",
     )
     conversation = await ConversationRepository(db_session).create(
         organization_id=organization.id,
@@ -407,18 +492,15 @@ async def test_upload_conversation_file_storage_failure_is_sanitized_and_not_per
     route_client.authenticate_as(athlete)
     storage, kb_provider = _override_file_upload_dependencies(
         route_client,
-        fail_storage_upload=fail_storage_upload,
-        fail_storage_presign=fail_storage_presign,
+        fail_storage_presign=True,
     )
 
     response = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={
-            "file": (
-                "nil-contract.pdf",
-                b"%PDF-1.7 contract",
-                "application/pdf",
-            )
+        json={
+            "filename": "nil-contract.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 17,
         },
         headers={"X-Request-ID": "req-storage-failure"},
     )
@@ -438,12 +520,9 @@ async def test_upload_conversation_file_storage_failure_is_sanitized_and_not_per
         db_session
     ).list_by_conversation_with_chunk_counts(conversation.id)
     assert files == []
-    if fail_storage_upload:
-        assert storage.uploads == []
-        assert storage.presigned == []
-    else:
-        assert len(storage.uploads) == 1
-        assert storage.presigned == []
+    assert storage.uploads == []
+    assert storage.presigned == []
+    assert storage.presigned_posts == []
 
 
 @pytest.mark.asyncio
@@ -479,7 +558,11 @@ async def test_upload_conversation_file_is_scoped_to_current_athlete(
 
     response = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={"file": ("contract.pdf", b"%PDF-1.7", "application/pdf")},
+        json={
+            "filename": "contract.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 8,
+        },
         headers={"X-Request-ID": "req-upload-owner"},
     )
 
@@ -491,6 +574,7 @@ async def test_upload_conversation_file_is_scoped_to_current_athlete(
         "details": {"request_id": "req-upload-owner"},
     }
     assert storage.uploads == []
+    assert storage.presigned_posts == []
     assert kb_provider.requests == []
 
 
@@ -519,11 +603,19 @@ async def test_upload_conversation_file_rejects_unsupported_or_mismatched_type(
 
     unsupported = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={"file": ("notes.txt", b"notes", "text/plain")},
+        json={
+            "filename": "notes.txt",
+            "content_type": "text/plain",
+            "size_bytes": 5,
+        },
     )
     mismatched = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={"file": ("contract.pdf", b"%PDF-1.7", "application/octet-stream")},
+        json={
+            "filename": "contract.pdf",
+            "content_type": "application/octet-stream",
+            "size_bytes": 8,
+        },
     )
 
     assert unsupported.status_code == 415
@@ -531,6 +623,7 @@ async def test_upload_conversation_file_rejects_unsupported_or_mismatched_type(
     assert mismatched.status_code == 415
     assert mismatched.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
     assert storage.uploads == []
+    assert storage.presigned_posts == []
     assert kb_provider.requests == []
 
 
@@ -559,24 +652,27 @@ async def test_upload_conversation_file_rejects_empty_or_oversize_file(
 
     empty = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={"file": ("empty.pdf", b"", "application/pdf")},
+        json={
+            "filename": "empty.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 0,
+        },
     )
     oversize = await route_client.client.post(
         f"/api/v1/conversations/{conversation.id}/files",
-        files={
-            "file": (
-                "too-large.pdf",
-                b"0" * (201 * 1024 * 1024),
-                "application/pdf",
-            )
+        json={
+            "filename": "too-large.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 201 * 1024 * 1024,
         },
     )
 
-    assert empty.status_code == 400
+    assert empty.status_code == 422
     assert empty.json()["error"]["code"] == "VALIDATION_ERROR"
     assert oversize.status_code == 413
     assert oversize.json()["error"]["code"] == "FILE_TOO_LARGE"
     assert storage.uploads == []
+    assert storage.presigned_posts == []
     assert kb_provider.requests == []
 
 

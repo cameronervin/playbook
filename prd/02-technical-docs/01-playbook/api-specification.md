@@ -30,14 +30,16 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | GET | `/conversations/{conversation_id}` | Get conversation with messages, citations, files | athlete-owner |
 | POST | `/conversations/{conversation_id}/messages` | Submit follow-up user message and start streamed generation | athlete-owner |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks for the submitted task | athlete-owner |
-| POST | `/conversations/{conversation_id}/files` | Upload conversation-scoped file | athlete-owner |
+| POST | `/conversations/{conversation_id}/files` | Create conversation-file direct-upload request | athlete-owner |
+| POST | `/conversations/{conversation_id}/files/{file_id}/upload-complete` | Verify completed conversation-file upload | athlete-owner |
 
 ### Knowledge Base Admin
 
 | Method | Endpoint | Purpose | Role |
 |--------|----------|---------|------|
 | GET | `/admin/kb/documents` | List KB documents and status | admin |
-| POST | `/admin/kb/documents` | Upload KB document | admin |
+| POST | `/admin/kb/documents` | Create KB document direct-upload request | admin |
+| POST | `/admin/kb/documents/{document_id}/upload-complete` | Verify completed KB document upload | admin |
 | GET | `/admin/kb/documents/{document_id}` | Get document metadata/status | admin |
 | PATCH | `/admin/kb/documents/{document_id}/metadata` | Update metadata tags and source date | admin |
 | POST | `/admin/kb/documents/{document_id}/retry` | Retry failed/ready document processing | admin |
@@ -149,22 +151,67 @@ conversation/message before subscribing to the task's Valkey stream/channel.
 ### Upload Conversation File
 ```json
 POST /api/v1/conversations/{conversation_id}/files
-Content-Type: multipart/form-data
-
-file=@contract.pdf
+{
+  "filename": "contract.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 123456,
+  "message_id": null
+}
 ```
 
 Response:
 ```json
 {
+  "file": {
+    "id": "uuid",
+    "conversation_id": "uuid",
+    "message_id": null,
+    "filename": "contract.pdf",
+    "content_type": "application/pdf",
+    "size_bytes": 123456,
+    "extraction_status": "upload_pending",
+    "chunk_count": 0,
+    "created_at": "2026-06-03T12:00:00Z",
+    "updated_at": "2026-06-03T12:00:00Z"
+  },
+  "upload": {
+    "upload_request_id": "uuid",
+    "method": "POST",
+    "url": "https://storage.example/upload",
+    "fields": {
+      "key": "conversation-files/originals/..."
+    },
+    "expires_at": "2026-06-03T12:15:00Z"
+  }
+}
+```
+
+After the browser uploads the binary to storage, it completes the request:
+
+```json
+POST /api/v1/conversations/{conversation_id}/files/{file_id}/upload-complete
+{
+  "upload_request_id": "uuid"
+}
+```
+
+Completion verifies storage object metadata before returning the safe file
+summary with `extraction_status: "uploaded"` and queues reliable private ingest
+handoff. KB-service parsing, chunking, embedding, summaries, and private
+retrieval happen outside the request path.
+
+```json
+{
   "id": "uuid",
   "conversation_id": "uuid",
+  "message_id": null,
   "filename": "contract.pdf",
   "content_type": "application/pdf",
   "size_bytes": 123456,
   "extraction_status": "uploaded",
   "chunk_count": 0,
-  "created_at": "2026-06-03T12:00:00Z"
+  "created_at": "2026-06-03T12:00:00Z",
+  "updated_at": "2026-06-03T12:00:01Z"
 }
 ```
 
@@ -203,25 +250,56 @@ and `updated_at`.
 ### Upload KB Document
 ```json
 POST /api/v1/admin/kb/documents
-Content-Type: multipart/form-data
-
-file=@nil-handbook.pdf
-metadata_tags={"topic":"nil","source_type":"policy"}
-source_date=2026-01-15
+{
+  "filename": "nil-handbook.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 456789,
+  "title": "NIL Handbook",
+  "metadata_tags": {
+    "topic": "nil"
+  },
+  "source_date": "2026-01-15"
+}
 ```
 
 Response:
 ```json
 {
-  "id": "uuid",
-  "title": "nil-handbook.pdf",
-  "processing_status": "uploaded",
-  "metadata_tags": {
-    "topic": "nil",
-    "source_type": "policy"
+  "document": {
+    "id": "uuid",
+    "title": "NIL Handbook",
+    "filename": "nil-handbook.pdf",
+    "content_type": "application/pdf",
+    "size_bytes": 456789,
+    "processing_status": "upload_pending",
+    "metadata_tags": {
+      "topic": "nil"
+    }
+  },
+  "upload": {
+    "upload_request_id": "uuid",
+    "method": "POST",
+    "url": "https://storage.example/upload",
+    "fields": {
+      "key": "kb/originals/..."
+    },
+    "expires_at": "2026-06-03T12:15:00Z"
   }
 }
 ```
+
+After browser storage upload, complete the request:
+
+```json
+POST /api/v1/admin/kb/documents/{document_id}/upload-complete
+{
+  "upload_request_id": "uuid"
+}
+```
+
+The backend verifies the object with storage `HEAD`, marks the document
+`uploaded`, and queues KB-service ingest handoff. Browser callers never supply
+`source_type`, organization IDs, storage keys, signed URLs, or KB-service IDs.
 
 ### Analytics Summary
 ```json

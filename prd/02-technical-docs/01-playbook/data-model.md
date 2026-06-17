@@ -157,6 +157,7 @@ locator metadata, and vectors in KB-service private ingestion state rather than
 backend tables.
 
 Extraction statuses:
+- `upload_pending`
 - `uploaded`
 - `extracting`
 - `ready`
@@ -199,6 +200,7 @@ CREATE TABLE kb_documents (
 ```
 
 Processing statuses:
+- `upload_pending`
 - `uploaded`
 - `processing`
 - `ready`

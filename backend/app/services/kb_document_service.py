@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, BinaryIO
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,9 @@ from app.core.config import Settings
 from app.core.exceptions import (
     ForbiddenError,
     NotFoundError,
+    StorageError,
     UnsupportedFileTypeError,
+    ValidationError,
 )
 from app.core.log_redaction import redact_string
 from app.infrastructure.knowledgebase import BaseKnowledgebaseProvider
@@ -30,14 +32,18 @@ from app.repositories.knowledge_base import (
     KBDocumentEventRepository,
     KBDocumentRepository,
 )
+from app.repositories.uploads import KBIngestOutboxRepository, UploadRequestRepository
 from app.schemas.kb_documents import (
     KBDocumentEventResponse,
     KBDocumentMetadataUpdateRequest,
     KBDocumentResponse,
+    KBDocumentUploadRequest,
+    KBDocumentUploadRequestResponse,
     KBWebhookPayload,
     KBWebhookResponse,
 )
 from app.schemas.knowledgebase import KBDocumentIngestRequest
+from app.schemas.uploads import DirectUploadContract, UploadCompleteRequest
 from app.services.audit_service import AuditLogService
 
 logger = structlog.get_logger(__name__)
@@ -47,6 +53,16 @@ SUPPORTED_KB_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+RESERVED_UPLOAD_METADATA_KEYS = {
+    "source_type",
+    "organization_id",
+    "playbook_document_id",
+    "conversation_id",
+    "conversation_file_id",
+    "kb_service_document_id",
+    "source_uri",
 }
 
 _TERMINAL_READY = {"success", "succeeded", "complete", "completed", "ready"}
@@ -95,14 +111,22 @@ class KBDocumentService:
         kb_provider: BaseKnowledgebaseProvider,
         document_repo: KBDocumentRepository | None = None,
         event_repo: KBDocumentEventRepository | None = None,
+        upload_request_repo: UploadRequestRepository | None = None,
+        outbox_repo: KBIngestOutboxRepository | None = None,
         audit_service: AuditLogService | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self.session = session
         self.storage = storage
         self.kb_provider = kb_provider
         self.document_repo = document_repo or KBDocumentRepository(session)
         self.event_repo = event_repo or KBDocumentEventRepository(session)
+        self.upload_request_repo = upload_request_repo or UploadRequestRepository(
+            session
+        )
+        self.outbox_repo = outbox_repo or KBIngestOutboxRepository(session)
         self.audit_service = audit_service or AuditLogService(session)
+        self.settings = settings
 
     async def list_documents(
         self,
@@ -212,6 +236,173 @@ class KBDocumentService:
         )
         return kb_document_to_response(document)
 
+    async def create_upload_request(
+        self,
+        *,
+        actor: User,
+        request: KBDocumentUploadRequest,
+    ) -> KBDocumentUploadRequestResponse:
+        """Create a direct-upload request for an admin KB document."""
+        self._validate_content_type(request.filename, request.content_type)
+        self._validate_metadata_tags(request.metadata_tags)
+
+        document_id = uuid4()
+        storage_key = kb_original_file_key(
+            actor.organization_id,
+            request.filename,
+            document_id=document_id,
+        )
+        try:
+            presigned = await self.storage.create_presigned_post(
+                key=storage_key,
+                content_type=request.content_type,
+                max_size_bytes=request.size_bytes,
+            )
+        except Exception as exc:
+            logger.warning(
+                "kb_document_presign_failed",
+                actor_user_id=str(actor.id),
+                document_id=str(document_id),
+                error_type=type(exc).__name__,
+            )
+            raise StorageError("KB document upload request failed") from exc
+
+        document = await self.document_repo.create(
+            document_id=document_id,
+            organization_id=actor.organization_id,
+            uploaded_by=actor.id,
+            title=request.title or request.filename,
+            filename=request.filename,
+            content_type=request.content_type,
+            size_bytes=request.size_bytes,
+            storage_key=storage_key,
+            processing_status="upload_pending",
+            metadata_tags=request.metadata_tags,
+            source_date=request.source_date,
+            is_official=True,
+            priority=0,
+        )
+        await self.event_repo.create(
+            document_id=document.id,
+            event_type="document.upload_requested",
+            status=document.processing_status,
+            message=None,
+            metadata={"filename": document.filename},
+        )
+        upload_request = await self.upload_request_repo.create(
+            organization_id=actor.organization_id,
+            requested_by=actor.id,
+            source_type="admin_upload",
+            filename=document.filename,
+            content_type=document.content_type,
+            size_bytes=document.size_bytes,
+            storage_key=storage_key,
+            expires_at=presigned.expires_at,
+            kb_document_id=document.id,
+        )
+        await self.audit_service.record(
+            actor=actor,
+            organization_id=actor.organization_id,
+            action="kb.document_upload_requested",
+            target_type="kb_document",
+            target_id=document.id,
+            metadata={"filename": document.filename},
+        )
+        await self.session.commit()
+        logger.info(
+            "kb_document_upload_requested",
+            actor_user_id=str(actor.id),
+            document_id=str(document.id),
+            content_type=document.content_type,
+            size_bytes=document.size_bytes,
+        )
+        return KBDocumentUploadRequestResponse(
+            document=kb_document_to_response(document),
+            upload=DirectUploadContract(
+                upload_request_id=upload_request.id,
+                url=presigned.url,
+                fields=presigned.fields,
+                expires_at=presigned.expires_at,
+            ),
+        )
+
+    async def complete_upload(
+        self,
+        *,
+        actor: User,
+        document_id: UUID,
+        request: UploadCompleteRequest,
+    ) -> KBDocumentResponse:
+        """Verify a direct upload and enqueue reliable KB ingest handoff."""
+        document = await self._get_document_or_404(actor, document_id)
+        upload_request = await self.upload_request_repo.get_for_admin_document(
+            upload_request_id=request.upload_request_id,
+            document_id=document.id,
+            for_update=True,
+        )
+        if upload_request is None:
+            raise NotFoundError("Upload request", str(request.upload_request_id))
+
+        if upload_request.status == "completed":
+            await self.outbox_repo.enqueue(
+                organization_id=document.organization_id,
+                source_type="admin_upload",
+                kb_document_id=document.id,
+            )
+            await self.session.commit()
+            return kb_document_to_response(document)
+
+        self._validate_pending_upload_request(upload_request.expires_at)
+        verification = await self.storage.verify_object(
+            key=upload_request.storage_key,
+            expected_size_bytes=upload_request.size_bytes,
+            expected_content_type=upload_request.content_type,
+        )
+        self._raise_for_verification_failure(verification.status)
+
+        await self.upload_request_repo.mark_completed(upload_request)
+        document = await self.document_repo.update_status(
+            document,
+            processing_status="uploaded",
+            failure_reason=None,
+        )
+        await self.outbox_repo.enqueue(
+            organization_id=document.organization_id,
+            source_type="admin_upload",
+            kb_document_id=document.id,
+        )
+        await self.event_repo.create(
+            document_id=document.id,
+            event_type="document.uploaded",
+            status=document.processing_status,
+            message=None,
+            metadata={"filename": document.filename},
+        )
+        await self.event_repo.create(
+            document_id=document.id,
+            event_type="ingestion.queued",
+            status=document.processing_status,
+            message=None,
+            metadata={},
+        )
+        await self.audit_service.record(
+            actor=actor,
+            organization_id=actor.organization_id,
+            action="kb.document_uploaded",
+            target_type="kb_document",
+            target_id=document.id,
+            metadata={"filename": document.filename},
+        )
+        await self.session.commit()
+        logger.info(
+            "kb_document_upload_completed",
+            actor_user_id=str(actor.id),
+            document_id=str(document.id),
+            content_type=document.content_type,
+            size_bytes=document.size_bytes,
+        )
+        return kb_document_to_response(document)
+
     async def update_metadata(
         self,
         *,
@@ -271,41 +462,34 @@ class KBDocumentService:
                 str(document.kb_service_document_id)
             )
         else:
-            signed_url = await self.storage.get_presigned_url(
-                document.storage_key,
-                download_filename=document.filename,
+            if document.processing_status == "upload_pending":
+                raise ValidationError("Document upload is not complete")
+            await self.outbox_repo.enqueue(
+                organization_id=document.organization_id,
+                source_type="admin_upload",
+                kb_document_id=document.id,
             )
-            ingest_response = await self.kb_provider.ingest_document(
-                KBDocumentIngestRequest(
-                    organization_id=actor.organization_id,
-                    playbook_document_id=document.id,
-                    source_uri=signed_url,
-                    filename=document.filename,
-                    content_type=document.content_type,
-                    size_bytes=document.size_bytes,
-                    source_title=document.title,
-                    source_date=document.source_date,
-                    is_official=True,
-                    priority=0,
-                    visibility_policy=document.visibility_policy,
-                    metadata_tags=document.metadata_tags,
-                )
-            )
+            ingest_response = None
         await self.document_repo.update_status(
             document,
             processing_status="uploaded",
             failure_reason=None,
         )
-        await self.document_repo.link_kb_service_document(
-            document,
-            kb_service_document_id=ingest_response.kb_service_document_id,
-        )
+        if ingest_response is not None:
+            await self.document_repo.link_kb_service_document(
+                document,
+                kb_service_document_id=ingest_response.kb_service_document_id,
+            )
         await self.event_repo.create(
             document_id=document.id,
             event_type="ingestion.retry_requested",
             status="uploaded",
             message=None,
-            metadata={"task_id": ingest_response.task_id},
+            metadata=(
+                {"task_id": ingest_response.task_id}
+                if ingest_response is not None
+                else {"queued": True}
+            ),
         )
         await self.audit_service.record(
             actor=actor,
@@ -361,6 +545,27 @@ class KBDocumentService:
                 content_type,
                 sorted(SUPPORTED_KB_CONTENT_TYPES),
             )
+
+    @staticmethod
+    def _validate_metadata_tags(metadata_tags: dict[str, Any]) -> None:
+        reserved = sorted(set(metadata_tags).intersection(RESERVED_UPLOAD_METADATA_KEYS))
+        if reserved:
+            raise ValidationError(
+                f"metadata_tags contains reserved keys: {', '.join(reserved)}"
+            )
+
+    @staticmethod
+    def _validate_pending_upload_request(expires_at: datetime) -> None:
+        if expires_at <= datetime.now(UTC):
+            raise ValidationError("Upload request has expired")
+
+    @staticmethod
+    def _raise_for_verification_failure(status: str) -> None:
+        if status == "valid":
+            return
+        if status == "missing":
+            raise ValidationError("Uploaded object is missing")
+        raise ValidationError("Uploaded object does not match request metadata")
 
     @staticmethod
     def _size(file: BinaryIO) -> int:

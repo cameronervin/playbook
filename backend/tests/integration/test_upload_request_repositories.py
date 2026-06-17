@@ -1,6 +1,7 @@
 """Integration tests for direct-upload request repositories."""
 
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -63,6 +64,20 @@ async def test_upload_request_repository_manages_admin_upload_request(db_session
     assert by_resource is request
     assert request.status == "completed"
     assert request.completed_at is not None
+
+
+def test_upload_request_resource_lookup_can_request_row_lock() -> None:
+    from sqlalchemy.dialects import postgresql
+
+    stmt = UploadRequestRepository.admin_document_statement(
+        upload_request_id=uuid4(),
+        document_id=uuid4(),
+        for_update=True,
+    )
+
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE" in compiled
 
 
 @pytest.mark.asyncio

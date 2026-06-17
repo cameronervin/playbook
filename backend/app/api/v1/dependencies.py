@@ -106,9 +106,15 @@ def get_kb_document_service(
     session: SessionDep,
     storage: StorageProviderDep,
     kb_provider: KBProviderDep,
+    settings: SettingsDep,
 ) -> KBDocumentService:
     """Return KB document service dependency."""
-    return KBDocumentService(session, storage=storage, kb_provider=kb_provider)
+    return KBDocumentService(
+        session,
+        storage=storage,
+        kb_provider=kb_provider,
+        settings=settings,
+    )
 
 
 def get_kb_webhook_service(

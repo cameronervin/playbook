@@ -32,7 +32,7 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 | `conversation_messages` | User, assistant, and system messages with safety/topic metadata |
 | `message_citations` | Assistant answer source references |
 | `conversation_files` | Conversation-scoped athlete uploads, extraction status, KB-service linkage, internal summary, and chunk count |
-| `upload_requests` | Backend-owned direct-upload request lifecycle metadata for future browser-to-storage uploads |
+| `upload_requests` | Backend-owned direct-upload request lifecycle metadata for browser-to-storage uploads |
 | `kb_documents` | Backend record for admin-uploaded department documents with mirrored KB-service status, internal summary, and chunk count |
 | `kb_document_events` | KB document lifecycle/status events |
 | `kb_ingest_outbox` | Durable backend-to-KB-service ingest handoff rows for verified uploads |
@@ -76,10 +76,10 @@ own commit/rollback boundaries so multi-row operations such as role change plus
 audit log creation remain atomic.
 
 `upload_requests` and `kb_ingest_outbox` are Phase 9 direct-upload foundations.
-They do not by themselves change the currently implemented multipart upload
-routes; later phases will create upload requests from JSON metadata, return
-presigned browser upload contracts, verify completed objects, and enqueue KB
-ingest outbox rows after storage verification.
+Phase 9C uses them from the public JSON upload routes to return presigned
+browser upload contracts, verify completed objects, and enqueue KB ingest
+outbox rows after storage verification. Later Phase 9 work drains the outbox and
+handles stale upload cleanup.
 
 Later phases will add analytics queries, dashboard insight run/output
 repositories, and admin chat repositories.

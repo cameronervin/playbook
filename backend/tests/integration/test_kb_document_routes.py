@@ -14,6 +14,7 @@ from app.infrastructure.storage import get_storage_provider_dependency
 from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjectMetadata
 from app.models.audit import AuditLog
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
+from app.models.uploads import KBIngestOutbox, UploadRequest
 from app.repositories.identity import OrganizationRepository, UserRepository
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
@@ -28,7 +29,9 @@ class FakeStorageProvider:
 
     def __init__(self) -> None:
         self.uploads: list[tuple[str, str, int]] = []
+        self.presigned_posts: list[tuple[str, str, int]] = []
         self.deletes: list[str] = []
+        self.objects: dict[str, StoredObjectMetadata | None] = {}
 
     async def upload_file(self, key: str, file: BinaryIO, content_type: str) -> str:
         data = file.read()
@@ -58,6 +61,7 @@ class FakeStorageProvider:
         max_size_bytes: int,
         expires_in: int | None = None,
     ) -> PresignedPostUpload:
+        self.presigned_posts.append((key, content_type, max_size_bytes))
         return PresignedPostUpload(
             url="https://storage.example/upload",
             fields={"key": key, "Content-Type": content_type},
@@ -65,11 +69,28 @@ class FakeStorageProvider:
         )
 
     async def get_object_metadata(self, key: str) -> StoredObjectMetadata | None:
-        return StoredObjectMetadata(
-            key=key,
-            content_length=123,
-            content_type="application/pdf",
-        )
+        return self.objects.get(key)
+
+    async def verify_object(
+        self,
+        *,
+        key: str,
+        expected_size_bytes: int,
+        expected_content_type: str,
+    ):
+        from app.infrastructure.storage.provider import ObjectVerificationResult
+
+        metadata = await self.get_object_metadata(key)
+        if metadata is None:
+            return ObjectVerificationResult(status="missing")
+        if metadata.content_length != expected_size_bytes:
+            return ObjectVerificationResult(status="size_mismatch", metadata=metadata)
+        if metadata.content_type != expected_content_type:
+            return ObjectVerificationResult(
+                status="content_type_mismatch",
+                metadata=metadata,
+            )
+        return ObjectVerificationResult(status="valid", metadata=metadata)
 
     async def file_exists(self, key: str) -> bool:
         return True
@@ -174,28 +195,68 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
 
     upload = await route_client.client.post(
         "/api/v1/admin/kb/documents",
-        data={
+        json={
+            "filename": "nil-handbook.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 10,
             "title": "NIL Handbook",
-            "metadata_tags": '{"topic":"nil","source_type":"policy"}',
+            "metadata_tags": {"topic": "nil"},
             "source_date": "2026-01-15",
         },
-        files={"file": ("nil-handbook.pdf", b"NIL policy", "application/pdf")},
     )
 
     assert upload.status_code == 201
     uploaded = upload.json()
-    document_id = UUID(uploaded["id"])
-    assert uploaded["metadata_tags"] == {"topic": "nil", "source_type": "policy"}
-    assert "is_official" not in uploaded
-    assert "priority" not in uploaded
-    assert storage.uploads[0][1] == "application/pdf"
-    assert kb_provider.ingest_requests[0].metadata_tags == {
-        "topic": "nil",
-        "source_type": "policy",
-    }
-    assert kb_provider.ingest_requests[0].organization_id == admin.organization_id
-    assert kb_provider.ingest_requests[0].is_official is True
-    assert kb_provider.ingest_requests[0].priority == 0
+    document = uploaded["document"]
+    document_id = UUID(document["id"])
+    upload_request_id = UUID(uploaded["upload"]["upload_request_id"])
+    storage_key = uploaded["upload"]["fields"]["key"]
+    assert document["processing_status"] == "upload_pending"
+    assert document["metadata_tags"] == {"topic": "nil"}
+    assert "is_official" not in document
+    assert "priority" not in document
+    assert storage.uploads == []
+    assert storage.presigned_posts == [(storage_key, "application/pdf", 10)]
+    assert (
+        storage_key
+        == f"kb/originals/{admin.organization_id}/{document_id}/nil-handbook.pdf"
+    )
+    assert kb_provider.ingest_requests == []
+
+    upload_request = await db_session.get(UploadRequest, upload_request_id)
+    assert upload_request is not None
+    assert upload_request.kb_document_id == document_id
+    assert upload_request.status == "pending"
+
+    storage.objects[storage_key] = StoredObjectMetadata(
+        key=storage_key,
+        content_length=10,
+        content_type="application/pdf",
+    )
+    complete_response = await route_client.client.post(
+        f"/api/v1/admin/kb/documents/{document_id}/upload-complete",
+        json={"upload_request_id": str(upload_request_id)},
+    )
+
+    assert complete_response.status_code == 200
+    completed = complete_response.json()
+    assert completed["processing_status"] == "uploaded"
+    assert completed["metadata_tags"] == {"topic": "nil"}
+    assert "storage_key" not in completed
+    assert kb_provider.ingest_requests == []
+    outbox_rows = list((await db_session.scalars(select(KBIngestOutbox))).all())
+    assert len(outbox_rows) == 1
+    assert outbox_rows[0].source_type == "admin_upload"
+    assert outbox_rows[0].kb_document_id == document_id
+
+    duplicate_complete = await route_client.client.post(
+        f"/api/v1/admin/kb/documents/{document_id}/upload-complete",
+        json={"upload_request_id": str(upload_request_id)},
+    )
+
+    assert duplicate_complete.status_code == 200
+    assert duplicate_complete.json()["processing_status"] == "uploaded"
+    assert len((await db_session.scalars(select(KBIngestOutbox))).all()) == 1
 
     list_response = await route_client.client.get("/api/v1/admin/kb/documents")
     get_response = await route_client.client.get(
@@ -221,10 +282,8 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     assert "priority" not in update_response.json()
     assert retry_response.status_code == 200
     assert retry_response.json()["processing_status"] == "uploaded"
-    assert len(kb_provider.ingest_requests) == 1
-    assert kb_provider.retried_document_ids == [
-        str(uploaded["kb_service_document_id"])
-    ]
+    assert kb_provider.ingest_requests == []
+    assert kb_provider.retried_document_ids == []
 
     events = list(
         (
@@ -233,9 +292,10 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
             )
         ).all()
     )
-    assert {event.event_type for event in events} == {
+    assert {event.event_type for event in events} >= {
+        "document.upload_requested",
         "document.uploaded",
-        "ingestion.requested",
+        "ingestion.queued",
         "document.metadata_updated",
         "ingestion.retry_requested",
     }
@@ -244,7 +304,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     assert persisted is not None
     assert persisted.is_official is True
     assert persisted.priority == 0
-    linked_id = persisted.kb_service_document_id
+    assert persisted.kb_service_document_id is None
 
     delete_response = await route_client.client.delete(
         f"/api/v1/admin/kb/documents/{document_id}"
@@ -252,7 +312,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
 
     assert delete_response.status_code == 204
     assert storage.deletes == [persisted.storage_key]
-    assert kb_provider.deleted_document_ids == [str(linked_id)]
+    assert kb_provider.deleted_document_ids == []
     assert await db_session.get(KBDocument, document_id) is None
 
     audit_actions = set(
@@ -262,7 +322,8 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
             )
         ).all()
     )
-    assert audit_actions == {
+    assert audit_actions >= {
+        "kb.document_upload_requested",
         "kb.document_uploaded",
         "kb.document_metadata_updated",
         "kb.document_retry_requested",
@@ -271,62 +332,75 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
 
 
 @pytest.mark.asyncio
-async def test_kb_upload_rejects_invalid_metadata_json(route_client, db_session) -> None:
+async def test_kb_upload_rejects_reserved_metadata_keys(
+    route_client,
+    db_session,
+) -> None:
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     _override_external_providers(route_client)
 
     response = await route_client.client.post(
         "/api/v1/admin/kb/documents",
-        data={"metadata_tags": "not-json"},
-        files={"file": ("nil-handbook.pdf", b"NIL policy", "application/pdf")},
-        headers={"X-Request-ID": "req-kb-json"},
+        json={
+            "filename": "nil-handbook.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 10,
+            "metadata_tags": {"source_type": "policy"},
+        },
+        headers={"X-Request-ID": "req-kb-reserved"},
     )
 
     assert response.status_code == 400
     assert response.json()["error"] == {
         "code": "VALIDATION_ERROR",
-        "message": "metadata_tags must be a JSON object",
+        "message": "metadata_tags contains reserved keys: source_type",
         "retryable": False,
-        "details": {"request_id": "req-kb-json"},
+        "details": {"request_id": "req-kb-reserved"},
     }
 
 
 @pytest.mark.asyncio
-async def test_kb_upload_rejects_metadata_json_array(route_client, db_session) -> None:
+async def test_kb_upload_rejects_metadata_array(route_client, db_session) -> None:
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     _override_external_providers(route_client)
 
     response = await route_client.client.post(
         "/api/v1/admin/kb/documents",
-        data={"metadata_tags": '["nil"]'},
-        files={"file": ("nil-handbook.pdf", b"NIL policy", "application/pdf")},
+        json={
+            "filename": "nil-handbook.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 10,
+            "metadata_tags": ["nil"],
+        },
         headers={"X-Request-ID": "req-kb-array"},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"] == {
-        "code": "VALIDATION_ERROR",
-        "message": "metadata_tags must be a JSON object",
-        "retryable": False,
-        "details": {"request_id": "req-kb-array"},
-    }
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["details"]["request_id"] == "req-kb-array"
 
 
 @pytest.mark.asyncio
-async def test_kb_upload_openapi_documents_metadata_tags_json_string(
+async def test_kb_upload_openapi_documents_use_json_direct_upload(
     route_client,
 ) -> None:
     response = await route_client.client.get("/openapi.json")
 
     assert response.status_code == 200
     upload_properties = response.json()["components"]["schemas"][
-        "Body_upload_document_api_v1_admin_kb_documents_post"
+        "KBDocumentUploadRequest"
     ]["properties"]
-    metadata_tags = upload_properties["metadata_tags"]
-    assert "JSON object encoded as a string" in metadata_tags["description"]
-    assert metadata_tags["examples"] == ['{"topic":"nil","source_type":"policy"}']
+    upload_response_properties = response.json()["components"]["schemas"][
+        "KBDocumentUploadRequestResponse"
+    ]["properties"]
+    assert "metadata_tags" in upload_properties
+    assert "filename" in upload_properties
+    assert "content_type" in upload_properties
+    assert "size_bytes" in upload_properties
+    assert "document" in upload_response_properties
+    assert "upload" in upload_response_properties
     assert "is_official" not in upload_properties
     assert "priority" not in upload_properties
 
@@ -348,7 +422,11 @@ async def test_kb_upload_rejects_unsupported_content_type(
 
     response = await route_client.client.post(
         "/api/v1/admin/kb/documents",
-        files={"file": ("notes.txt", b"notes", "text/plain")},
+        json={
+            "filename": "notes.txt",
+            "content_type": "text/plain",
+            "size_bytes": 5,
+        },
         headers={"X-Request-ID": "req-kb-type"},
     )
 

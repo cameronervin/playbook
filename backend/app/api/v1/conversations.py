@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Header, Query, UploadFile, status
+from fastapi import APIRouter, Header, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.api.v1.dependencies import (
@@ -19,12 +19,14 @@ from app.schemas.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationFileSummaryResponse,
+    ConversationFileUploadRequest,
+    ConversationFileUploadRequestResponse,
     ConversationSummaryResponse,
     MessageSubmitRequest,
     MessageSubmitResponse,
 )
+from app.schemas.uploads import UploadCompleteRequest
 from app.services.agent_stream_service import AgentStreamService, format_sse_record
-from app.services.conversation_service import ConversationFileUpload
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -75,25 +77,40 @@ async def get_conversation(
 
 @router.post(
     "/{conversation_id}/files",
-    response_model=ConversationFileSummaryResponse,
+    response_model=ConversationFileUploadRequestResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def upload_conversation_file(
+async def create_conversation_file_upload_request(
     conversation_id: UUID,
+    request: ConversationFileUploadRequest,
     athlete: AthleteUserDep,
     service: ConversationFileUploadServiceDep,
-    file: Annotated[UploadFile, File()],
-) -> ConversationFileSummaryResponse:
-    """Upload a file scoped to the current athlete's conversation."""
-    upload = ConversationFileUpload(
-        filename=file.filename or "",
-        content_type=file.content_type or "application/octet-stream",
-        file=file.file,
-    )
-    return await service.upload_file(
+) -> ConversationFileUploadRequestResponse:
+    """Create a direct-upload request for a current-athlete conversation file."""
+    return await service.create_file_upload_request(
         athlete=athlete,
         conversation_id=conversation_id,
-        upload=upload,
+        request=request,
+    )
+
+
+@router.post(
+    "/{conversation_id}/files/{file_id}/upload-complete",
+    response_model=ConversationFileSummaryResponse,
+)
+async def complete_conversation_file_upload(
+    conversation_id: UUID,
+    file_id: UUID,
+    request: UploadCompleteRequest,
+    athlete: AthleteUserDep,
+    service: ConversationFileUploadServiceDep,
+) -> ConversationFileSummaryResponse:
+    """Verify a direct-uploaded conversation file and queue private ingest."""
+    return await service.complete_file_upload(
+        athlete=athlete,
+        conversation_id=conversation_id,
+        file_id=file_id,
+        request=request,
     )
 
 

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import Depends
 from sqlalchemy import Select, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
@@ -70,32 +71,70 @@ class UploadRequestRepository:
         *,
         upload_request_id: UUID,
         document_id: UUID,
+        for_update: bool = False,
     ) -> UploadRequest | None:
         """Return an upload request scoped to one admin KB document."""
         result = await self.session.execute(
-            select(UploadRequest).where(
-                UploadRequest.id == upload_request_id,
-                UploadRequest.source_type == "admin_upload",
-                UploadRequest.kb_document_id == document_id,
+            self.admin_document_statement(
+                upload_request_id=upload_request_id,
+                document_id=document_id,
+                for_update=for_update,
             )
         )
         return result.scalar_one_or_none()
+
+    @classmethod
+    def admin_document_statement(
+        cls,
+        *,
+        upload_request_id: UUID,
+        document_id: UUID,
+        for_update: bool = False,
+    ) -> Select[tuple[UploadRequest]]:
+        """Build an admin-document upload request lookup statement."""
+        stmt = select(UploadRequest).where(
+            UploadRequest.id == upload_request_id,
+            UploadRequest.source_type == "admin_upload",
+            UploadRequest.kb_document_id == document_id,
+        )
+        if for_update:
+            stmt = stmt.with_for_update()
+        return stmt
 
     async def get_for_conversation_file(
         self,
         *,
         upload_request_id: UUID,
         conversation_file_id: UUID,
+        for_update: bool = False,
     ) -> UploadRequest | None:
         """Return an upload request scoped to one conversation file."""
         result = await self.session.execute(
-            select(UploadRequest).where(
-                UploadRequest.id == upload_request_id,
-                UploadRequest.source_type == "conversation_file",
-                UploadRequest.conversation_file_id == conversation_file_id,
+            self.conversation_file_statement(
+                upload_request_id=upload_request_id,
+                conversation_file_id=conversation_file_id,
+                for_update=for_update,
             )
         )
         return result.scalar_one_or_none()
+
+    @classmethod
+    def conversation_file_statement(
+        cls,
+        *,
+        upload_request_id: UUID,
+        conversation_file_id: UUID,
+        for_update: bool = False,
+    ) -> Select[tuple[UploadRequest]]:
+        """Build a conversation-file upload request lookup statement."""
+        stmt = select(UploadRequest).where(
+            UploadRequest.id == upload_request_id,
+            UploadRequest.source_type == "conversation_file",
+            UploadRequest.conversation_file_id == conversation_file_id,
+        )
+        if for_update:
+            stmt = stmt.with_for_update()
+        return stmt
 
     async def list_expired_pending_requests(
         self,
@@ -169,28 +208,36 @@ class KBIngestOutboxRepository:
         failure_metadata: dict[str, Any] | None = None,
     ) -> KBIngestOutbox:
         """Create one outbox row per backend resource, returning existing rows."""
-        existing = await self.get_for_resource(
-            source_type=source_type,
-            kb_document_id=kb_document_id,
-            conversation_file_id=conversation_file_id,
-        )
-        if existing is not None:
-            return existing
-
-        row = KBIngestOutbox(
-            organization_id=organization_id,
-            source_type=source_type,
-            kb_document_id=kb_document_id,
-            conversation_file_id=conversation_file_id,
-        )
+        values: dict[str, Any] = {
+            "organization_id": organization_id,
+            "source_type": source_type,
+            "kb_document_id": kb_document_id,
+            "conversation_file_id": conversation_file_id,
+        }
         if next_attempt_at is not None:
-            row.next_attempt_at = next_attempt_at
+            values["next_attempt_at"] = next_attempt_at
         if failure_metadata is not None:
-            row.failure_metadata = failure_metadata
+            values["failure_metadata"] = failure_metadata
 
-        self.session.add(row)
+        stmt = insert(KBIngestOutbox).values(**values)
+        if source_type == "admin_upload":
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=["source_type", "kb_document_id"]
+            )
+        else:
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=["source_type", "conversation_file_id"]
+            )
+        await self.session.execute(stmt)
         await self.session.flush()
-        await self.session.refresh(row)
+
+        row = await self.get_for_resource(
+            source_type=source_type,
+            kb_document_id=kb_document_id,
+            conversation_file_id=conversation_file_id,
+        )
+        if row is None:
+            raise RuntimeError("Failed to enqueue KB ingest outbox row")
         return row
 
     async def get_for_resource(
