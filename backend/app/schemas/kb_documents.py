@@ -8,7 +8,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-KBDocumentStatus = Literal["uploaded", "processing", "ready", "failed"]
+from app.schemas.uploads import DirectUploadContract
+
+KBDocumentStatus = Literal[
+    "upload_pending",
+    "uploaded",
+    "processing",
+    "ready",
+    "failed",
+]
 KBSourceType = Literal["admin_upload", "conversation_file"]
 
 
@@ -39,6 +47,42 @@ class KBDocumentMetadataUpdateRequest(BaseModel):
 
     metadata_tags: dict[str, Any] | None = None
     source_date: date | None = None
+
+
+class KBDocumentUploadRequest(BaseModel):
+    """Create a direct-upload request for an admin KB document."""
+
+    filename: str = Field(min_length=1, max_length=500)
+    content_type: str = Field(min_length=1, max_length=120)
+    size_bytes: int = Field(gt=0)
+    title: str | None = Field(default=None, max_length=500)
+    metadata_tags: dict[str, Any] = Field(default_factory=dict)
+    source_date: date | None = None
+
+    @field_validator("filename")
+    @classmethod
+    def trim_filename(cls, value: str) -> str:
+        """Normalize path-bearing browser filenames to the leaf filename."""
+        trimmed = value.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        if not trimmed:
+            raise ValueError("filename must not be empty")
+        return trimmed
+
+    @field_validator("content_type")
+    @classmethod
+    def trim_content_type(cls, value: str) -> str:
+        """Normalize accidental whitespace around content type values."""
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("content_type must not be empty")
+        return trimmed
+
+
+class KBDocumentUploadRequestResponse(BaseModel):
+    """Admin KB document plus direct browser upload contract."""
+
+    document: KBDocumentResponse
+    upload: DirectUploadContract
 
 
 class KBDocumentEventResponse(BaseModel):

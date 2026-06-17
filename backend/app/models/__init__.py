@@ -16,6 +16,7 @@ from app.models.conversations import (
 )
 from app.models.identity import OAuthAccount, Organization, User
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
+from app.models.uploads import KBIngestOutbox, UploadRequest
 
 __all__ = [
     "AdminChatMessage",
@@ -27,10 +28,12 @@ __all__ = [
     "ConversationMessage",
     "DashboardInsight",
     "DashboardInsightRun",
+    "KBIngestOutbox",
     "KBDocument",
     "KBDocumentEvent",
     "MessageCitation",
     "OAuthAccount",
     "Organization",
+    "UploadRequest",
     "User",
 ]

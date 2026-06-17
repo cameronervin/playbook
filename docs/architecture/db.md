@@ -32,8 +32,10 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 | `conversation_messages` | User, assistant, and system messages with safety/topic metadata |
 | `message_citations` | Assistant answer source references |
 | `conversation_files` | Conversation-scoped athlete uploads, extraction status, KB-service linkage, internal summary, and chunk count |
+| `upload_requests` | Backend-owned direct-upload request lifecycle metadata for future browser-to-storage uploads |
 | `kb_documents` | Backend record for admin-uploaded department documents with mirrored KB-service status, internal summary, and chunk count |
 | `kb_document_events` | KB document lifecycle/status events |
+| `kb_ingest_outbox` | Durable backend-to-KB-service ingest handoff rows for verified uploads |
 | `dashboard_insight_runs` | Nightly/manual dashboard insight generation runs |
 | `dashboard_insights` | Generated admin dashboard insight outputs |
 | `admin_chat_sessions` | Admin-only chat sessions over analytics and insights |
@@ -51,7 +53,7 @@ All product database access goes through repositories under
 `backend/app/repositories/`. Repositories use SQLAlchemy 2.0 async `select(...)`
 queries and receive an `AsyncSession` through FastAPI dependency injection.
 
-Phase 1 repository coverage:
+Current repository coverage:
 
 | Repository | Tables | Purpose |
 |------------|--------|---------|
@@ -65,11 +67,19 @@ Phase 1 repository coverage:
 | `ConversationMessageRepository` | `conversation_messages` | Message append, ordered history, bounded recent history, and assistant status/content updates |
 | `MessageCitationRepository` | `message_citations` | Assistant citation append and rank-ordered listing |
 | `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list, extraction-status updates, KB-service linking, and summary/count mirroring |
+| `UploadRequestRepository` | `upload_requests` | Direct-upload request create/lookup, completion/failure/expiry status updates, and expired pending request listing |
+| `KBIngestOutboxRepository` | `kb_ingest_outbox` | Idempotent ingest enqueue, due-row locking with `FOR UPDATE SKIP LOCKED`, dispatch linkage, retry scheduling, and terminal failure updates |
 
 Repositories flush and refresh written models so generated IDs and server
 defaults are visible to callers, but they do not commit transactions. Services
 own commit/rollback boundaries so multi-row operations such as role change plus
 audit log creation remain atomic.
+
+`upload_requests` and `kb_ingest_outbox` are Phase 9 direct-upload foundations.
+They do not by themselves change the currently implemented multipart upload
+routes; later phases will create upload requests from JSON metadata, return
+presigned browser upload contracts, verify completed objects, and enqueue KB
+ingest outbox rows after storage verification.
 
 Later phases will add analytics queries, dashboard insight run/output
 repositories, and admin chat repositories.
