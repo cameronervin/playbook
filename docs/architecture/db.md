@@ -78,8 +78,10 @@ audit log creation remain atomic.
 `upload_requests` and `kb_ingest_outbox` are Phase 9 direct-upload foundations.
 Phase 9C uses them from the public JSON upload routes to return presigned
 browser upload contracts, verify completed objects, and enqueue KB ingest
-outbox rows after storage verification. Later Phase 9 work drains the outbox and
-handles stale upload cleanup.
+outbox rows after storage verification. Phase 9D drains the outbox from the
+`backend-files` worker queue, dispatches trusted KB-service ingest requests, and
+records retry or terminal failure state. Later Phase 9 work handles stale upload
+cleanup.
 
 Later phases will add analytics queries, dashboard insight run/output
 repositories, and admin chat repositories.

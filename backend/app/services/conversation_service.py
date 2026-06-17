@@ -53,7 +53,11 @@ from app.schemas.knowledgebase import (
     KBDocumentIngestResponse,
 )
 from app.schemas.uploads import DirectUploadContract, UploadCompleteRequest
-from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
+from app.workers.dispatcher import (
+    AthleteChatTaskDispatcher,
+    AthleteChatTaskPayload,
+    KbIngestOutboxTaskDispatcher,
+)
 from app.workers.queues import WorkerTaskName
 
 logger = structlog.get_logger(__name__)
@@ -89,6 +93,7 @@ class ConversationService:
         upload_request_repo: UploadRequestRepository | None = None,
         outbox_repo: KBIngestOutboxRepository | None = None,
         athlete_chat_dispatcher: AthleteChatTaskDispatcher | None = None,
+        outbox_dispatcher: KbIngestOutboxTaskDispatcher | None = None,
         kb_provider: BaseKnowledgebaseProvider | None = None,
         storage: StorageProvider | None = None,
         settings: Settings | None = None,
@@ -105,6 +110,7 @@ class ConversationService:
         self.athlete_chat_dispatcher = (
             athlete_chat_dispatcher or AthleteChatTaskDispatcher()
         )
+        self.outbox_dispatcher = outbox_dispatcher or KbIngestOutboxTaskDispatcher()
         self.kb_provider = kb_provider
         self.storage = storage
         self.settings = settings
@@ -545,6 +551,7 @@ class ConversationService:
                 conversation_file_id=file.id,
             )
             await self.session.commit()
+            self._dispatch_kb_ingest_outbox(conversation_file_id=file.id)
             return self._file_response(file, file.chunk_count)
 
         self._validate_pending_upload_request(upload_request.expires_at)
@@ -567,6 +574,7 @@ class ConversationService:
             conversation_file_id=file.id,
         )
         await self.session.commit()
+        self._dispatch_kb_ingest_outbox(conversation_file_id=file.id)
         logger.info(
             "conversation_file_upload_completed",
             athlete_user_id=str(athlete.id),
@@ -782,3 +790,13 @@ class ConversationService:
             else 200
         )
         return max_mb * 1024 * 1024
+
+    def _dispatch_kb_ingest_outbox(self, *, conversation_file_id: UUID) -> None:
+        try:
+            self.outbox_dispatcher.dispatch()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "kb_ingest_outbox_dispatch_failed",
+                conversation_file_id=str(conversation_file_id),
+                error_type=type(exc).__name__,
+            )

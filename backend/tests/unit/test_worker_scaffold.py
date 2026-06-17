@@ -7,19 +7,24 @@ from uuid import uuid4
 import pytest
 
 from app.core.config import Settings, get_settings
-from app.infrastructure.streaming import AgentStreamEventType, InMemoryAgentStreamProvider
-from app.workers.app import backend_worker, create_worker_app
+from app.infrastructure.streaming import (
+    AgentStreamEventType,
+    InMemoryAgentStreamProvider,
+)
 from app.workers import tasks as worker_tasks
+from app.workers.app import backend_worker, create_worker_app
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import (
     BACKEND_AGENT_QUEUE,
     BACKEND_DEFAULT_QUEUE,
+    BACKEND_FILES_QUEUE,
     BACKEND_INSIGHTS_QUEUE,
     BACKEND_MAINTENANCE_QUEUE,
     TASK_ROUTES,
     WorkerTaskName,
 )
 from app.workers.tasks import (
+    drain_kb_ingest_outbox_task,
     run_admin_chat_task,
     run_athlete_chat_task,
     worker_health_check,
@@ -48,6 +53,7 @@ def test_backend_worker_config_declares_expected_queues() -> None:
     assert declared_queues == {
         BACKEND_AGENT_QUEUE,
         BACKEND_DEFAULT_QUEUE,
+        BACKEND_FILES_QUEUE,
         BACKEND_INSIGHTS_QUEUE,
         BACKEND_MAINTENANCE_QUEUE,
     }
@@ -81,6 +87,7 @@ def test_backend_worker_registers_and_routes_named_tasks() -> None:
     expected_routes = {
         WorkerTaskName.RUN_ATHLETE_CHAT: BACKEND_AGENT_QUEUE,
         WorkerTaskName.RUN_ADMIN_CHAT: BACKEND_AGENT_QUEUE,
+        WorkerTaskName.DRAIN_KB_INGEST_OUTBOX: BACKEND_FILES_QUEUE,
         WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS: BACKEND_INSIGHTS_QUEUE,
         WorkerTaskName.PRUNE_CHECKPOINTS: BACKEND_MAINTENANCE_QUEUE,
         WorkerTaskName.HEALTH_CHECK: BACKEND_MAINTENANCE_QUEUE,
@@ -140,6 +147,49 @@ def test_athlete_chat_dispatcher_uses_explicit_task_id(monkeypatch) -> None:
         "attached_file_ids": [str(payload.attached_file_ids[0])],
     }
     assert WorkerTaskName.RUN_ATHLETE_CHAT.value == run_athlete_chat_task.name
+
+
+def test_kb_ingest_outbox_task_runs_drain_entrypoint_in_eager_mode(
+    monkeypatch,
+) -> None:
+    async def fake_drain(*, limit: int) -> dict[str, object]:
+        return {
+            "status": "complete",
+            "limit": limit,
+            "processed": 2,
+            "dispatched": 1,
+            "retried": 1,
+            "failed": 0,
+        }
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "_drain_kb_ingest_outbox",
+        fake_drain,
+        raising=False,
+    )
+    previous_always_eager = backend_worker.conf.task_always_eager
+    previous_eager_propagates = backend_worker.conf.task_eager_propagates
+    backend_worker.conf.task_always_eager = True
+    backend_worker.conf.task_eager_propagates = True
+    try:
+        result = drain_kb_ingest_outbox_task.delay(limit=2)
+    finally:
+        backend_worker.conf.task_always_eager = previous_always_eager
+        backend_worker.conf.task_eager_propagates = previous_eager_propagates
+
+    assert result.get(timeout=1) == {
+        "status": "complete",
+        "limit": 2,
+        "processed": 2,
+        "dispatched": 1,
+        "retried": 1,
+        "failed": 0,
+    }
+    assert (
+        WorkerTaskName.DRAIN_KB_INGEST_OUTBOX.value
+        == drain_kb_ingest_outbox_task.name
+    )
 
 
 def test_athlete_chat_task_runs_agent_entrypoint_in_eager_mode(

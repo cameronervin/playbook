@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from celery.signals import worker_ready
 
 from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
 from app.core.config import get_settings
@@ -16,14 +17,17 @@ from app.infrastructure.checkpointer import (
 )
 from app.infrastructure.knowledgebase import get_kb_provider
 from app.infrastructure.llm import get_llm_provider
+from app.infrastructure.storage import get_storage_provider
 from app.infrastructure.streaming import get_agent_stream_provider
 from app.services.agent_stream_service import AgentStreamService
+from app.services.kb_ingest_outbox_service import KbIngestOutboxService
 from app.workers.app import backend_worker, run_async
 from app.workers.queues import WorkerTaskName
 from app.workers.session import worker_db_session
 
 logger = structlog.get_logger(__name__)
 TASK_MAX_RETRIES = backend_worker.conf.playbook_task_max_retries
+DEFAULT_OUTBOX_DRAIN_LIMIT = 25
 
 
 def _raise_scaffold_not_implemented(task_name: WorkerTaskName, **context: Any) -> None:
@@ -165,6 +169,64 @@ async def _run_athlete_chat_agent(
 
 @backend_worker.task(
     bind=True,
+    name=WorkerTaskName.DRAIN_KB_INGEST_OUTBOX.value,
+    max_retries=TASK_MAX_RETRIES,
+)
+def drain_kb_ingest_outbox_task(
+    self: Any,
+    *,
+    limit: int = DEFAULT_OUTBOX_DRAIN_LIMIT,
+) -> dict[str, Any]:
+    """Drain verified direct-upload ingest handoff rows."""
+    task_id = str(self.request.id)
+    logger.info(
+        "backend_worker_kb_ingest_outbox_invoked",
+        task_id=task_id,
+        limit=limit,
+    )
+    result = run_async(_drain_kb_ingest_outbox(limit=limit))
+    _schedule_next_outbox_drain(
+        limit=limit,
+        countdown=result.get("next_countdown_seconds"),
+    )
+    return result
+
+
+async def _drain_kb_ingest_outbox(*, limit: int) -> dict[str, Any]:
+    settings = get_settings()
+    async with worker_db_session(settings) as session:
+        service = KbIngestOutboxService(
+            session,
+            storage=get_storage_provider(settings),
+            kb_provider=get_kb_provider(app_settings=settings),
+            settings=settings,
+        )
+        result = await service.drain_due(limit=limit)
+        return result.to_task_payload()
+
+
+def _schedule_next_outbox_drain(
+    *,
+    limit: int,
+    countdown: int | None,
+) -> None:
+    if countdown is None or backend_worker.conf.task_always_eager:
+        return
+    try:
+        drain_kb_ingest_outbox_task.apply_async(
+            kwargs={"limit": limit},
+            countdown=countdown,
+            retry=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "kb_ingest_outbox_reschedule_failed",
+            error_type=type(exc).__name__,
+        )
+
+
+@backend_worker.task(
+    bind=True,
     name=WorkerTaskName.RUN_ADMIN_CHAT.value,
     max_retries=TASK_MAX_RETRIES,
 )
@@ -237,3 +299,20 @@ def worker_health_check() -> dict[str, str]:
     """Return a lightweight worker health payload."""
     logger.info("backend_worker_health_check")
     return {"status": "ok"}
+
+
+@worker_ready.connect
+def schedule_kb_ingest_outbox_startup_drain(**_: Any) -> None:
+    """Kick durable ingest handoff when a backend worker starts."""
+    if backend_worker.conf.task_always_eager:
+        return
+    try:
+        drain_kb_ingest_outbox_task.apply_async(
+            kwargs={"limit": DEFAULT_OUTBOX_DRAIN_LIMIT},
+            retry=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "kb_ingest_outbox_startup_dispatch_failed",
+            error_type=type(exc).__name__,
+        )

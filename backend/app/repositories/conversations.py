@@ -413,6 +413,21 @@ class ConversationFileRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_with_conversation(
+        self,
+        file_id: UUID,
+    ) -> tuple[ConversationFile, Conversation] | None:
+        """Return one file with its owning conversation for trusted worker use."""
+        result = await self.session.execute(
+            select(ConversationFile, Conversation)
+            .join(Conversation, ConversationFile.conversation_id == Conversation.id)
+            .where(ConversationFile.id == file_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return row[0], row[1]
+
     async def list_by_conversation_and_ids(
         self,
         conversation_id: UUID,

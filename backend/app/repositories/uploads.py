@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -335,10 +335,14 @@ class KBIngestOutboxRepository:
         *,
         failure_metadata: dict[str, Any] | None = None,
         error_message: str | None = None,
+        increment_attempt: bool = False,
+        attempted_at: datetime | None = None,
     ) -> KBIngestOutbox:
         """Mark an outbox row terminally failed without committing."""
         row.status = "failed"
-        row.last_attempt_at = datetime.now(UTC)
+        if increment_attempt:
+            row.attempt_count += 1
+        row.last_attempt_at = attempted_at or datetime.now(UTC)
         if failure_metadata is not None:
             row.failure_metadata = failure_metadata
         if error_message is not None:
@@ -346,3 +350,12 @@ class KBIngestOutboxRepository:
         await self.session.flush()
         await self.session.refresh(row)
         return row
+
+    async def next_attempt_at(self) -> datetime | None:
+        """Return the next pending/retrying outbox attempt timestamp."""
+        result = await self.session.scalar(
+            select(func.min(KBIngestOutbox.next_attempt_at)).where(
+                KBIngestOutbox.status.in_(self.DUE_STATUSES)
+            )
+        )
+        return result

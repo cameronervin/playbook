@@ -284,7 +284,7 @@ Do not do yet:
   identifiers.
 - Do not expose raw storage internals after intent creation.
 
-## Phase 9D: Durable Ingest Outbox Worker
+## [COMPLETED] Phase 9D: Durable Ingest Outbox Worker
 
 Scope:
 
@@ -300,6 +300,24 @@ Scope:
   and safe failure metadata.
 - Update admin document events for upload verified, ingest queued, dispatched,
   retried, and failed.
+
+Implemented behavior:
+
+- Backend worker routing now includes `backend-files` plus
+  `drain_kb_ingest_outbox_task(limit=25)` for verified direct-upload ingest
+  handoff.
+- The outbox service drains due rows one locked row at a time with
+  `FOR UPDATE SKIP LOCKED`, derives trusted admin/conversation-file ingest
+  payloads from backend records, and generates signed source URLs only at
+  dispatch time.
+- Successful dispatch records KB-service document/task linkage, moves admin
+  documents to `processing`, moves conversation files to `extracting`, and
+  appends safe admin lifecycle events.
+- Retryable KB/storage failures schedule backoff using existing KB retry
+  settings; terminal failures mark outbox rows and backend resources failed with
+  sanitized metadata.
+- Upload completion and worker startup kick the drain task without making user
+  responses depend on Celery broker availability.
 
 Suggested files:
 
@@ -329,6 +347,7 @@ Relevant tests:
 - Terminal failure tests with sanitized metadata.
 - Duplicate worker attempt/idempotency tests.
 - Redaction tests for signed source URLs.
+- Worker queue/task scaffold tests.
 
 Do not do yet:
 

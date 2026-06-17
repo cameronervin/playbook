@@ -45,6 +45,7 @@ from app.schemas.kb_documents import (
 from app.schemas.knowledgebase import KBDocumentIngestRequest
 from app.schemas.uploads import DirectUploadContract, UploadCompleteRequest
 from app.services.audit_service import AuditLogService
+from app.workers.dispatcher import KbIngestOutboxTaskDispatcher
 
 logger = structlog.get_logger(__name__)
 
@@ -113,6 +114,7 @@ class KBDocumentService:
         event_repo: KBDocumentEventRepository | None = None,
         upload_request_repo: UploadRequestRepository | None = None,
         outbox_repo: KBIngestOutboxRepository | None = None,
+        outbox_dispatcher: KbIngestOutboxTaskDispatcher | None = None,
         audit_service: AuditLogService | None = None,
         settings: Settings | None = None,
     ) -> None:
@@ -125,6 +127,7 @@ class KBDocumentService:
             session
         )
         self.outbox_repo = outbox_repo or KBIngestOutboxRepository(session)
+        self.outbox_dispatcher = outbox_dispatcher or KbIngestOutboxTaskDispatcher()
         self.audit_service = audit_service or AuditLogService(session)
         self.settings = settings
 
@@ -350,6 +353,7 @@ class KBDocumentService:
                 kb_document_id=document.id,
             )
             await self.session.commit()
+            self._dispatch_kb_ingest_outbox(document_id=document.id)
             return kb_document_to_response(document)
 
         self._validate_pending_upload_request(upload_request.expires_at)
@@ -394,6 +398,7 @@ class KBDocumentService:
             metadata={"filename": document.filename},
         )
         await self.session.commit()
+        self._dispatch_kb_ingest_outbox(document_id=document.id)
         logger.info(
             "kb_document_upload_completed",
             actor_user_id=str(actor.id),
@@ -500,6 +505,8 @@ class KBDocumentService:
             metadata={},
         )
         await self.session.commit()
+        if ingest_response is None:
+            self._dispatch_kb_ingest_outbox(document_id=document.id)
         return kb_document_to_response(document)
 
     async def delete_document(
@@ -576,6 +583,16 @@ class KBDocumentService:
         if position:
             file.seek(position)
         return size
+
+    def _dispatch_kb_ingest_outbox(self, *, document_id: UUID) -> None:
+        try:
+            self.outbox_dispatcher.dispatch()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "kb_ingest_outbox_dispatch_failed",
+                document_id=str(document_id),
+                error_type=type(exc).__name__,
+            )
 
 
 class KBDocumentWebhookService:

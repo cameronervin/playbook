@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from app.workers.tasks import run_athlete_chat_task
+from app.workers.tasks import drain_kb_ingest_outbox_task, run_athlete_chat_task
 
 
 @dataclass(frozen=True)
@@ -42,4 +42,19 @@ class AthleteChatTaskDispatcher:
             kwargs=payload.to_kwargs(),
             task_id=task_id,
         )
+        return str(result.id)
+
+
+class KbIngestOutboxTaskDispatcher:
+    """Dispatch durable KB ingest outbox drain work to the backend worker."""
+
+    def dispatch(self, *, limit: int = 25, countdown: int | None = None) -> str:
+        """Enqueue outbox draining and return the Celery task id."""
+        options: dict[str, object] = {
+            "kwargs": {"limit": limit},
+            "retry": False,
+        }
+        if countdown is not None:
+            options["countdown"] = countdown
+        result = drain_kb_ingest_outbox_task.apply_async(**options)
         return str(result.id)
