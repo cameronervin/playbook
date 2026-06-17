@@ -88,7 +88,7 @@ Do not expose storage keys, source URLs, presigned URLs, or signed download URLs
 from normal conversation detail or admin document responses after the upload
 intent has been created.
 
-## Phase 9A: Contracts and Migrations
+## [COMPLETED] Phase 9A: Contracts and Migrations
 
 Scope:
 
@@ -140,7 +140,7 @@ Do not do yet:
 - Do not call KB-service from request handlers.
 - Do not mark Phase 9 implemented in PRD/status docs.
 
-## Phase 9B: Presigned POST Storage Support
+## [COMPLETED] Phase 9B: Presigned POST Storage Support
 
 Scope:
 
@@ -154,6 +154,21 @@ Scope:
   ETag, and checksum fields when available.
 - Update MinIO local setup so browser uploads from the frontend origin are
   allowed by bucket CORS.
+
+Implemented behavior:
+
+- `StorageProvider` now exposes direct-upload POST contract creation, object
+  metadata lookup, and reusable expected-size/content-type verification.
+- `S3StorageProvider` generates constrained presigned POST contracts using
+  fixed key, fixed content type, expiry, and `content-length-range` policy
+  conditions.
+- `S3StorageProvider.get_object_metadata(...)` wraps S3 `HEAD`, returns safe
+  length/type/ETag/checksum metadata when available, and treats expected
+  missing-object errors as `None`.
+- Local Docker MinIO bootstrap creates the bucket and applies frontend-origin
+  CORS for direct browser POST upload checks.
+- `S3_PUBLIC_ENDPOINT_URL` supports Docker local browser uploads while backend
+  signed GET URLs continue to use the internal storage endpoint.
 
 Suggested files:
 

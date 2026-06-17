@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 # Add backend to path for imports
@@ -16,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, set_settings_override
+from app.infrastructure.storage import PresignedPostUpload, StoredObjectMetadata
 
 TEST_SETTINGS = Settings(
     _env_file=None,
@@ -124,6 +126,20 @@ def mock_storage_provider():
     storage.delete_file = AsyncMock()
     storage.file_exists = AsyncMock(return_value=True)
     storage.get_presigned_url = AsyncMock(return_value="https://example.com/presigned-url")
+    storage.create_presigned_post = AsyncMock(
+        return_value=PresignedPostUpload(
+            url="https://example.com/upload",
+            fields={"key": "test-key", "Content-Type": "application/pdf"},
+            expires_at=datetime.now(UTC) + timedelta(minutes=15),
+        )
+    )
+    storage.get_object_metadata = AsyncMock(
+        return_value=StoredObjectMetadata(
+            key="test-key",
+            content_length=123,
+            content_type="application/pdf",
+        )
+    )
     return storage
 
 

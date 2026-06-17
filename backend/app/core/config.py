@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # Set S3_ENDPOINT_URL to a MinIO URL (e.g. http://minio:9000) for local/dev.
     # Leave empty/None for production AWS S3.
     S3_ENDPOINT_URL: str | None = None
+    # Optional browser-facing S3-compatible endpoint for direct upload contracts.
+    # Local Docker uses S3_ENDPOINT_URL=http://minio:9000 internally while the
+    # browser must POST to http://localhost:9000.
+    S3_PUBLIC_ENDPOINT_URL: str | None = None
     S3_BUCKET_NAME: str = "playbook-bucket"
     S3_REGION: str = "us-east-1"
     # Explicit credentials (MinIO: local dev credentials). If unset, boto3

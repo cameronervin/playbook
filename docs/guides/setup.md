@@ -67,6 +67,8 @@ uv sync
 cp ../deploy/envs/.env.local .env
 # If running backend directly on the host, set:
 # LITELLM_BASE_URL=http://localhost:4000
+# S3_ENDPOINT_URL=http://localhost:9000
+# S3_PUBLIC_ENDPOINT_URL=http://localhost:9000
 
 # Apply database migrations
 uv run alembic upgrade head

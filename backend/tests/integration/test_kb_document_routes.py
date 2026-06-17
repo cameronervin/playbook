@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import BinaryIO
 from uuid import UUID, uuid4
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
 from app.infrastructure.knowledgebase import get_kb_provider_dependency
 from app.infrastructure.storage import get_storage_provider_dependency
+from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjectMetadata
 from app.models.audit import AuditLog
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
 from app.repositories.identity import OrganizationRepository, UserRepository
@@ -47,6 +49,27 @@ class FakeStorageProvider:
         download_filename: str | None = None,
     ) -> str:
         return f"https://storage.example/{key}?filename={download_filename}"
+
+    async def create_presigned_post(
+        self,
+        *,
+        key: str,
+        content_type: str,
+        max_size_bytes: int,
+        expires_in: int | None = None,
+    ) -> PresignedPostUpload:
+        return PresignedPostUpload(
+            url="https://storage.example/upload",
+            fields={"key": key, "Content-Type": content_type},
+            expires_at=datetime.now(UTC) + timedelta(seconds=expires_in or 900),
+        )
+
+    async def get_object_metadata(self, key: str) -> StoredObjectMetadata | None:
+        return StoredObjectMetadata(
+            key=key,
+            content_length=123,
+            content_type="application/pdf",
+        )
 
     async def file_exists(self, key: str) -> bool:
         return True

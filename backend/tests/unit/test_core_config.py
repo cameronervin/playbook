@@ -87,6 +87,16 @@ def test_settings_use_playbook_local_defaults() -> None:
     assert not hasattr(settings, "ADVANCED_MODEL")
 
 
+def test_settings_support_browser_facing_s3_public_endpoint() -> None:
+    settings = _base_settings(
+        S3_ENDPOINT_URL="http://minio:9000",
+        S3_PUBLIC_ENDPOINT_URL="http://localhost:9000",
+    )
+
+    assert settings.S3_ENDPOINT_URL == "http://minio:9000"
+    assert settings.S3_PUBLIC_ENDPOINT_URL == "http://localhost:9000"
+
+
 def test_cors_origins_parse_json_and_comma_separated_values() -> None:
     json_settings = _base_settings(
         CORS_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000"]'
