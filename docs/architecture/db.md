@@ -61,14 +61,14 @@ Current repository coverage:
 | `UserRepository` | `users` | OAuth subject lookup, org/email lookup, profile updates, role updates, and org-scoped user listing |
 | `OAuthAccountRepository` | `oauth_accounts` | OAuth account lookup plus token/account metadata create/update |
 | `AuditLogRepository` | `audit_logs` | Append-only privileged-action audit creation and super-admin query filters |
-| `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, summary/count mirroring, and org-scoped listing |
+| `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, summary/count mirroring, org-scoped listing, and status counts for maintenance observability |
 | `KBDocumentEventRepository` | `kb_document_events` | KB ingestion/status lifecycle event append and listing |
 | `ConversationRepository` | `conversations` | Athlete-owned conversation create/list/get and status/timestamp updates |
 | `ConversationMessageRepository` | `conversation_messages` | Message append, ordered history, bounded recent history, and assistant status/content updates |
 | `MessageCitationRepository` | `message_citations` | Assistant citation append and rank-ordered listing |
-| `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list, extraction-status updates, KB-service linking, and summary/count mirroring |
-| `UploadRequestRepository` | `upload_requests` | Direct-upload request create/lookup, completion/failure/expiry status updates, and expired pending request listing |
-| `KBIngestOutboxRepository` | `kb_ingest_outbox` | Idempotent ingest enqueue, due-row locking with `FOR UPDATE SKIP LOCKED`, dispatch linkage, retry scheduling, and terminal failure updates |
+| `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list, extraction-status updates, KB-service linking, summary/count mirroring, and status counts for maintenance observability |
+| `UploadRequestRepository` | `upload_requests` | Direct-upload request create/lookup, completion/failure/expiry status updates, expired pending request locking with `FOR UPDATE SKIP LOCKED`, and next-expiration lookup |
+| `KBIngestOutboxRepository` | `kb_ingest_outbox` | Idempotent ingest enqueue, due-row locking with `FOR UPDATE SKIP LOCKED`, dispatch linkage, retry scheduling, terminal failure updates, and due-backlog counts |
 
 Repositories flush and refresh written models so generated IDs and server
 defaults are visible to callers, but they do not commit transactions. Services
@@ -80,8 +80,10 @@ Phase 9C uses them from the public JSON upload routes to return presigned
 browser upload contracts, verify completed objects, and enqueue KB ingest
 outbox rows after storage verification. Phase 9D drains the outbox from the
 `backend-files` worker queue, dispatches trusted KB-service ingest requests, and
-records retry or terminal failure state. Later Phase 9 work handles stale upload
-cleanup.
+records retry or terminal failure state. Phase 9F reconciles expired pending
+upload requests from the `backend-maintenance` queue, moves still-pending
+resources to failed, and deletes only storage objects tied to known expired
+intents.
 
 Later phases will add analytics queries, dashboard insight run/output
 repositories, and admin chat repositories.

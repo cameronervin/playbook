@@ -135,6 +135,75 @@ def test_build_ingest_metadata_stamps_source_type_and_private_scope() -> None:
     assert "source_uri" not in metadata
 
 
+def test_admin_upload_idempotency_identity_is_backend_document_id() -> None:
+    playbook_document_id = uuid4()
+    organization_id = uuid4()
+    first = IngestDocumentRequest(
+        organization_id=organization_id,
+        playbook_document_id=playbook_document_id,
+        configuration_id=uuid4(),
+        source_uri="https://storage.test/bucket/first.pdf?signature=secret",
+        filename="first.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="First",
+    )
+    second = first.model_copy(
+        update={
+            "source_uri": "https://storage.test/bucket/second.pdf?signature=secret",
+            "filename": "second.pdf",
+            "source_title": "Second",
+        }
+    )
+
+    first_identity = {
+        key: build_ingest_metadata(first)[key]
+        for key in ("source_type", "organization_id", "playbook_document_id")
+    }
+    second_identity = {
+        key: build_ingest_metadata(second)[key]
+        for key in ("source_type", "organization_id", "playbook_document_id")
+    }
+
+    assert first_identity == second_identity
+
+
+def test_conversation_file_idempotency_identity_is_trusted_private_scope() -> None:
+    organization_id = uuid4()
+    conversation_id = uuid4()
+    conversation_file_id = uuid4()
+    first = IngestConversationFileRequest(
+        organization_id=organization_id,
+        conversation_id=conversation_id,
+        conversation_file_id=conversation_file_id,
+        configuration_id=uuid4(),
+        source_uri="https://storage.test/bucket/first.pdf?signature=secret",
+        filename="first.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        source_title="First",
+    )
+    second = first.model_copy(
+        update={
+            "source_uri": "https://storage.test/bucket/second.pdf?signature=secret",
+            "filename": "second.pdf",
+            "source_title": "Second",
+        }
+    )
+
+    identity_keys = (
+        "source_type",
+        "organization_id",
+        "conversation_id",
+        "conversation_file_id",
+        "visibility_policy",
+    )
+    first_identity = {key: build_ingest_metadata(first)[key] for key in identity_keys}
+    second_identity = {key: build_ingest_metadata(second)[key] for key in identity_keys}
+
+    assert first_identity == second_identity
+
+
 @pytest.mark.asyncio
 async def test_private_retrieval_fake_rejects_cross_conversation_leaks() -> None:
     organization_id = uuid4()

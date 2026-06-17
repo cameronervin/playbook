@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import uuid
-from typing import TypeAlias
+from typing import Any, TypeAlias
 
 import structlog
 from fastapi import HTTPException, status
@@ -35,6 +35,9 @@ from app.schemas.status import DocumentStatusResponse, StageStatus, TaskStatusRe
 
 logger = structlog.get_logger(__name__)
 IngestRequest: TypeAlias = IngestDocumentRequest | IngestConversationFileRequest
+_SOURCE_IDENTITY_CONFLICT_DETAIL = (
+    "document content already exists for a different trusted source identity"
+)
 
 
 def _metadata_with_organization(
@@ -145,6 +148,24 @@ def _conversation_file_id(metadata: dict | None) -> uuid.UUID | None:
         return uuid.UUID(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _metadata_matches_trusted_source_identity(
+    metadata: dict | None,
+    req: IngestRequest,
+) -> bool:
+    metadata = metadata or {}
+    if metadata.get("source_type") != req.source_type:
+        return False
+    if metadata.get("organization_id") != str(req.organization_id):
+        return False
+    if isinstance(req, IngestDocumentRequest):
+        return metadata.get("playbook_document_id") == str(req.playbook_document_id)
+    return (
+        metadata.get("conversation_id") == str(req.conversation_id)
+        and metadata.get("conversation_file_id") == str(req.conversation_file_id)
+        and metadata.get("visibility_policy") == {"scope": "conversation"}
+    )
 
 
 def _ingest_response(
@@ -276,6 +297,15 @@ class IngestionService:
             raise LookupError(f"Configuration {req.configuration_id} not found")
         metadata = _metadata_from_ingest_request(req)
 
+        existing_source = await self._get_existing_source_identity_document(req)
+        if existing_source is not None:
+            return await self._existing_ingest_response(
+                existing_source,
+                fallback_playbook_document_id=req.playbook_document_id
+                if isinstance(req, IngestDocumentRequest)
+                else None,
+            )
+
         _, s3_key = extract_s3_parts(req.source_uri)
         # Enforce max document size BEFORE MD5 download — HEAD is cheap, MD5 streams full bytes.
         await self._enforce_max_size(s3_key)
@@ -294,24 +324,17 @@ class IngestionService:
                         "document content already exists for a different organization"
                     ),
                 )
-            if existing.status in self._IN_PROGRESS_STATUSES:
-                # Pipeline already running — return existing task_id, don't dispatch a duplicate.
-                log = await self._log_repo.get_by_document(existing.id)
-                logger.info("kb_ingest_skipped_in_progress", doc_id=str(existing.id), doc_status=existing.status)
-                return _ingest_response(
-                    kb_service_document_id=existing.id,
-                    metadata=existing.metadata_,
-                    task_id=log.pipeline_task_id if log else None,
-                    status_=existing.status,
-                    fallback_playbook_document_id=req.playbook_document_id
-                    if isinstance(req, IngestDocumentRequest)
-                    else None,
+            if not _metadata_matches_trusted_source_identity(existing.metadata_, req):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=_SOURCE_IDENTITY_CONFLICT_DETAIL,
                 )
-
-            # success or failed — delete the old record and start fresh.
-            logger.info("kb_ingest_replacing", doc_id=str(existing.id), prev_status=existing.status)
-            await self._vector_repo.delete_document_embeddings(existing.id)
-            await self._doc_repo.delete(existing.id)
+            return await self._existing_ingest_response(
+                existing,
+                fallback_playbook_document_id=req.playbook_document_id
+                if isinstance(req, IngestDocumentRequest)
+                else None,
+            )
 
         # Create a new document record (fresh doc_id each time).
         doc_id = uuid.uuid4()
@@ -334,6 +357,48 @@ class IngestionService:
             metadata=metadata,
             task_id=task_id,
             status_="pending",
+        )
+
+    async def _get_existing_source_identity_document(
+        self,
+        req: IngestRequest,
+    ) -> Any | None:
+        if isinstance(req, IngestDocumentRequest):
+            return await self._doc_repo.get_by_admin_source_identity(
+                configuration_id=req.configuration_id,
+                organization_id=req.organization_id,
+                playbook_document_id=req.playbook_document_id,
+            )
+        return await self._doc_repo.get_by_conversation_file_source_identity(
+            configuration_id=req.configuration_id,
+            organization_id=req.organization_id,
+            conversation_id=req.conversation_id,
+            conversation_file_id=req.conversation_file_id,
+        )
+
+    async def _existing_ingest_response(
+        self,
+        existing: Any,
+        *,
+        fallback_playbook_document_id: uuid.UUID | None = None,
+    ) -> IngestDocumentResponse:
+        task_id = None
+        if existing.status in self._IN_PROGRESS_STATUSES:
+            log = await self._log_repo.get_by_document(existing.id)
+            task_id = log.pipeline_task_id if log else None
+        logger.info(
+            "kb_ingest_duplicate_source_identity",
+            doc_id=str(existing.id),
+            doc_status=existing.status,
+            source_type=(existing.metadata_ or {}).get("source_type"),
+            active=existing.status in self._IN_PROGRESS_STATUSES,
+        )
+        return _ingest_response(
+            kb_service_document_id=existing.id,
+            metadata=existing.metadata_,
+            task_id=task_id,
+            status_=existing.status,
+            fallback_playbook_document_id=fallback_playbook_document_id,
         )
 
     async def _dispatch_pipeline(

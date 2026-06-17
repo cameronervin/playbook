@@ -21,6 +21,9 @@ from app.infrastructure.storage import get_storage_provider
 from app.infrastructure.streaming import get_agent_stream_provider
 from app.services.agent_stream_service import AgentStreamService
 from app.services.kb_ingest_outbox_service import KbIngestOutboxService
+from app.services.upload_reconciliation_service import (
+    UploadRequestReconciliationService,
+)
 from app.workers.app import backend_worker, run_async
 from app.workers.queues import WorkerTaskName
 from app.workers.session import worker_db_session
@@ -28,6 +31,7 @@ from app.workers.session import worker_db_session
 logger = structlog.get_logger(__name__)
 TASK_MAX_RETRIES = backend_worker.conf.playbook_task_max_retries
 DEFAULT_OUTBOX_DRAIN_LIMIT = 25
+DEFAULT_UPLOAD_RECONCILE_LIMIT = 100
 
 
 def _raise_scaffold_not_implemented(task_name: WorkerTaskName, **context: Any) -> None:
@@ -227,6 +231,62 @@ def _schedule_next_outbox_drain(
 
 @backend_worker.task(
     bind=True,
+    name=WorkerTaskName.RECONCILE_UPLOAD_REQUESTS.value,
+    max_retries=TASK_MAX_RETRIES,
+)
+def reconcile_upload_requests_task(
+    self: Any,
+    *,
+    limit: int = DEFAULT_UPLOAD_RECONCILE_LIMIT,
+) -> dict[str, Any]:
+    """Expire stale direct-upload requests and clean known orphan objects."""
+    task_id = str(self.request.id)
+    logger.info(
+        "backend_worker_upload_reconciliation_invoked",
+        task_id=task_id,
+        limit=limit,
+    )
+    result = run_async(_reconcile_upload_requests(limit=limit))
+    _schedule_next_upload_reconciliation(
+        limit=limit,
+        countdown=result.get("next_countdown_seconds"),
+    )
+    return result
+
+
+async def _reconcile_upload_requests(*, limit: int) -> dict[str, Any]:
+    settings = get_settings()
+    async with worker_db_session(settings) as session:
+        service = UploadRequestReconciliationService(
+            session,
+            storage=get_storage_provider(settings),
+        )
+        result = await service.reconcile_expired(limit=limit)
+        return result.to_task_payload()
+
+
+def _schedule_next_upload_reconciliation(
+    *,
+    limit: int,
+    countdown: int | None,
+) -> None:
+    if countdown is None or backend_worker.conf.task_always_eager:
+        return
+    try:
+        reconcile_upload_requests_task.apply_async(
+            kwargs={"limit": limit},
+            countdown=countdown,
+            retry=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "upload_reconciliation_reschedule_failed",
+            error_type=type(exc).__name__,
+        )
+
+
+@backend_worker.task(
+    bind=True,
     name=WorkerTaskName.RUN_ADMIN_CHAT.value,
     max_retries=TASK_MAX_RETRIES,
 )
@@ -314,5 +374,22 @@ def schedule_kb_ingest_outbox_startup_drain(**_: Any) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "kb_ingest_outbox_startup_dispatch_failed",
+            error_type=type(exc).__name__,
+        )
+
+
+@worker_ready.connect
+def schedule_upload_reconciliation_startup(**_: Any) -> None:
+    """Kick stale upload cleanup when a backend worker starts."""
+    if backend_worker.conf.task_always_eager:
+        return
+    try:
+        reconcile_upload_requests_task.apply_async(
+            kwargs={"limit": DEFAULT_UPLOAD_RECONCILE_LIMIT},
+            retry=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "upload_reconciliation_startup_dispatch_failed",
             error_type=type(exc).__name__,
         )

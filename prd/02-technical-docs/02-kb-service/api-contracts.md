@@ -88,6 +88,17 @@ Phase 2 persists this trusted source identity in KB-service JSON metadata rather
 than first-class columns; a later migration will backfill columns once private
 retrieval and webhook contracts are stable.
 
+Ingestion is idempotent by trusted source identity. Repeated admin-upload
+requests with the same `organization_id`, `configuration_id`, and
+`playbook_document_id` return the existing KB-service document instead of
+creating or dispatching duplicate work. Repeated conversation-file requests with
+the same `organization_id`, `configuration_id`, `conversation_id`, and
+`conversation_file_id` do the same. Active duplicates return the existing
+pipeline `task_id`; terminal duplicates return `task_id: null`. Failed
+documents are not implicitly retried through ingest; callers must use the retry
+endpoint. If identical content is submitted for a different trusted source
+identity, KB-service returns `409` rather than replacing the existing document.
+
 ## Status Webhook
 
 The KB service posts signed status events to the main backend. The main backend

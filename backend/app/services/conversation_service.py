@@ -57,6 +57,7 @@ from app.workers.dispatcher import (
     AthleteChatTaskDispatcher,
     AthleteChatTaskPayload,
     KbIngestOutboxTaskDispatcher,
+    UploadRequestReconciliationTaskDispatcher,
 )
 from app.workers.queues import WorkerTaskName
 
@@ -94,6 +95,9 @@ class ConversationService:
         outbox_repo: KBIngestOutboxRepository | None = None,
         athlete_chat_dispatcher: AthleteChatTaskDispatcher | None = None,
         outbox_dispatcher: KbIngestOutboxTaskDispatcher | None = None,
+        upload_reconciliation_dispatcher: (
+            UploadRequestReconciliationTaskDispatcher | None
+        ) = None,
         kb_provider: BaseKnowledgebaseProvider | None = None,
         storage: StorageProvider | None = None,
         settings: Settings | None = None,
@@ -111,6 +115,10 @@ class ConversationService:
             athlete_chat_dispatcher or AthleteChatTaskDispatcher()
         )
         self.outbox_dispatcher = outbox_dispatcher or KbIngestOutboxTaskDispatcher()
+        self.upload_reconciliation_dispatcher = (
+            upload_reconciliation_dispatcher
+            or UploadRequestReconciliationTaskDispatcher()
+        )
         self.kb_provider = kb_provider
         self.storage = storage
         self.settings = settings
@@ -488,6 +496,10 @@ class ConversationService:
             conversation_file_id=file.id,
         )
         await self.session.commit()
+        self._dispatch_upload_reconciliation(
+            expires_at=upload_request.expires_at,
+            conversation_file_id=file.id,
+        )
         logger.info(
             "conversation_file_upload_requested",
             athlete_user_id=str(athlete.id),
@@ -800,3 +812,24 @@ class ConversationService:
                 conversation_file_id=str(conversation_file_id),
                 error_type=type(exc).__name__,
             )
+
+    def _dispatch_upload_reconciliation(
+        self,
+        *,
+        expires_at: datetime,
+        conversation_file_id: UUID,
+    ) -> None:
+        try:
+            self.upload_reconciliation_dispatcher.dispatch(
+                countdown=self._countdown_until(expires_at)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "upload_reconciliation_dispatch_failed",
+                conversation_file_id=str(conversation_file_id),
+                error_type=type(exc).__name__,
+            )
+
+    @staticmethod
+    def _countdown_until(target: datetime) -> int:
+        return max(0, int((target - datetime.now(UTC)).total_seconds()))

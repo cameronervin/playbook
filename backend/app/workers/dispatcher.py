@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from app.workers.tasks import drain_kb_ingest_outbox_task, run_athlete_chat_task
+from app.workers.tasks import (
+    drain_kb_ingest_outbox_task,
+    reconcile_upload_requests_task,
+    run_athlete_chat_task,
+)
 
 
 @dataclass(frozen=True)
@@ -57,4 +61,19 @@ class KbIngestOutboxTaskDispatcher:
         if countdown is not None:
             options["countdown"] = countdown
         result = drain_kb_ingest_outbox_task.apply_async(**options)
+        return str(result.id)
+
+
+class UploadRequestReconciliationTaskDispatcher:
+    """Dispatch direct-upload reconciliation work to the backend worker."""
+
+    def dispatch(self, *, limit: int = 100, countdown: int | None = None) -> str:
+        """Enqueue expired direct-upload reconciliation and return the task id."""
+        options: dict[str, object] = {
+            "kwargs": {"limit": limit},
+            "retry": False,
+        }
+        if countdown is not None:
+            options["countdown"] = countdown
+        result = reconcile_upload_requests_task.apply_async(**options)
         return str(result.id)

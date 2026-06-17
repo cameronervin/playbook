@@ -13,7 +13,11 @@ from app.infrastructure.streaming import (
 )
 from app.workers import tasks as worker_tasks
 from app.workers.app import backend_worker, create_worker_app
-from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
+from app.workers.dispatcher import (
+    AthleteChatTaskDispatcher,
+    AthleteChatTaskPayload,
+    UploadRequestReconciliationTaskDispatcher,
+)
 from app.workers.queues import (
     BACKEND_AGENT_QUEUE,
     BACKEND_DEFAULT_QUEUE,
@@ -25,6 +29,7 @@ from app.workers.queues import (
 )
 from app.workers.tasks import (
     drain_kb_ingest_outbox_task,
+    reconcile_upload_requests_task,
     run_admin_chat_task,
     run_athlete_chat_task,
     worker_health_check,
@@ -88,6 +93,7 @@ def test_backend_worker_registers_and_routes_named_tasks() -> None:
         WorkerTaskName.RUN_ATHLETE_CHAT: BACKEND_AGENT_QUEUE,
         WorkerTaskName.RUN_ADMIN_CHAT: BACKEND_AGENT_QUEUE,
         WorkerTaskName.DRAIN_KB_INGEST_OUTBOX: BACKEND_FILES_QUEUE,
+        WorkerTaskName.RECONCILE_UPLOAD_REQUESTS: BACKEND_MAINTENANCE_QUEUE,
         WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS: BACKEND_INSIGHTS_QUEUE,
         WorkerTaskName.PRUNE_CHECKPOINTS: BACKEND_MAINTENANCE_QUEUE,
         WorkerTaskName.HEALTH_CHECK: BACKEND_MAINTENANCE_QUEUE,
@@ -190,6 +196,83 @@ def test_kb_ingest_outbox_task_runs_drain_entrypoint_in_eager_mode(
         WorkerTaskName.DRAIN_KB_INGEST_OUTBOX.value
         == drain_kb_ingest_outbox_task.name
     )
+
+
+def test_upload_reconciliation_task_runs_entrypoint_in_eager_mode(
+    monkeypatch,
+) -> None:
+    async def fake_reconcile(*, limit: int) -> dict[str, object]:
+        return {
+            "status": "complete",
+            "limit": limit,
+            "processed": 3,
+            "expired": 2,
+            "resources_failed": 2,
+            "objects_deleted": 1,
+            "objects_missing": 1,
+            "cleanup_failed": 0,
+            "skipped": 1,
+            "next_countdown_seconds": None,
+        }
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "_reconcile_upload_requests",
+        fake_reconcile,
+        raising=False,
+    )
+    previous_always_eager = backend_worker.conf.task_always_eager
+    previous_eager_propagates = backend_worker.conf.task_eager_propagates
+    backend_worker.conf.task_always_eager = True
+    backend_worker.conf.task_eager_propagates = True
+    try:
+        result = reconcile_upload_requests_task.delay(limit=3)
+    finally:
+        backend_worker.conf.task_always_eager = previous_always_eager
+        backend_worker.conf.task_eager_propagates = previous_eager_propagates
+
+    assert result.get(timeout=1) == {
+        "status": "complete",
+        "limit": 3,
+        "processed": 3,
+        "expired": 2,
+        "resources_failed": 2,
+        "objects_deleted": 1,
+        "objects_missing": 1,
+        "cleanup_failed": 0,
+        "skipped": 1,
+        "next_countdown_seconds": None,
+    }
+    assert (
+        WorkerTaskName.RECONCILE_UPLOAD_REQUESTS.value
+        == reconcile_upload_requests_task.name
+    )
+
+
+def test_upload_reconciliation_dispatcher_uses_countdown(monkeypatch) -> None:
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(**options: object) -> SimpleNamespace:
+        dispatched.update(options)
+        return SimpleNamespace(id="reconcile-task-id")
+
+    monkeypatch.setattr(
+        reconcile_upload_requests_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    task_id = UploadRequestReconciliationTaskDispatcher().dispatch(
+        limit=7,
+        countdown=30,
+    )
+
+    assert task_id == "reconcile-task-id"
+    assert dispatched == {
+        "kwargs": {"limit": 7},
+        "retry": False,
+        "countdown": 30,
+    }
 
 
 def test_athlete_chat_task_runs_agent_entrypoint_in_eager_mode(

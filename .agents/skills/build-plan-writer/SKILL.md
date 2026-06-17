@@ -1,6 +1,6 @@
 ---
 name: build-plan-writer
-description: Use this skill when creating phased build plans, implementation handoffs, feature build breakdowns, phase plans, or docs that let later coding agents implement work one slice at a time. Trigger when the user asks to write, create, update, or review a build plan, phased plan, implementation handoff, direct build breakdown, or agent-ready feature plan.
+description: Manual invocation only. Do not use this skill based on task content; use it only when the user explicitly invokes build-plan-writer or asks to use the build-plan-writer skill.
 ---
 
 # Build Plan Writer
@@ -9,7 +9,13 @@ Create build plans that a later coding agent can implement safely without
 re-discovering the whole product. The plan should be grounded in repo facts,
 clear about decisions, and split into independently testable phases.
 
-## When to Use
+## Manual Invocation Only
+
+Do not auto-apply this skill based on task content. Use it only when the user
+explicitly invokes `build-plan-writer`, such as with `$build-plan-writer`,
+`use build-plan-writer`, or `use the build-plan-writer skill`.
+
+Once explicitly invoked, use it for:
 
 - Creating a phased build plan or implementation handoff.
 - Breaking a large feature into slices for later agents.
@@ -106,4 +112,3 @@ Use `references/build-plan-template.md` when starting a new plan from scratch.
 - Clearly label planning artifacts as not yet implemented.
 - Do not include secrets, private credentials, raw file contents, raw model
   inputs, or signed/presigned URLs.
-

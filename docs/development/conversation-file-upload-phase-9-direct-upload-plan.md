@@ -354,7 +354,7 @@ Do not do yet:
 - Do not move KB-service document intelligence into backend workers.
 - Do not log signed source URLs or raw file content.
 
-## Phase 9E: KB-Service Ingest Idempotency
+## [COMPLETED] Phase 9E: KB-Service Ingest Idempotency
 
 Scope:
 
@@ -386,6 +386,16 @@ Acceptance criteria:
   cross-source leaks.
 - Existing retry/delete behavior remains compatible.
 
+Implementation notes:
+
+- KB-service now checks JSONB metadata for trusted source identity before
+  storage `HEAD`, MD5 download, or Celery dispatch.
+- Active duplicates return the existing pipeline task ID; terminal duplicates
+  return the existing KB-service document with `task_id=null`.
+- Content-MD5 dedupe remains as a legacy guard, but same-content submissions
+  for a different trusted source identity return `409` instead of replacing an
+  existing document.
+
 Relevant tests:
 
 - KB-service ingest idempotency tests for `admin_upload`.
@@ -398,7 +408,7 @@ Do not do yet:
   explicitly includes the migration and JSON backfill.
 - Do not relax current metadata validation.
 
-## Phase 9F: Reconciliation and Cleanup
+## [COMPLETED] Phase 9F: Reconciliation and Cleanup
 
 Scope:
 
@@ -408,6 +418,28 @@ Scope:
 - Add observability for stuck upload-pending resources and outbox backlog.
 - Decide only short-term cleanup needed for Phase 9; keep long-term retention
   policy as a follow-up unless product requirements settle it.
+
+Implemented behavior:
+
+- Backend maintenance now includes `reconcile_upload_requests_task` on the
+  `backend-maintenance` queue.
+- Upload intent creation schedules reconciliation for the returned contract
+  expiration time without making the HTTP response depend on broker
+  availability.
+- Backend worker startup also kicks reconciliation, and each reconciliation
+  pass self-schedules for the next pending expiration when one exists.
+- Expired pending admin upload requests move still-`upload_pending` documents to
+  `failed`, append a safe `document.upload_expired` lifecycle event, and delete
+  the known intent object when storage confirms it exists.
+- Expired pending conversation-file upload requests move still-`upload_pending`
+  files to `failed` with safe athlete-visible error metadata and delete the
+  known intent object when storage confirms it exists.
+- Reconciliation uses row locking with `FOR UPDATE SKIP LOCKED`, is idempotent
+  across duplicate task runs, skips resources already transitioned out of the
+  pending state, and reports safe counters for object cleanup, stuck
+  upload-pending resources, and due outbox backlog.
+- Long-term retention for successful originals and extracted artifacts remains
+  deferred in `docs/development/tech-debt-tracker.md`.
 
 Suggested files:
 

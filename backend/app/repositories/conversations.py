@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
@@ -483,6 +483,15 @@ class ConversationFileRepository:
             .order_by(ConversationFile.created_at.asc(), ConversationFile.id.asc())
         )
         return list(result.all())
+
+    async def count_by_status(self, *, extraction_status: str) -> int:
+        """Return the number of conversation files in one extraction status."""
+        result = await self.session.scalar(
+            select(func.count())
+            .select_from(ConversationFile)
+            .where(ConversationFile.extraction_status == extraction_status)
+        )
+        return int(result or 0)
 
     async def update_extraction_status(
         self,

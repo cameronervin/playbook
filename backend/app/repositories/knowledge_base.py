@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
@@ -80,6 +80,15 @@ class KBDocumentRepository:
             .offset(offset)
         )
         return list(result.all())
+
+    async def count_by_status(self, *, processing_status: str) -> int:
+        """Return the number of KB documents in one processing status."""
+        result = await self.session.scalar(
+            select(func.count())
+            .select_from(KBDocument)
+            .where(KBDocument.processing_status == processing_status)
+        )
+        return int(result or 0)
 
     async def create(
         self,

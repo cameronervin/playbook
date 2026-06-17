@@ -45,7 +45,10 @@ from app.schemas.kb_documents import (
 from app.schemas.knowledgebase import KBDocumentIngestRequest
 from app.schemas.uploads import DirectUploadContract, UploadCompleteRequest
 from app.services.audit_service import AuditLogService
-from app.workers.dispatcher import KbIngestOutboxTaskDispatcher
+from app.workers.dispatcher import (
+    KbIngestOutboxTaskDispatcher,
+    UploadRequestReconciliationTaskDispatcher,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -115,6 +118,9 @@ class KBDocumentService:
         upload_request_repo: UploadRequestRepository | None = None,
         outbox_repo: KBIngestOutboxRepository | None = None,
         outbox_dispatcher: KbIngestOutboxTaskDispatcher | None = None,
+        upload_reconciliation_dispatcher: (
+            UploadRequestReconciliationTaskDispatcher | None
+        ) = None,
         audit_service: AuditLogService | None = None,
         settings: Settings | None = None,
     ) -> None:
@@ -128,6 +134,10 @@ class KBDocumentService:
         )
         self.outbox_repo = outbox_repo or KBIngestOutboxRepository(session)
         self.outbox_dispatcher = outbox_dispatcher or KbIngestOutboxTaskDispatcher()
+        self.upload_reconciliation_dispatcher = (
+            upload_reconciliation_dispatcher
+            or UploadRequestReconciliationTaskDispatcher()
+        )
         self.audit_service = audit_service or AuditLogService(session)
         self.settings = settings
 
@@ -312,6 +322,10 @@ class KBDocumentService:
             metadata={"filename": document.filename},
         )
         await self.session.commit()
+        self._dispatch_upload_reconciliation(
+            expires_at=upload_request.expires_at,
+            document_id=document.id,
+        )
         logger.info(
             "kb_document_upload_requested",
             actor_user_id=str(actor.id),
@@ -593,6 +607,27 @@ class KBDocumentService:
                 document_id=str(document_id),
                 error_type=type(exc).__name__,
             )
+
+    def _dispatch_upload_reconciliation(
+        self,
+        *,
+        expires_at: datetime,
+        document_id: UUID,
+    ) -> None:
+        try:
+            self.upload_reconciliation_dispatcher.dispatch(
+                countdown=self._countdown_until(expires_at)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "upload_reconciliation_dispatch_failed",
+                document_id=str(document_id),
+                error_type=type(exc).__name__,
+            )
+
+    @staticmethod
+    def _countdown_until(target: datetime) -> int:
+        return max(0, int((target - datetime.now(UTC)).total_seconds()))
 
 
 class KBDocumentWebhookService:

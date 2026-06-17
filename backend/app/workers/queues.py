@@ -19,6 +19,7 @@ class WorkerTaskName(StrEnum):
     RUN_ATHLETE_CHAT = "app.workers.tasks.run_athlete_chat_task"
     RUN_ADMIN_CHAT = "app.workers.tasks.run_admin_chat_task"
     DRAIN_KB_INGEST_OUTBOX = "app.workers.tasks.drain_kb_ingest_outbox_task"
+    RECONCILE_UPLOAD_REQUESTS = "app.workers.tasks.reconcile_upload_requests_task"
     GENERATE_DASHBOARD_INSIGHTS = "app.workers.tasks.generate_dashboard_insights_task"
     PRUNE_CHECKPOINTS = "app.workers.tasks.prune_checkpoints_task"
     HEALTH_CHECK = "app.workers.tasks.worker_health_check"
@@ -36,6 +37,9 @@ TASK_ROUTES: dict[str, dict[str, str]] = {
     WorkerTaskName.RUN_ATHLETE_CHAT.value: {"queue": BACKEND_AGENT_QUEUE},
     WorkerTaskName.RUN_ADMIN_CHAT.value: {"queue": BACKEND_AGENT_QUEUE},
     WorkerTaskName.DRAIN_KB_INGEST_OUTBOX.value: {"queue": BACKEND_FILES_QUEUE},
+    WorkerTaskName.RECONCILE_UPLOAD_REQUESTS.value: {
+        "queue": BACKEND_MAINTENANCE_QUEUE,
+    },
     WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS.value: {
         "queue": BACKEND_INSIGHTS_QUEUE,
     },

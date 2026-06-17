@@ -79,7 +79,9 @@ uv run uvicorn app.main:app --reload
 
 Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "healthy"}`.
 
-Optional backend worker for Phase 2+ async jobs:
+Optional backend worker for Phase 2+ async jobs. Keep `backend-maintenance` in
+the queue list so worker startup and scheduled passes can reconcile expired
+direct-upload intents:
 
 ```bash
 uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info

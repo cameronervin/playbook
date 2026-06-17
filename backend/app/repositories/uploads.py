@@ -136,14 +136,16 @@ class UploadRequestRepository:
             stmt = stmt.with_for_update()
         return stmt
 
-    async def list_expired_pending_requests(
-        self,
+    @classmethod
+    def expired_pending_requests_statement(
+        cls,
         *,
         now: datetime,
-        limit: int = 100,
-    ) -> list[UploadRequest]:
-        """Return pending upload requests whose storage contracts have expired."""
-        result = await self.session.scalars(
+        limit: int,
+        for_update: bool = False,
+    ) -> Select[tuple[UploadRequest]]:
+        """Build the expired pending direct-upload query."""
+        stmt = (
             select(UploadRequest)
             .where(
                 UploadRequest.status == "pending",
@@ -151,6 +153,25 @@ class UploadRequestRepository:
             )
             .order_by(UploadRequest.expires_at.asc(), UploadRequest.id.asc())
             .limit(limit)
+        )
+        if for_update:
+            stmt = stmt.with_for_update(skip_locked=True)
+        return stmt
+
+    async def list_expired_pending_requests(
+        self,
+        *,
+        now: datetime,
+        limit: int = 100,
+        for_update: bool = False,
+    ) -> list[UploadRequest]:
+        """Return pending upload requests whose storage contracts have expired."""
+        result = await self.session.scalars(
+            self.expired_pending_requests_statement(
+                now=now,
+                limit=limit,
+                for_update=for_update,
+            )
         )
         return list(result.all())
 
@@ -181,12 +202,27 @@ class UploadRequestRepository:
         await self.session.refresh(request)
         return request
 
-    async def mark_expired(self, request: UploadRequest) -> UploadRequest:
+    async def mark_expired(
+        self,
+        request: UploadRequest,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> UploadRequest:
         """Mark an upload request expired without committing."""
         request.status = "expired"
+        if metadata is not None:
+            request.request_metadata = metadata
         await self.session.flush()
         await self.session.refresh(request)
         return request
+
+    async def next_pending_expiration_at(self) -> datetime | None:
+        """Return the next pending upload request expiration timestamp."""
+        return await self.session.scalar(
+            select(func.min(UploadRequest.expires_at)).where(
+                UploadRequest.status == "pending"
+            )
+        )
 
 
 class KBIngestOutboxRepository:
@@ -359,3 +395,15 @@ class KBIngestOutboxRepository:
             )
         )
         return result
+
+    async def count_due(self, *, now: datetime) -> int:
+        """Return the due pending/retrying outbox row count."""
+        result = await self.session.scalar(
+            select(func.count())
+            .select_from(KBIngestOutbox)
+            .where(
+                KBIngestOutbox.status.in_(self.DUE_STATUSES),
+                KBIngestOutbox.next_attempt_at <= now,
+            )
+        )
+        return int(result or 0)
