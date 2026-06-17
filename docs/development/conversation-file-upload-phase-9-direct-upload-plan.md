@@ -2,13 +2,9 @@
 
 ## Purpose
 
-This document is an implementation handoff for later coding agents. It breaks
-Phase 9 of the conversation file upload build into small action items that can
-be picked up independently.
-
-This is a planning artifact only. It does not mean Phase 9 is implemented, and
-it should not be read as a request to run these phases in this documentation
-task.
+This document is an implementation handoff and verification record for Phase 9
+of the conversation file upload build. It breaks the work into small action
+items and records which pieces have been completed.
 
 Primary source documents:
 
@@ -471,7 +467,7 @@ Do not do yet:
 - Do not decide long-term retention for original conversation files and
   extracted artifacts unless product requirements explicitly settle it.
 
-## Phase 9G: Frontend Direct Upload Flow
+## [COMPLETED] Phase 9G: Frontend Direct Upload Flow
 
 Scope:
 
@@ -519,7 +515,16 @@ Do not do yet:
 - Do not add file download/export.
 - Do not expose internal KB summaries to athletes.
 
-## Phase 9H: Documentation and Verification
+Implemented behavior:
+
+- Frontend API adapters and hooks use JSON intent creation, browser direct
+  storage POST, completion calls, and TanStack Query invalidation for admin KB
+  documents and conversation files.
+- Admin and chat UI surfaces render local upload progress, recoverable upload
+  failure, completion status, and backend/KB processing states without exposing
+  storage keys, presigned URLs, source URIs, or internal summaries.
+
+## [COMPLETED] Phase 9H: Documentation and Verification
 
 Scope:
 
@@ -549,6 +554,41 @@ Acceptance criteria:
 - Endpoint docs match actual route behavior after implementation.
 - Setup docs include any new MinIO CORS or worker schedule requirements.
 - Phase 2 status reflects Phase 9 only after tests/smoke pass.
+
+Implemented behavior:
+
+- Added `docs/architecture/direct-upload-flow.md` with ASCII diagrams for admin
+  document upload, conversation-file upload, and failure/retry paths.
+- Updated API, database, setup, MinIO, PRD, and phase status docs to describe
+  the implemented direct-upload intent/complete runtime instead of historical
+  multipart upload behavior.
+- Documented local prerequisites for MinIO preflight, backend workers on
+  `backend-files` and `backend-maintenance`, KB-service API/workers, frontend,
+  and private KB-service smoke coverage.
+
+Verification recorded on 2026-06-17:
+
+- Backend targeted unit checks passed:
+  `27 passed in 0.41s`.
+- Backend targeted integration checks passed:
+  `43 passed, 4 warnings in 58.97s`.
+- KB-service targeted checks passed:
+  `42 passed in 1.57s`.
+- Frontend targeted checks passed:
+  typecheck, lint, and `49` focused Vitest tests.
+- MinIO bucket bootstrap and browser preflight were verified locally; preflight
+  from `http://localhost:3000` returned `204` with POST allowed.
+- `kb-service/scripts/smoke_kb_service.py --include-conversation-file` passed
+  after applying KB migrations and restarting stale local KB workers. It
+  confirmed shared admin-style ingest/search, private conversation-file
+  ingest/search, and default shared-search isolation.
+- Backend route tests cover direct-upload intent creation, storage `HEAD`
+  verification, duplicate completion idempotency, and outbox row creation for
+  both admin documents and conversation files.
+- Browser admin/chat UI smoke and the Phase 2 live grounded citation smoke were
+  not promoted to complete here; Phase 2 keeps citation validation marked
+  remaining until seeded local retrieval data proves an athlete answer cites a
+  ready conversation file.
 
 Relevant tests and checks:
 

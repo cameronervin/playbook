@@ -76,7 +76,11 @@ function resolveDocumentCollectionId(document: KBDocument, collections: KBCollec
 }
 
 function isProcessingDocument(document: KBDocument): boolean {
-  return document.processing_status === 'processing' || document.processing_status === 'uploaded'
+  return (
+    document.processing_status === 'upload_pending' ||
+    document.processing_status === 'processing' ||
+    document.processing_status === 'uploaded'
+  )
 }
 
 function hasCollection(collectionId: string, collections: KBCollection[]): boolean {

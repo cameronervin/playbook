@@ -15,8 +15,7 @@ docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d mini
 ```
 
 The `minio-bootstrap` service creates the configured local bucket used by
-Playbook and applies bucket CORS so the frontend origin can POST direct-upload
-form requests:
+Playbook:
 
 ```text
 playbook-bucket
@@ -74,35 +73,30 @@ docker run --rm --network host quay.io/minio/mc \
   mc mb --ignore-existing local/playbook-bucket'
 ```
 
-## Bucket CORS
+## Browser CORS
 
-Compose applies this automatically from `deploy/compose/local.yml`. For
-standalone MinIO, configure CORS with the MinIO client:
+Local Compose configures MinIO's global CORS allowlist with
+`MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3000` by default. The bootstrap
+container only creates the bucket; it does not apply bucket-level CORS rules.
+This keeps local setup aligned with MinIO's documented global CORS setting and
+avoids brittle XML bootstrapping in `mc cors set`.
+
+Validate the frontend origin before browser direct-upload smoke:
 
 ```bash
-cat > /tmp/playbook-cors.json <<'JSON'
-[
-  {
-    "AllowedOrigins": ["http://localhost:3000"],
-    "AllowedMethods": ["POST", "GET", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": [
-      "ETag",
-      "x-amz-checksum-crc32",
-      "x-amz-checksum-crc32c",
-      "x-amz-checksum-sha1",
-      "x-amz-checksum-sha256"
-    ],
-    "MaxAgeSeconds": 3000
-  }
-]
-JSON
-
-docker run --rm --network host -v /tmp/playbook-cors.json:/tmp/playbook-cors.json quay.io/minio/mc \
-  sh -c 'mc alias set local http://localhost:9000 playbookminio playbookminio123 && \
-  mc cors set local/playbook-bucket /tmp/playbook-cors.json && \
-  mc cors get local/playbook-bucket'
+curl -i -X OPTIONS http://localhost:9000/playbook-bucket \
+  -H 'Origin: http://localhost:3000' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type'
 ```
+
+The response should include `Access-Control-Allow-Origin:
+http://localhost:3000` and `Access-Control-Allow-Methods: POST`.
+
+For production AWS S3 or an S3-compatible service that requires bucket CORS
+configuration, configure the equivalent POST/GET/HEAD CORS policy through that
+provider's supported control plane. MinIO also supports bucket CORS through
+`mc cors set`, but that command expects S3 CORS XML.
 
 ## Validate
 
@@ -110,24 +104,35 @@ docker run --rm --network host -v /tmp/playbook-cors.json:/tmp/playbook-cors.jso
 # Check MinIO health
 curl -f http://localhost:9000/minio/health/live
 
-# Confirm bucket CORS
-docker run --rm --network host quay.io/minio/mc \
-  sh -c 'mc alias set local http://localhost:9000 playbookminio playbookminio123 && \
-  mc cors get local/playbook-bucket'
+# Confirm browser preflight
+curl -i -X OPTIONS http://localhost:9000/playbook-bucket \
+  -H 'Origin: http://localhost:3000' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type'
 
 # Open MinIO console
 open http://localhost:9001
 ```
 
-Manual direct-upload smoke after backend storage support is available:
+Manual direct-upload smoke for the implemented route path:
 
-1. Generate a presigned POST contract through `StorageProvider.create_presigned_post(...)`.
-2. Submit a multipart form POST to the returned `url` with every returned
-   `field` plus a `file` part.
-3. Confirm `StorageProvider.get_object_metadata(...)` returns the expected
-   content length, content type, ETag, and any checksum metadata exposed by
-   MinIO.
-4. Confirm `StorageProvider.verify_object(...)` returns `valid`.
+1. Start the backend with `S3_ENDPOINT_URL` pointing at MinIO and
+   `S3_PUBLIC_ENDPOINT_URL=http://localhost:9000` so browser upload contracts
+   use the host-reachable endpoint.
+2. Create an upload intent through either
+   `POST /api/v1/admin/kb/documents` or
+   `POST /api/v1/conversations/{conversation_id}/files`.
+3. Submit a multipart form POST to the returned `upload.url` with every
+   returned `upload.fields` entry plus a final `file` part.
+4. Call the matching `upload-complete` endpoint with the returned
+   `upload_request_id`.
+5. Confirm backend completion verifies MinIO object metadata and transitions the
+   resource to `uploaded`; the backend worker should then move it to
+   `processing`/`extracting` and eventually `ready` or `failed` after KB-service
+   ingestion.
+
+If the browser POST fails before reaching backend completion, re-check bucket
+CORS, the frontend origin, and `S3_PUBLIC_ENDPOINT_URL`.
 
 ## Reset
 

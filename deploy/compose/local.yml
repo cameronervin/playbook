@@ -86,6 +86,8 @@ services:
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
+    environment:
+      MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -114,26 +116,8 @@ services:
         set -eu
         /usr/bin/mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
         /usr/bin/mc mb --ignore-existing "local/$${S3_BUCKET_NAME}"
-        origin="$${FRONTEND_URL:-http://localhost:3000}"
-        cat > /tmp/playbook-cors.json <<EOF
-        [
-          {
-            "AllowedOrigins": ["$${origin}"],
-            "AllowedMethods": ["POST", "GET", "HEAD"],
-            "AllowedHeaders": ["*"],
-            "ExposeHeaders": [
-              "ETag",
-              "x-amz-checksum-crc32",
-              "x-amz-checksum-crc32c",
-              "x-amz-checksum-sha1",
-              "x-amz-checksum-sha256"
-            ],
-            "MaxAgeSeconds": 3000
-          }
-        ]
-        EOF
-        /usr/bin/mc cors set "local/$${S3_BUCKET_NAME}" /tmp/playbook-cors.json
-        /usr/bin/mc cors get "local/$${S3_BUCKET_NAME}"
+        echo "MinIO bucket ready for local direct-upload smoke: $${S3_BUCKET_NAME}"
+        echo "Validate browser preflight with docs/guides/minio_setup.md"
 
   celery-worker:
     env_file:

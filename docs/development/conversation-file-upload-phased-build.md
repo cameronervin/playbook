@@ -538,7 +538,7 @@ Do not do yet:
 - Do not add broad frontend upload UI in this backend/RAG build unless a later
   phase explicitly takes it on.
 
-## Phase 9: Direct Uploads and Reliable Ingest Handoff
+## [IMPLEMENTED] Phase 9: Direct Uploads and Reliable Ingest Handoff
 
 Scope:
 
@@ -580,6 +580,23 @@ Acceptance criteria:
 - Duplicate browser completion calls and duplicate worker attempts are safe.
 - Users see accurate states for upload pending, upload complete/queued,
   extracting, ready, and failed.
+
+Implementation and verification notes:
+
+- Phase 9A through 9H are implemented in the detailed handoff at
+  `docs/development/conversation-file-upload-phase-9-direct-upload-plan.md`.
+- Backend direct-upload routes now use JSON metadata intent creation plus
+  storage-verified completion for admin KB documents and conversation files.
+- The backend durable outbox owns restart-safe KB-service handoff, retry state,
+  and duplicate-completion idempotency.
+- Frontend admin and chat upload surfaces use presigned POST contracts, progress
+  tracking, completion calls, and cache invalidation without rendering raw
+  storage keys, source URIs, presigned URLs, or internal summaries.
+- Verification on 2026-06-17 passed targeted backend, KB-service, and frontend
+  checks, MinIO preflight, and `kb-service/scripts/smoke_kb_service.py
+  --include-conversation-file` for shared ingest/search plus private
+  conversation-file isolation. Live athlete-chat citation against a ready
+  conversation file remains tracked in Phase 2.
 
 Do not do yet:
 

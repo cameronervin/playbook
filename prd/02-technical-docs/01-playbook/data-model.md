@@ -223,6 +223,61 @@ CREATE TABLE kb_document_events (
 );
 ```
 
+### `upload_requests`
+```sql
+CREATE TABLE upload_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    requested_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    source_type VARCHAR(40) NOT NULL,
+    kb_document_id UUID NULL REFERENCES kb_documents(id) ON DELETE CASCADE,
+    conversation_file_id UUID NULL REFERENCES conversation_files(id) ON DELETE CASCADE,
+    filename VARCHAR(500) NOT NULL,
+    content_type VARCHAR(120) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    storage_key VARCHAR(1000) NOT NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'pending',
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    completed_at TIMESTAMP WITH TIME ZONE NULL,
+    request_metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+`upload_requests` stores backend-owned direct-upload intent lifecycle metadata.
+Each row belongs to exactly one admin document or one conversation file, enforced
+by a check constraint on `source_type`, `kb_document_id`, and
+`conversation_file_id`. Statuses are `pending`, `completed`, `failed`, and
+`expired`; the table is not exposed through product APIs.
+
+### `kb_ingest_outbox`
+```sql
+CREATE TABLE kb_ingest_outbox (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    source_type VARCHAR(40) NOT NULL,
+    kb_document_id UUID NULL REFERENCES kb_documents(id) ON DELETE CASCADE,
+    conversation_file_id UUID NULL REFERENCES conversation_files(id) ON DELETE CASCADE,
+    status VARCHAR(40) NOT NULL DEFAULT 'pending',
+    attempt_count INT NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    last_attempt_at TIMESTAMP WITH TIME ZONE NULL,
+    dispatched_at TIMESTAMP WITH TIME ZONE NULL,
+    kb_service_document_id UUID NULL,
+    kb_task_id VARCHAR(255) NULL,
+    failure_metadata JSONB NOT NULL DEFAULT '{}',
+    error_message TEXT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+`kb_ingest_outbox` is the durable backend-to-KB-service handoff for verified
+direct uploads. Unique constraints keep one outbox row per backend resource for
+each `source_type`, allowing duplicate completion calls and worker retries to be
+idempotent. Statuses are `pending`, `retrying`, `dispatched`, and `failed`.
+
 ### `dashboard_insight_runs`
 ```sql
 CREATE TABLE dashboard_insight_runs (
@@ -364,6 +419,8 @@ Checkpoint requirements:
 | `message_citations` | Links assistant messages to KB source records |
 | `conversation_files` | Stores original-file metadata, KB-service document linkage, mirrored status, internal summary, and chunk count for athlete uploads |
 | `kb_documents` | Represents admin-uploaded searchable department documents with mirrored KB-service status, internal summary, and chunk count |
+| `upload_requests` | Stores backend-owned direct-upload intent lifecycle metadata for admin documents and conversation files |
+| `kb_ingest_outbox` | Stores durable, retryable KB-service ingest handoff rows for verified uploads |
 | `dashboard_insight_runs` | Tracks nightly/manual dashboard insights agent lifecycle |
 | `dashboard_insights` | Stores agent-curated dashboard insight output |
 | `admin_chat_sessions` | Stores admin-only dashboard side-panel chat sessions |

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from app.api.deps.services import get_configuration_service
+from app.api.deps.services import get_configuration_service, get_ingestion_service
 from app.main import app
+from app.schemas.ingest import IngestDocumentResponse
 
 
 class FakeConfigurationService:
@@ -28,6 +30,23 @@ class FakeConfigurationService:
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
         }
+
+
+class FakeIngestionService:
+    def __init__(self) -> None:
+        self.requests: list[Any] = []
+
+    async def start_ingest(self, body: Any) -> IngestDocumentResponse:
+        self.requests.append(body)
+        return IngestDocumentResponse(
+            kb_service_document_id=uuid4(),
+            source_type=body.source_type,
+            playbook_document_id=getattr(body, "playbook_document_id", None),
+            conversation_id=getattr(body, "conversation_id", None),
+            conversation_file_id=getattr(body, "conversation_file_id", None),
+            task_id="fake-task-id",
+            status="pending",
+        )
 
 
 def test_openapi_exposes_only_canonical_kb_contract_routes() -> None:
@@ -91,3 +110,37 @@ def test_configuration_resolve_accepts_empty_authenticated_request() -> None:
     assert response.status_code == 200
     assert response.json()["name"] == "Playbook KB Pipeline"
     assert response.json()["collection_name"] == "playbook-kb"
+
+
+def test_ingest_route_accepts_conversation_file_without_playbook_document_id() -> None:
+    client = TestClient(app)
+    fake_service = FakeIngestionService()
+    conversation_id = uuid4()
+    conversation_file_id = uuid4()
+    app.dependency_overrides[get_ingestion_service] = lambda: fake_service
+    try:
+        response = client.post(
+            "/api/kb/ingest/document",
+            json={
+                "source_type": "conversation_file",
+                "organization_id": str(uuid4()),
+                "conversation_id": str(conversation_id),
+                "conversation_file_id": str(conversation_file_id),
+                "configuration_id": str(uuid4()),
+                "source_uri": "s3://playbook-bucket/conversations/contract.pdf",
+                "filename": "contract.pdf",
+                "content_type": "application/pdf",
+                "size_bytes": 100,
+                "source_title": "Contract",
+            },
+            headers={"Authorization": "Bearer test-api-secret"},
+        )
+    finally:
+        app.dependency_overrides = {}
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["source_type"] == "conversation_file"
+    assert payload["conversation_id"] == str(conversation_id)
+    assert payload["conversation_file_id"] == str(conversation_file_id)
+    assert payload["playbook_document_id"] is None

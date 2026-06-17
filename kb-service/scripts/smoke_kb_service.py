@@ -333,6 +333,7 @@ def _run_smoke(args: argparse.Namespace) -> None:
                     expected_statuses={httpx.codes.OK, httpx.codes.ACCEPTED},
                     headers=headers,
                     json={
+                        "source_type": "admin_upload",
                         "organization_id": str(organization_id),
                         "playbook_document_id": str(playbook_document_id),
                         "configuration_id": config_id,

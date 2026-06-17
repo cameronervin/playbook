@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChatComposer, type ChatComposerHandle } from '@/src/components/features/chat/ChatComposer'
+import { ChatComposer, type ChatComposerHandle, type ChatUploadRow } from '@/src/components/features/chat/ChatComposer'
 import { ChatNavRail } from '@/src/components/features/chat/ChatNavRail'
 import { ChatSourcesPanel } from '@/src/components/features/chat/ChatSourcesPanel'
 import { ChatThread } from '@/src/components/features/chat/ChatThread'
@@ -12,8 +12,9 @@ import { HorizonBackground } from '@/src/components/features/common/HorizonBackg
 import { ChatWorkspaceSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
-import { useConversationDetail, useConversations, useCreateConversation } from '@/src/hooks/useConversations'
+import { useConversationDetail, useConversations, useCreateConversation, useUploadConversationFile } from '@/src/hooks/useConversations'
 import { ROUTES } from '@/src/lib/constants/config'
+import { validateUploadFile } from '@/src/lib/api/uploadValidation'
 import { useUIStore } from '@/src/lib/store/uiStore'
 import type { ChatMessage, ConversationSummary, Citation } from '@/src/types/conversations'
 import type { ConversationGroup } from './chatTypes'
@@ -25,6 +26,7 @@ export function ChatShell() {
   const router = useRouter()
   const composerRef = useRef<ChatComposerHandle | null>(null)
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
+  const [localUploads, setLocalUploads] = useState<ChatUploadRow[]>([])
   const { data: user, isLoading: userLoading } = useCurrentUser()
   const conversationsQuery = useConversations()
   const conversations = conversationsQuery.data ?? EMPTY_CONVERSATIONS
@@ -40,6 +42,7 @@ export function ChatShell() {
   const conversationDetailQuery = useConversationDetail(activeConversationId)
   const activeConversation = conversationDetailQuery.data
   const createConversation = useCreateConversation()
+  const uploadConversationFile = useUploadConversationFile()
   const logout = useLogout()
 
   useEffect(() => {
@@ -59,6 +62,7 @@ export function ChatShell() {
 
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null)
+    setLocalUploads([])
     setSelectedCitationTitle(null)
     setSourcesOpen(false)
     focusComposer()
@@ -82,9 +86,58 @@ export function ChatShell() {
   const citations = useMemo(() => collectCitations(messages.flatMap((message) => message.citations)), [messages])
   const showSourcesPanel = hasMessages && sourcesOpen
   const activeConversationTitle = activeConversation?.title?.trim() || 'New chat'
+  const conversationFiles = activeConversation?.files ?? []
+
+  const startConversationFileUpload = (conversationId: string, upload: ChatUploadRow) => {
+    setLocalUploads((current) =>
+      current.map((currentUpload) =>
+        currentUpload.id === upload.id
+          ? { ...currentUpload, errorMessage: undefined, phase: 'requesting', percent: 0 }
+          : currentUpload,
+      ),
+    )
+    uploadConversationFile.mutate(
+      {
+        conversationId,
+        file: upload.file,
+        onProgress: (progress) => {
+          setLocalUploads((current) =>
+            current.map((currentUpload) =>
+              currentUpload.id === upload.id
+                ? { ...currentUpload, percent: progress.percent, phase: 'uploading' }
+                : currentUpload,
+            ),
+          )
+        },
+      },
+      {
+        onSuccess: () => {
+          setLocalUploads((current) =>
+            current.map((currentUpload) =>
+              currentUpload.id === upload.id ? { ...currentUpload, percent: 100, phase: 'queued' } : currentUpload,
+            ),
+          )
+        },
+        onError: (error) => {
+          setLocalUploads((current) =>
+            current.map((currentUpload) =>
+              currentUpload.id === upload.id
+                ? {
+                    ...currentUpload,
+                    errorMessage: getSafeUploadErrorMessage(error),
+                    phase: 'failed',
+                  }
+                : currentUpload,
+            ),
+          )
+        },
+      },
+    )
+  }
 
   const handleSelectConversation = (conversationId: string) => {
     setPendingMessage(null)
+    setLocalUploads([])
     setActiveConversationId(conversationId)
     setSelectedCitationTitle(null)
     setSourcesOpen(true)
@@ -100,10 +153,36 @@ export function ChatShell() {
           setActiveConversationId(conversation.id)
           setSelectedCitationTitle(null)
           setSourcesOpen(conversation.messages.some((chatMessage) => chatMessage.citations.length > 0))
+          localUploads
+            .filter((upload) => upload.phase === 'pending')
+            .forEach((upload) => startConversationFileUpload(conversation.id, upload))
         },
         onError: () => setPendingMessage(null),
       },
     )
+  }
+
+  const handleAttachFile = (file: File) => {
+    const id = `${file.name}-${file.lastModified}-${Date.now()}`
+    try {
+      validateUploadFile(file)
+    } catch (error) {
+      setLocalUploads((current) => [
+        {
+          errorMessage: getSafeUploadErrorMessage(error),
+          file,
+          id,
+          percent: 0,
+          phase: 'failed',
+        },
+        ...current,
+      ])
+      return
+    }
+
+    const upload: ChatUploadRow = { file, id, percent: 0, phase: activeConversationId ? 'requesting' : 'pending' }
+    setLocalUploads((current) => [upload, ...current])
+    if (activeConversationId) startConversationFileUpload(activeConversationId, upload)
   }
 
   const handleCitationSelect = (citation: Citation) => {
@@ -151,7 +230,15 @@ export function ChatShell() {
           onCitationSelect={handleCitationSelect}
           pendingMessage={pendingMessage}
         />
-        <ChatComposer disabled={createConversation.isPending} onSend={handleSend} ref={composerRef} />
+        <ChatComposer
+          canAttach
+          conversationFiles={conversationFiles}
+          disabled={createConversation.isPending}
+          localUploads={localUploads}
+          onAttachFile={handleAttachFile}
+          onSend={handleSend}
+          ref={composerRef}
+        />
       </div>
     </section>
   )
@@ -175,6 +262,11 @@ export function ChatShell() {
       />
     </>
   )
+}
+
+function getSafeUploadErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'Upload failed before Playbook received it.'
 }
 
 function groupConversations(conversations: ConversationSummary[]): ConversationGroup[] {

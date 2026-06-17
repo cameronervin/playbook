@@ -79,9 +79,9 @@ uv run uvicorn app.main:app --reload
 
 Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "healthy"}`.
 
-Optional backend worker for Phase 2+ async jobs. Keep `backend-maintenance` in
-the queue list so worker startup and scheduled passes can reconcile expired
-direct-upload intents:
+Optional backend worker for Phase 2+ async jobs. Keep both `backend-files` and
+`backend-maintenance` in the queue list so verified direct uploads dispatch to
+KB-service and scheduled passes reconcile expired direct-upload intents:
 
 ```bash
 uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
@@ -231,9 +231,45 @@ KB infrastructure definitions:
 2. Confirm the backend health check is reachable.
 3. Confirm LiteLLM health is reachable on port `4000`.
 4. Confirm Playbook migrations apply against the local `playbook` database.
-5. From `kb-service/`, run `uv run python scripts/smoke_kb_service.py` for
-   shared KB ingest/search, or add `--include-conversation-file` to also verify
-   private conversation-file ingest/search isolation.
+5. From `kb-service/`, run `uv run alembic upgrade head` so the live KB schema
+   matches the current models, then run `uv run python
+   scripts/smoke_kb_service.py` for shared KB ingest/search. Add
+   `--include-conversation-file` to also verify private conversation-file
+   ingest/search isolation.
+
+### Direct Upload Smoke
+
+Before validating admin or athlete uploads through the browser, confirm these
+processes are running:
+
+- MinIO plus `minio-bootstrap`, with browser preflight from
+  `http://localhost:3000` allowing direct-upload POST requests.
+- Backend API on `http://localhost:8000`.
+- Backend worker listening on `backend-files` and `backend-maintenance`.
+- KB-service API on `http://localhost:8001`.
+- KB-service CPU and IO/notify workers.
+- Frontend on `http://localhost:3000`.
+
+Then smoke the implemented browser path:
+
+1. Sign in locally as an admin and upload a supported KB document from
+   `/admin`. Confirm the row moves from local upload progress to
+   `upload_pending`, `uploaded`/queued, `processing`, and then `ready` or a safe
+   `failed` reason.
+2. Sign in locally as an athlete, open `/chat`, attach a supported file to an
+   existing conversation or queue it before the first message creates a
+   conversation. Confirm the file moves through `upload_pending`, `uploaded` or
+   `extracting`, and then `ready` or a safe `failed` reason.
+3. Re-run the KB-service smoke with private source coverage:
+
+   ```bash
+   cd kb-service
+   uv run python scripts/smoke_kb_service.py --include-conversation-file
+   ```
+
+4. If seeded local retrieval data is available, ask a question that should use a
+   ready conversation file and confirm the answer cites that file. If not, keep
+   the Phase 2 grounded citation smoke marked as remaining.
 
 ## Common Issues
 

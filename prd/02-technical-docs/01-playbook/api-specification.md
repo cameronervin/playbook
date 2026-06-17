@@ -118,7 +118,9 @@ POST /api/v1/conversations
 
 Response includes the created conversation and the initial user message. The
 conversation title is `null` until agent-generated title logic updates it, and
-`files` is an empty list until conversation-scoped uploads are added.
+`files` is a safe top-level list of conversation-scoped uploads. It is usually
+empty when a conversation is first created, and later includes file status
+summaries after direct-upload intents are created.
 
 Submit a follow-up message to an existing conversation:
 
@@ -223,7 +225,8 @@ download/export feature explicitly requires them.
 Conversation detail returns file attachments as a top-level `files` list. Each
 file summary includes `id`, `conversation_id`, optional `message_id`, `filename`,
 `content_type`, `size_bytes`, `extraction_status`, `chunk_count`, `created_at`,
-and `updated_at`.
+and `updated_at`. It does not return storage keys, source URIs, presigned URLs,
+or signed download URLs.
 
 ### Assistant Message Shape
 ```json

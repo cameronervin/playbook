@@ -62,6 +62,38 @@ Example error response:
 | POST | `/kb/webhook` | Receive signed KB-service status callbacks |
 | GET | `/admin/audit-logs` | Query org-scoped audit log records |
 
+## Direct Upload Endpoints
+
+Admin KB documents and athlete conversation files use a two-step direct upload
+contract. The intent routes accept JSON metadata only, create an
+`upload_pending` backend resource, and return the safe resource plus an
+`upload` object:
+
+```json
+{
+  "upload_request_id": "uuid",
+  "method": "POST",
+  "url": "http://localhost:9000/playbook-bucket",
+  "fields": {
+    "key": "resource/originals/...",
+    "Content-Type": "application/pdf"
+  },
+  "expires_at": "2026-06-17T12:15:00Z"
+}
+```
+
+Browser clients submit a multipart form POST directly to `upload.url` with every
+returned `field` and a final `file` part. After storage upload succeeds, clients
+call the matching `upload-complete` route with `{ "upload_request_id": "uuid" }`.
+The backend verifies object existence, size, and content type with storage
+metadata before marking the resource `uploaded` and enqueueing durable
+KB-service ingest handoff.
+
+Normal conversation detail and admin document responses do not include storage
+keys, source URIs, presigned URLs, or signed download URLs. See
+[Direct Upload Flow](../architecture/direct-upload-flow.md) for the architecture
+and failure paths.
+
 ## Local Development Only
 
 These routes are absent unless the backend is running with

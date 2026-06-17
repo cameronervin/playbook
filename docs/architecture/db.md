@@ -75,15 +75,15 @@ defaults are visible to callers, but they do not commit transactions. Services
 own commit/rollback boundaries so multi-row operations such as role change plus
 audit log creation remain atomic.
 
-`upload_requests` and `kb_ingest_outbox` are Phase 9 direct-upload foundations.
-Phase 9C uses them from the public JSON upload routes to return presigned
-browser upload contracts, verify completed objects, and enqueue KB ingest
-outbox rows after storage verification. Phase 9D drains the outbox from the
-`backend-files` worker queue, dispatches trusted KB-service ingest requests, and
-records retry or terminal failure state. Phase 9F reconciles expired pending
-upload requests from the `backend-maintenance` queue, moves still-pending
-resources to failed, and deletes only storage objects tied to known expired
-intents.
+`upload_requests` and `kb_ingest_outbox` are the implemented direct-upload
+control tables. Public JSON upload intent routes return presigned browser POST
+contracts, completion routes verify uploaded objects before status transitions,
+and verified resources enqueue KB ingest outbox rows. The `backend-files` worker
+queue drains the outbox, dispatches trusted KB-service ingest requests, and
+records retry or terminal failure state. The `backend-maintenance` queue
+reconciles expired pending upload requests, moves still-pending resources to
+failed, and deletes only storage objects tied to known expired intents. See
+[Direct Upload Flow](direct-upload-flow.md) for the end-to-end lifecycle.
 
 Later phases will add analytics queries, dashboard insight run/output
 repositories, and admin chat repositories.

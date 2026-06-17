@@ -7,10 +7,12 @@ import {
   BookOpen,
   ChevronRight,
   Database,
+  FileText,
   LoaderCircle,
   Lock,
   Plane,
   Plus,
+  RefreshCw,
   Shield,
   Upload,
   Users,
@@ -20,8 +22,10 @@ import { AdminKBMetadataDrawer } from '@/src/components/features/admin/AdminKBMe
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { AdminKBSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { Button } from '@/src/components/ui'
+import { validateUploadFile } from '@/src/lib/api/uploadValidation'
+import { SUPPORTED_UPLOAD_ACCEPT } from '@/src/lib/constants/uploads'
 import { ADMIN_KB_COLLECTIONS, buildKBCollectionViews, collectionUploadMetadata } from '@/src/lib/fixtures/kbCollections'
-import type { UploadKBDocumentRequest } from '@/src/lib/api/endpoints/kbDocuments'
+import type { UploadKBDocumentRequest } from '@/src/types/kb'
 import type { KBCollection, KBCollectionIcon, KBCollectionViewModel, KBDocument, KBDocumentMetadataUpdateRequest } from '@/src/types/kb'
 
 interface AdminKnowledgeBasePanelProps {
@@ -34,7 +38,7 @@ interface AdminKnowledgeBasePanelProps {
   onRetry: (id: string) => void
   onToggleOfficial: (id: string, isOfficial: boolean) => void
   onUpdateMetadata: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => void
-  onUpload: (request: UploadKBDocumentRequest) => void
+  onUpload: (request: UploadKBDocumentRequest) => Promise<KBDocument>
 }
 
 export function AdminKnowledgeBasePanel({
@@ -226,7 +230,17 @@ interface CollectionDetailProps {
   onEdit: (id: string) => void
   onRetry: (id: string) => void
   onToggleOfficial: (id: string, isOfficial: boolean) => void
-  onUpload: (request: UploadKBDocumentRequest) => void
+  onUpload: (request: UploadKBDocumentRequest) => Promise<KBDocument>
+}
+
+type LocalUploadPhase = 'requesting' | 'uploading' | 'queued' | 'failed'
+
+interface LocalUploadRow {
+  errorMessage?: string
+  file: File
+  id: string
+  percent: number
+  phase: LocalUploadPhase
 }
 
 function CollectionDetail({
@@ -240,16 +254,71 @@ function CollectionDetail({
   onUpload,
 }: CollectionDetailProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [localUploads, setLocalUploads] = useState<LocalUploadRow[]>([])
   const subtitle = `${collection.documents.length} ${collection.documents.length === 1 ? 'document' : 'documents'} · grounds athlete answers`
+
+  const startUpload = (file: File) => {
+    const id = `${file.name}-${file.lastModified}-${Date.now()}`
+    try {
+      validateUploadFile(file)
+    } catch (error) {
+      setLocalUploads((current) => [
+        {
+          errorMessage: getSafeUploadErrorMessage(error),
+          file,
+          id,
+          percent: 0,
+          phase: 'failed',
+        },
+        ...current,
+      ])
+      return
+    }
+
+    setLocalUploads((current) => [
+      { file, id, percent: 0, phase: 'requesting' },
+      ...current,
+    ])
+    void onUpload({
+      file,
+      metadata_tags: collectionUploadMetadata(collection),
+      onProgress: (progress) => {
+        setLocalUploads((current) =>
+          current.map((upload) =>
+            upload.id === id
+              ? { ...upload, percent: progress.percent, phase: 'uploading' }
+              : upload,
+          ),
+        )
+      },
+      title: file.name,
+    })
+      .then(() => {
+        setLocalUploads((current) =>
+          current.map((upload) =>
+            upload.id === id ? { ...upload, percent: 100, phase: 'queued' } : upload,
+          ),
+        )
+      })
+      .catch((error: unknown) => {
+        setLocalUploads((current) =>
+          current.map((upload) =>
+            upload.id === id
+              ? {
+                  ...upload,
+                  errorMessage: getSafeUploadErrorMessage(error),
+                  phase: 'failed',
+                }
+              : upload,
+          ),
+        )
+      })
+  }
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    onUpload({
-      file,
-      metadata_tags: collectionUploadMetadata(collection),
-      title: file.name,
-    })
+    startUpload(file)
     event.target.value = ''
   }
 
@@ -263,7 +332,14 @@ function CollectionDetail({
           </Button>
           {canManage && (
             <>
-              <input className="sr-only" onChange={handleFileChange} ref={fileInputRef} type="file" />
+              <input
+                accept={SUPPORTED_UPLOAD_ACCEPT}
+                aria-label="Upload document file"
+                className="sr-only"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                type="file"
+              />
               <Button className="pb-admin-header-control" onClick={() => fileInputRef.current?.click()} size="sm">
                 <Upload size={15} />
                 Upload document
@@ -283,7 +359,18 @@ function CollectionDetail({
         </span>
         <span>{collection.blurb}</span>
       </div>
-      {collection.documents.length === 0 ? (
+      {localUploads.length > 0 && (
+        <div className="pb-admin-kb-doc-list mb-3">
+          {localUploads.map((upload) => (
+            <LocalUploadRowView
+              key={upload.id}
+              onRetry={() => startUpload(upload.file)}
+              upload={upload}
+            />
+          ))}
+        </div>
+      )}
+      {collection.documents.length === 0 && localUploads.length === 0 ? (
         <div className="pb-admin-kb-detail-note">
           No documents yet{canManage ? '. Upload department documents to start grounding answers from this collection.' : '.'}
         </div>
@@ -304,6 +391,76 @@ function CollectionDetail({
       )}
     </AdminPageScaffold>
   )
+}
+
+function LocalUploadRowView({
+  onRetry,
+  upload,
+}: {
+  onRetry: () => void
+  upload: LocalUploadRow
+}) {
+  const failed = upload.phase === 'failed'
+  return (
+    <article className="pb-admin-kb-doc-row" data-failed={failed}>
+      <div className="pb-admin-kb-doc-main">
+        <span className="pb-admin-kb-file-icon" aria-hidden="true">
+          <FileText size={17} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="pb-admin-kb-doc-title">{upload.file.name}</span>
+          </div>
+          <p className="pb-admin-kb-doc-meta">{formatBytes(upload.file.size)} · Direct upload</p>
+        </div>
+        <span className={failed ? 'pb-admin-kb-status text-danger' : 'pb-admin-kb-status text-info'}>
+          {failed ? <AlertTriangle size={14} /> : <LoaderCircle className="pb-spin" size={14} />}
+          {formatLocalUploadPhase(upload)}
+        </span>
+      </div>
+      {upload.phase === 'uploading' && (
+        <div className="px-3 pb-3">
+          <div className="h-1.5 overflow-hidden rounded-pill bg-surface-hover" aria-hidden="true">
+            <span
+              className="block h-full rounded-pill bg-brand"
+              style={{ width: `${upload.percent}%` }}
+            />
+          </div>
+          <p className="pb-ui-xs mt-1 text-fg-3" role="status">
+            Uploading {upload.percent}%
+          </p>
+        </div>
+      )}
+      {failed && (
+        <div className="pb-admin-kb-failure">
+          <AlertTriangle className="shrink-0 text-danger" size={14} />
+          <span className="flex-1">{upload.errorMessage ?? 'Upload failed.'}</span>
+          <button className="pb-admin-kb-inline-action" onClick={onRetry} type="button">
+            <RefreshCw size={13} />
+            Try again
+          </button>
+        </div>
+      )}
+    </article>
+  )
+}
+
+function formatLocalUploadPhase(upload: LocalUploadRow): string {
+  if (upload.phase === 'requesting') return 'Preparing'
+  if (upload.phase === 'uploading') return `Uploading ${upload.percent}%`
+  if (upload.phase === 'queued') return 'Queued'
+  return 'Failed'
+}
+
+function getSafeUploadErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'Upload failed before Playbook received it.'
+}
+
+function formatBytes(sizeBytes: number): string {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return 'Unknown size'
+  if (sizeBytes >= 1_000_000) return `${(sizeBytes / 1_000_000).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(sizeBytes / 1_000))} KB`
 }
 
 function CollectionIcon({ icon, size }: { icon: KBCollectionIcon; size: number }) {

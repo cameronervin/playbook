@@ -143,7 +143,7 @@ export function AdminShell() {
             onRetry={(id) => retryDocument.mutate(id)}
             onToggleOfficial={(id, isOfficial) => updateDocument.mutate({ documentId: id, isOfficial })}
             onUpdateMetadata={(documentId, metadata) => updateDocument.mutate({ documentId, metadata })}
-            onUpload={(request) => uploadDocument.mutate(request)}
+            onUpload={(request) => uploadDocument.mutateAsync(request)}
           />
         )}
         {adminTab === 'users' && isSuperAdmin && (
