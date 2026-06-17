@@ -1,7 +1,8 @@
 # KB Service Retrieval
 
-This document defines semantic retrieval behavior for shared Playbook KB
-documents and private conversation-file context.
+This document defines the current semantic retrieval behavior for shared
+Playbook KB documents and private conversation-file context, plus the reserved
+contract shape for later hybrid search and reranking.
 
 ## Search Scope
 
@@ -22,11 +23,28 @@ trusted scope from the backend.
 2. Chat orchestration decides whether KB retrieval is required.
 3. Main backend calls KB service search with query, organization ID, source type
    scope, limit, threshold, and visibility context.
-4. KB service embeds the query.
-5. KB service runs cosine similarity search against ready vectors.
-6. KB service returns chunk text, score, document IDs, and metadata.
-7. Main backend may re-rank or filter using safety policy and source date.
+4. KB service embeds the query through the configured embedding provider.
+5. KB service currently runs pgvector cosine similarity search against ready
+   vectors.
+6. KB service returns chunk text, final caller-facing `score`, document IDs, and
+   metadata.
+7. Main backend currently keeps defensive dedupe and near-similar source-date
+   ordering during the semantic-only transition.
 8. Assistant answer cites returned sources through `message_citations`.
+
+Target hybrid/rerank flow, implemented in later phases:
+
+```text
+query embedding
+  -> semantic pgvector candidates
+  -> PostgreSQL full-text lexical candidates
+  -> KB-service dedupe + reciprocal-rank fusion
+  -> LiteLLM /rerank using LITELLM_RERANK_MODEL
+  -> final ranked chunks
+```
+
+Phase 0 only reserves the docs, schema descriptions, and config placeholders for
+that target. It does not change runtime search ordering.
 
 ## Required Filtering
 
@@ -57,12 +75,22 @@ only when the backend supplies the trusted private conversation scope.
 
 ## Ranking Signals
 
-The KB service returns similarity score and metadata. Final answer orchestration
-may combine:
-- vector similarity score,
-- `source_date`,
-- freshness/conflict rules,
-- safety/risk category.
+Current Phase 0 runtime ranking is semantic-only:
+- `score` is `1 - pgvector cosine_distance` after the request threshold is
+  applied,
+- rows are ordered by ascending cosine distance in KB-service,
+- backend may still dedupe and prefer newer `source_date` within near-similar
+  semantic bands until the later backend cleanup phase.
+
+Target hybrid/rerank behavior keeps `score` as the final retrieval score exposed
+to callers. Raw ranking diagnostics are reserved for `metadata`:
+- `semantic_score`,
+- `semantic_rank`,
+- `lexical_score`,
+- `lexical_rank`,
+- `hybrid_score`,
+- `rerank_score`,
+- `ranking_strategy`.
 
 Admin-uploaded shared KB documents are official by definition for MVP, and
 priority is not used as a ranking control.

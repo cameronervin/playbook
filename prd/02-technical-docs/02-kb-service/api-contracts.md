@@ -163,6 +163,8 @@ POST /api/kb/search
 
 If omitted, `source_types` defaults to `["admin_upload"]` so existing backend
 shared-KB retrieval cannot accidentally include conversation-file chunks.
+Frontend/browser callers never choose arbitrary KB-service `source_types`; the
+backend derives trusted source scope before calling this service.
 
 Private conversation-file retrieval requires trusted backend scope:
 
@@ -203,6 +205,13 @@ Response:
   ]
 }
 ```
+
+`score` is always the final retrieval score exposed to service callers. Current
+Phase 0 responses use semantic cosine similarity for `score`; later
+hybrid/rerank phases may populate raw semantic, lexical, hybrid, and rerank
+diagnostics inside `metadata` only. Reserved metadata keys are
+`semantic_score`, `semantic_rank`, `lexical_score`, `lexical_rank`,
+`hybrid_score`, `rerank_score`, and `ranking_strategy`.
 
 ## Error Contract
 

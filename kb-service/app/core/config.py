@@ -70,10 +70,18 @@ class Settings(BaseSettings):
     LITELLM_EMBED_MODEL: str = "playbook-embed"
     LITELLM_VLM_MODEL: str = "playbook-ocr"
     LITELLM_SUMMARY_MODEL: str = "playbook-fast"
+    LITELLM_RERANK_MODEL: str = "playbook-rerank"
 
     # Source summary generation through the lightweight LiteLLM text alias.
     KB_SUMMARY_INPUT_MAX_TOKENS: int = 3000
     KB_SUMMARY_MAX_OUTPUT_TOKENS: int = 160
+
+    # Reranking placeholders. Phase 0 only reserves the contract/config shape;
+    # search remains semantic-only until later hybrid/rerank phases wire this in.
+    KB_RERANK_ENABLED: bool = False
+    KB_RERANK_CANDIDATE_LIMIT: int = 50
+    KB_RERANK_TIMEOUT_SECONDS: float = 10.0
+    KB_RERANK_FAIL_OPEN: bool = True
 
     # -------------------------------------------------------------------------
     # S3-compatible storage — where original uploads + staged NDJSON live
@@ -202,6 +210,19 @@ class Settings(BaseSettings):
                 errors.append("LITELLM_API_KEY is required when OCR_PROVIDER=vlm")
             if not self.LITELLM_VLM_MODEL:
                 errors.append("LITELLM_VLM_MODEL is required when OCR_PROVIDER=vlm")
+        if self.KB_RERANK_ENABLED:
+            if not self.LITELLM_BASE_URL:
+                errors.append(
+                    "LITELLM_BASE_URL is required when KB_RERANK_ENABLED=true"
+                )
+            if not self.LITELLM_API_KEY:
+                errors.append(
+                    "LITELLM_API_KEY is required when KB_RERANK_ENABLED=true"
+                )
+            if not self.LITELLM_RERANK_MODEL:
+                errors.append(
+                    "LITELLM_RERANK_MODEL is required when KB_RERANK_ENABLED=true"
+                )
         if _is_production_environment(self.ENVIRONMENT):
             _require_min_secret_length(
                 errors,

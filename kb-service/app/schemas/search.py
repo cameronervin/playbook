@@ -12,16 +12,57 @@ KBSourceType = Literal["admin_upload", "conversation_file"]
 
 
 class SearchRequest(BaseModel):
-    query: str
-    organization_id: uuid.UUID
-    visibility_context: dict[str, Any] = Field(default_factory=dict)
+    query: str = Field(description="Natural-language retrieval query.")
+    organization_id: uuid.UUID = Field(
+        description="Trusted Playbook organization scope supplied by the backend."
+    )
+    visibility_context: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Trusted backend visibility context. Athlete shared-KB search uses "
+            'visibility_policy.scope="all_athletes"; private conversation-file '
+            "search uses conversation-scoped metadata."
+        ),
+    )
     source_types: list[KBSourceType] = Field(
         default_factory=lambda: ["admin_upload"],
+        description=(
+            'Source scopes to search. Defaults to ["admin_upload"]. '
+            '"conversation_file" may be used only by trusted backend callers '
+            "and requires conversation_id; browser callers must not choose "
+            "source types directly."
+        ),
     )
-    conversation_id: uuid.UUID | None = None
-    file_ids: list[uuid.UUID] = Field(default_factory=list)
-    limit: int = Field(settings.KB_SEARCH_MAX_DOCS, ge=1, le=100)
-    score_threshold: float = Field(settings.KB_SEARCH_SCORE_THRESHOLD, ge=0.0, le=1.0)
+    conversation_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "Trusted private conversation scope. Required when source_types "
+            'includes "conversation_file".'
+        ),
+    )
+    file_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description=(
+            "Optional trusted conversation-file IDs to narrow private retrieval. "
+            'Only valid with source_types including "conversation_file".'
+        ),
+    )
+    limit: int = Field(
+        settings.KB_SEARCH_MAX_DOCS,
+        ge=1,
+        le=100,
+        description="Maximum number of final retrieval results to return.",
+    )
+    score_threshold: float = Field(
+        settings.KB_SEARCH_SCORE_THRESHOLD,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum final retrieval score to include. Current semantic search "
+            "maps this to pgvector cosine similarity; future hybrid/rerank "
+            "scores remain exposed through the final score contract."
+        ),
+    )
 
     @field_validator("source_types")
     @classmethod
@@ -52,13 +93,39 @@ class SearchRequest(BaseModel):
 
 
 class SearchResult(BaseModel):
-    document_id: uuid.UUID
-    kb_service_document_id: uuid.UUID
-    chunk_id: uuid.UUID | None = None
-    chunk_index: int | None = None
-    text: str
-    score: float
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    document_id: uuid.UUID = Field(
+        description=(
+            "External Playbook source identifier: kb_documents.id for "
+            "admin uploads or conversation_files.id for private files."
+        )
+    )
+    kb_service_document_id: uuid.UUID = Field(
+        description="KB-service internal document identifier for status/debug linkage."
+    )
+    chunk_id: uuid.UUID | None = Field(
+        default=None,
+        description="Stable chunk identifier used for citation persistence.",
+    )
+    chunk_index: int | None = Field(
+        default=None,
+        description="Zero-based chunk index within the KB-service document.",
+    )
+    text: str = Field(description="Retrieved chunk text.")
+    score: float = Field(
+        description=(
+            "Final caller-facing retrieval score. Current Phase 0 behavior is "
+            "semantic cosine similarity (1 - pgvector cosine distance); future "
+            "semantic, lexical, hybrid, and rerank diagnostics belong in metadata."
+        )
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Citation/source metadata. Reserved future ranking diagnostics include "
+            "semantic_score, semantic_rank, lexical_score, lexical_rank, "
+            "hybrid_score, rerank_score, and ranking_strategy."
+        ),
+    )
 
 
 class SearchResponse(BaseModel):

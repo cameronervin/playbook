@@ -71,6 +71,29 @@ def test_openapi_exposes_only_canonical_kb_contract_routes() -> None:
     assert "/api/kb/status/{task_id}" not in paths
 
 
+def test_search_openapi_keeps_ranking_fields_in_result_metadata() -> None:
+    client = TestClient(app)
+
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schemas = response.json()["components"]["schemas"]
+    result_props = schemas["SearchResult"]["properties"]
+    request_props = schemas["SearchRequest"]["properties"]
+
+    assert "score" in result_props
+    assert "metadata" in result_props
+    assert "semantic_score" not in result_props
+    assert "semantic_rank" not in result_props
+    assert "lexical_score" not in result_props
+    assert "lexical_rank" not in result_props
+    assert "hybrid_score" not in result_props
+    assert "rerank_score" not in result_props
+    assert "ranking_strategy" not in result_props
+    assert "admin_upload" in request_props["source_types"]["description"]
+    assert "conversation_file" in request_props["source_types"]["description"]
+
+
 def test_legacy_scaffold_routes_return_404() -> None:
     client = TestClient(app)
     document_id = uuid4()

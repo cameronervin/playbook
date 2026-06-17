@@ -25,6 +25,10 @@ embedding model alias such as `playbook-embed`. The KB service should hold only
 the LiteLLM service key required to call the gateway; provider credentials remain
 owned by the gateway.
 
+Future KB-service reranking also routes through LiteLLM, using the
+`LITELLM_RERANK_MODEL` alias (`playbook-rerank` by default). Phase 0 keeps
+`KB_RERANK_ENABLED=false`, so no reranker calls occur yet.
+
 Direct provider API keys are allowed only for local development, smoke tests, or
 an explicit break-glass path. Production ingestion should not require OpenAI,
 Anthropic, or other provider credentials in KB-service runtime configuration.
@@ -83,6 +87,7 @@ Environment-configured values:
 - LiteLLM base URL and service key,
 - embedding model alias,
 - summary model alias,
+- reserved rerank model alias and rerank feature flags,
 - chunk size and overlap,
 - search default limit and score threshold,
 - maximum upload size.

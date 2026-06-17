@@ -29,7 +29,7 @@ POST /api/kb/ingest/document ───────▶ IngestionService ─▶ Ce
                                                                   └─ writes vectors → pgvector (kb.langchain_pg_embedding)
                                                                   └─ last batch dispatches load_vector_task (finalize)
 
-POST /api/kb/search ────────────────▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ ranked results
+POST /api/kb/search ────────────────▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ semantic results
 ```
 
 `/configuration/resolve` owns the singleton Playbook defaults
@@ -37,6 +37,10 @@ POST /api/kb/search ────────────────▶ SearchSe
 database. Search resolves that default internally before vector lookup, so a
 new database returns zero results instead of requiring manual configuration
 seeding.
+
+Phase 0 search is intentionally semantic-only. Hybrid lexical candidates,
+reciprocal-rank fusion, and LiteLLM `/rerank` are reserved for later phases;
+the current `score` is pgvector cosine similarity (`1 - distance`).
 
 ## Stack
 
@@ -48,6 +52,7 @@ seeding.
 | OCR | Opt-in scanned PDF OCR via LiteLLM VLM alias (`OCR_PROVIDER=vlm`); default is `NullOCRProvider` |
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
 | Embeddings | OpenAI direct or LiteLLM mode (`EmbedProviderMode`), 1536-dim |
+| Reranking | Reserved LiteLLM alias `playbook-rerank`; disabled by `KB_RERANK_ENABLED=false` in Phase 0 |
 | Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
 | Storage | S3-compatible storage / MinIO locally (boto3), streamed to tempfiles |
 

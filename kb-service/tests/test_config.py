@@ -69,6 +69,52 @@ def test_ocr_provider_defaults_to_none() -> None:
     assert settings.OCR_PROVIDER == "none"
 
 
+def test_rerank_placeholders_default_to_disabled_litellm_alias() -> None:
+    settings = _base_settings()
+
+    assert settings.LITELLM_RERANK_MODEL == "playbook-rerank"
+    assert settings.KB_RERANK_ENABLED is False
+    assert settings.KB_RERANK_CANDIDATE_LIMIT == 50
+    assert settings.KB_RERANK_TIMEOUT_SECONDS == 10.0
+    assert settings.KB_RERANK_FAIL_OPEN is True
+
+
+def test_rerank_placeholders_accept_env_overrides() -> None:
+    settings = _base_settings(
+        LITELLM_RERANK_MODEL="custom-rerank",
+        KB_RERANK_ENABLED="true",
+        KB_RERANK_CANDIDATE_LIMIT="25",
+        KB_RERANK_TIMEOUT_SECONDS="2.5",
+        KB_RERANK_FAIL_OPEN="false",
+    )
+
+    assert settings.LITELLM_RERANK_MODEL == "custom-rerank"
+    assert settings.KB_RERANK_ENABLED is True
+    assert settings.KB_RERANK_CANDIDATE_LIMIT == 25
+    assert settings.KB_RERANK_TIMEOUT_SECONDS == 2.5
+    assert settings.KB_RERANK_FAIL_OPEN is False
+
+
+def test_enabled_rerank_requires_litellm_connection_settings() -> None:
+    try:
+        _base_settings(
+            LLM_PROVIDER_MODE="direct",
+            OPENAI_API_KEY="direct-key",
+            KB_RERANK_ENABLED=True,
+            LITELLM_BASE_URL="",
+            LITELLM_API_KEY="",
+            LITELLM_RERANK_MODEL="",
+        )
+    except ValidationError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Settings should reject missing LiteLLM rerank config")
+
+    assert "LITELLM_BASE_URL is required when KB_RERANK_ENABLED=true" in message
+    assert "LITELLM_API_KEY is required when KB_RERANK_ENABLED=true" in message
+    assert "LITELLM_RERANK_MODEL is required when KB_RERANK_ENABLED=true" in message
+
+
 def test_vlm_ocr_requires_litellm_connection_settings() -> None:
     try:
         _base_settings(

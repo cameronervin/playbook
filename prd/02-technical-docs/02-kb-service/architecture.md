@@ -2,8 +2,9 @@
 
 This document maps the standalone KB service to Playbook MVP ingestion and
 retrieval needs. The KB service owns parsing, chunking, embedding, vector
-storage, status events, and semantic search for admin-uploaded department
-documents.
+storage, status events, and current semantic search for admin-uploaded
+department documents, with the later hybrid search/rerank contract reserved in
+the retrieval docs.
 
 Related KB-service PRD docs:
 - [data-model.md](data-model.md)
@@ -27,7 +28,9 @@ KB service owns:
 - durable searchable chunk text and embeddings,
 - ingestion lifecycle status,
 - semantic search over ready shared KB documents and private conversation-file
-  chunks when the backend supplies trusted private scope.
+  chunks when the backend supplies trusted private scope,
+- final candidate ordering once hybrid search and reranking are enabled in
+  later phases.
 
 Athlete-uploaded conversation files are outside the shared admin KB corpus, but
 they use the same KB-service parser/chunker/embedder/vector pipeline with
@@ -48,6 +51,11 @@ POST /api/kb/search
   -> query embedding -> pgvector cosine search -> ranked chunks
 ```
 
+The implemented Phase 0 search path is semantic-only. It does not perform
+PostgreSQL full-text lexical search, reciprocal-rank fusion, or cross-encoded
+reranking. Later phases keep the same `/search` contract while adding lexical
+candidates and LiteLLM `/rerank` behind the service boundary.
+
 Stack:
 - FastAPI on port 8001.
 - Celery + Valkey workers.
@@ -55,6 +63,8 @@ Stack:
 - S3-compatible staging.
 - LiteLLM embeddings and source summaries by default, with direct provider mode
   only for local or break-glass embedding use.
+- Reserved LiteLLM rerank alias `playbook-rerank` for future cross-encoder
+  reranking.
 - PostgreSQL + pgvector.
 
 <!-- V2 CHANGE: Use the existing KB service as the retrieval layer for Playbook athlete chat and admin document ingestion. -->
@@ -109,6 +119,8 @@ that value in `kb_documents.kb_service_document_id` for status/debug linkage.
 - Changes to embedding model require migration planning.
 - OCR/image handling is not MVP unless added separately.
 - Existing service-to-service auth should remain in place.
+- `score` remains the final retrieval score in API responses; raw semantic,
+  lexical, hybrid, and rerank diagnostics belong in response metadata.
 - Heavy intermediate artifacts may be staged in S3-compatible storage, but durable search
   content lives in the KB service database.
 - Staging artifacts should be deleted after successful load or terminal failure

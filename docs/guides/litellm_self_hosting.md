@@ -23,6 +23,13 @@ Configured aliases:
 - `playbook-ocr` for opt-in scanned PDF OCR when `OCR_PROVIDER=vlm`. Local
   defaults route to `openai/gpt-5.4-mini`.
 
+Reserved future alias:
+
+- `playbook-rerank` for KB-service hybrid/rerank phases through LiteLLM
+  `/rerank`. Phase 0 adds `LITELLM_RERANK_MODEL=playbook-rerank` and
+  `KB_RERANK_ENABLED=false` placeholders only; `deploy/litellm/config.yaml`
+  does not route this alias until the reranker service phase.
+
 Provider API keys belong only in the LiteLLM env/secrets. For the local OpenAI
 defaults, set:
 
@@ -59,7 +66,8 @@ Provision two virtual keys:
 | KB-service | `playbook-embed`, `playbook-fast` |
 
 Only add `playbook-ocr` to the KB-service virtual key when scanned PDF OCR is
-enabled with `OCR_PROVIDER=vlm`.
+enabled with `OCR_PROVIDER=vlm`. Add `playbook-rerank` only when
+`KB_RERANK_ENABLED=true` and the LiteLLM rerank alias has been configured.
 
 Set them here:
 

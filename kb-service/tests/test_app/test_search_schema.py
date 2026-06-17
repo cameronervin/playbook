@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.search import SearchRequest
+from app.schemas.search import SearchRequest, SearchResult
 
 
 def test_search_request_requires_organization_id() -> None:
@@ -100,3 +100,32 @@ def test_search_request_rejects_file_ids_without_private_search() -> None:
             source_types=["admin_upload"],
             file_ids=[uuid4()],
         )
+
+
+def test_search_result_keeps_ranking_diagnostics_in_metadata() -> None:
+    result = SearchResult(
+        document_id=uuid4(),
+        kb_service_document_id=uuid4(),
+        chunk_id=uuid4(),
+        chunk_index=1,
+        text="Relevant policy text.",
+        score=0.82,
+        metadata={
+            "semantic_score": 0.82,
+            "semantic_rank": 1,
+            "lexical_score": None,
+            "lexical_rank": None,
+            "hybrid_score": 0.82,
+            "rerank_score": None,
+            "ranking_strategy": "semantic",
+        },
+    )
+
+    payload = result.model_dump()
+
+    assert payload["score"] == 0.82
+    assert payload["metadata"]["ranking_strategy"] == "semantic"
+    assert "semantic_score" not in payload
+    assert "lexical_score" not in payload
+    assert "hybrid_score" not in payload
+    assert "rerank_score" not in payload
