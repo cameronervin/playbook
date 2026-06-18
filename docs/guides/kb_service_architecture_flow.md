@@ -239,10 +239,13 @@ LIMIT request.limit
 requires backend-supplied `conversation_id` and can be narrowed by `file_ids`;
 browser callers never choose these KB-service filters directly.
 
-Current ranking is vector-similarity first from KB-service, then the backend
-keeps semantic relevance bands and prefers newer `source_date` within
-near-similar matches. Admin-uploaded shared KB documents are official by
-definition for MVP, and priority is not used as a ranking control.
+KB-service owns final retrieval order and primary dedupe. In semantic mode that
+order is vector-similarity first; in hybrid modes it is reciprocal-rank fusion
+order or reranker order. KB-service dedupes all search modes by `chunk_id`,
+then exact non-empty text fallback, preserving first-ranked order. The backend
+keeps only temporary defensive dedupe that preserves KB-service order before
+context assembly. Admin-uploaded shared KB documents are official by definition
+for MVP, and priority is not used as a ranking control.
 
 Hybrid search/reranking uses PostgreSQL full-text lexical candidates,
 reciprocal-rank fusion, and the reusable KB-service LiteLLM `/rerank` provider.
@@ -256,5 +259,5 @@ candidates through the reranker before applying the request `limit`.
 hybrid mode without reranking, and reranker relevance score in hybrid rerank
 mode when a rerank score is returned. `score_threshold` remains a semantic
 candidate-generation threshold and is not re-applied to RRF or rerank scores.
-Raw ranking diagnostics belong in result `metadata`. Until Phase 5, the backend
-still keeps defensive dedupe and source-date ranking during context assembly.
+Raw ranking diagnostics belong in result `metadata`. Backend context assembly
+and citation persistence preserve the KB-service ranked order.

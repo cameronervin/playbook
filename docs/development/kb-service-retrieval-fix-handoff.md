@@ -45,10 +45,10 @@ Related docs:
 7. **Resolved — No-text extraction is unclear**: documents that produce zero
    usable parser text or zero usable chunks now fail with a clear
    `NO_TEXT_EXTRACTED` reason instead of silently continuing.
-8. **Resolved — MVP ranking/conflict handling uses freshness only**:
+8. **Resolved — MVP retrieval order is KB-service owned**:
    admin-uploaded shared KB documents are official by definition, priority is
-   not a user-facing MVP ranking control, and backend retrieval ranks
-   near-similar chunks by `source_date`.
+   not a user-facing MVP ranking control, and backend retrieval preserves
+   KB-service order after temporary order-preserving defensive dedupe.
 9. **Resolved — OCR/VLM provider is opt-in**: high-complexity scanned PDFs can
    use `OCR_PROVIDER=vlm`, which routes page images through a LiteLLM vision
    model alias. `OCR_PROVIDER=none` remains the default, and Textract remains

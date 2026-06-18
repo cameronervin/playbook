@@ -45,9 +45,11 @@ Implementation notes:
 
 1. Athlete asks question.
 2. Chat agent calls backend knowledgebase provider.
-3. Provider calls KB service semantic search.
-4. Results return document/chunk metadata.
-5. Chat agent ranks results using score and source date freshness.
+3. Provider calls KB service search.
+4. Results return in KB-service retrieval order with document/chunk metadata and
+   final relevance scores.
+5. Chat agent preserves retrieval order while applying answer safety and
+   unsupported-source policy.
 6. Answer cites source titles at the bottom.
 
 ## Conversation File Uploads

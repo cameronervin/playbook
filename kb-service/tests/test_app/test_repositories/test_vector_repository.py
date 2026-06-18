@@ -15,14 +15,15 @@ from types import SimpleNamespace
 
 from sqlalchemy.dialects import postgresql
 
+from app.models.vector_embedding import VectorEmbedding
 from app.repositories.vector_repo import (
     VectorRepository,
     _build_chunk_records,
     _build_lexical_search_statement,
     _build_search_statement,
     _deterministic_chunk_id,
-    _merge_hybrid_candidates,
     _map_search_row,
+    _merge_hybrid_candidates,
 )
 
 ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
@@ -510,6 +511,165 @@ def test_search_returns_results_ordered_most_similar_first() -> None:
     }
 
 
+def test_search_dedupes_by_chunk_id_keeps_first_and_caps_results() -> None:
+    duplicate_chunk_id = uuid.uuid4()
+    unique_chunk_id = uuid.uuid4()
+    first_doc = uuid.uuid4()
+    later_doc = uuid.uuid4()
+    unique_doc = uuid.uuid4()
+    search_rows = [
+        _search_row(
+            document_id=first_doc,
+            chunk_id=duplicate_chunk_id,
+            chunk_index=1,
+            document="first duplicate",
+            score=0.95,
+        ),
+        _search_row(
+            document_id=later_doc,
+            chunk_id=duplicate_chunk_id,
+            chunk_index=2,
+            document="later duplicate",
+            score=0.99,
+        ),
+        _search_row(
+            document_id=unique_doc,
+            chunk_id=unique_chunk_id,
+            chunk_index=3,
+            document="unique",
+            score=0.90,
+        ),
+    ]
+    conn = _Conn(
+        responses=[
+            _Result(row={"collection_name": "my-collection"}),
+            _Result(row={"uuid": uuid.uuid4()}),
+            _Result(rows=search_rows),
+        ]
+    )
+    repo = VectorRepository(SimpleNamespace(begin=lambda: _BeginContext(conn)))
+
+    results = repo.search(
+        configuration_id=uuid.uuid4(),
+        query_vector=[0.1] * 1536,
+        max_docs=2,
+        score_threshold=0.7,
+        organization_id=ORG_ID,
+    )
+
+    assert [item["document_id"] for item in results] == [first_doc, unique_doc]
+    assert [item["text"] for item in results] == ["first duplicate", "unique"]
+
+
+def test_search_dedupes_by_exact_non_empty_text_when_chunk_id_missing() -> None:
+    first_doc = uuid.uuid4()
+    later_doc = uuid.uuid4()
+    unique_doc = uuid.uuid4()
+    search_rows = [
+        _search_row(
+            document_id=first_doc,
+            chunk_id=None,
+            chunk_index=None,
+            document="same text",
+            score=0.95,
+        ),
+        _search_row(
+            document_id=later_doc,
+            chunk_id=None,
+            chunk_index=None,
+            document="same text",
+            score=0.99,
+        ),
+        _search_row(
+            document_id=unique_doc,
+            chunk_id=None,
+            chunk_index=None,
+            document="",
+            score=0.80,
+        ),
+        _search_row(
+            document_id=uuid.uuid4(),
+            chunk_id=None,
+            chunk_index=None,
+            document="",
+            score=0.70,
+        ),
+    ]
+    conn = _Conn(
+        responses=[
+            _Result(row={"collection_name": "my-collection"}),
+            _Result(row={"uuid": uuid.uuid4()}),
+            _Result(rows=search_rows),
+        ]
+    )
+    repo = VectorRepository(SimpleNamespace(begin=lambda: _BeginContext(conn)))
+
+    results = repo.search(
+        configuration_id=uuid.uuid4(),
+        query_vector=[0.1] * 1536,
+        max_docs=10,
+        score_threshold=0.7,
+        organization_id=ORG_ID,
+    )
+
+    assert [item["document_id"] for item in results] == [
+        first_doc,
+        unique_doc,
+        search_rows[3]["document_id"],
+    ]
+    assert [item["text"] for item in results] == ["same text", "", ""]
+
+
+def test_lexical_search_uses_same_result_dedupe_behavior() -> None:
+    duplicate_chunk_id = uuid.uuid4()
+    first_doc = uuid.uuid4()
+    unique_doc = uuid.uuid4()
+    search_rows = [
+        _search_row(
+            document_id=first_doc,
+            chunk_id=duplicate_chunk_id,
+            chunk_index=1,
+            document="first lexical duplicate",
+            score=0.95,
+        ),
+        _search_row(
+            document_id=uuid.uuid4(),
+            chunk_id=duplicate_chunk_id,
+            chunk_index=2,
+            document="later lexical duplicate",
+            score=0.99,
+        ),
+        _search_row(
+            document_id=unique_doc,
+            chunk_id=uuid.uuid4(),
+            chunk_index=3,
+            document="unique lexical",
+            score=0.90,
+        ),
+    ]
+    conn = _Conn(
+        responses=[
+            _Result(row={"collection_name": "my-collection"}),
+            _Result(row={"uuid": uuid.uuid4()}),
+            _Result(rows=search_rows),
+        ]
+    )
+    repo = VectorRepository(SimpleNamespace(begin=lambda: _BeginContext(conn)))
+
+    results = repo.lexical_search(
+        configuration_id=uuid.uuid4(),
+        query_text="nil disclosure",
+        max_docs=10,
+        organization_id=ORG_ID,
+    )
+
+    assert [item["document_id"] for item in results] == [first_doc, unique_doc]
+    assert [item["text"] for item in results] == [
+        "first lexical duplicate",
+        "unique lexical",
+    ]
+
+
 def test_search_returns_empty_for_non_positive_max_docs() -> None:
     fake_engine = SimpleNamespace(begin=lambda: None)
     repo = VectorRepository(fake_engine)
@@ -523,8 +683,6 @@ def test_search_returns_empty_for_non_positive_max_docs() -> None:
 
 
 def test_vector_embedding_model_declares_search_vector_column() -> None:
-    from app.models.vector_embedding import VectorEmbedding
-
     assert "search_vector" in VectorEmbedding.__table__.columns
 
 
@@ -557,4 +715,29 @@ def _candidate(
             "chunk_id": str(chunk_id) if chunk_id else None,
             "source_type": "admin_upload",
         },
+    }
+
+
+def _search_row(
+    *,
+    document_id: uuid.UUID,
+    chunk_id: uuid.UUID | None,
+    chunk_index: int | None,
+    document: str,
+    score: float,
+) -> dict:
+    kb_doc_id = uuid.uuid4()
+    metadata = {}
+    if chunk_index is not None:
+        metadata["chunk_index"] = chunk_index
+    if chunk_id is not None:
+        metadata["chunk_id"] = str(chunk_id)
+    return {
+        "document_id": document_id,
+        "kb_service_document_id": kb_doc_id,
+        "chunk_id": chunk_id,
+        "chunk_index": chunk_index,
+        "document": document,
+        "cmetadata": metadata,
+        "score": score,
     }

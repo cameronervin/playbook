@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 SEARCHABLE_DOCUMENT_STATUS = "success"
 _CHUNK_ID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "playbook.kb-service.chunk")
 RANKING_STRATEGY_HYBRID = "hybrid"
+DEDUPED_SEARCH_FETCH_MULTIPLIER = 3
 
 
 def _build_chunk_records(
@@ -499,7 +500,9 @@ def _record_ranked_candidates(
     insertion_order_start: int,
 ) -> None:
     for offset, result in enumerate(results):
-        key = _candidate_dedupe_key(result)
+        key = _result_dedupe_key(result)
+        if key is None:
+            key = ("row", str(insertion_order_start + offset))
         if key not in merged:
             merged[key] = {
                 "result": result,
@@ -513,11 +516,41 @@ def _record_ranked_candidates(
         merged[key][rank_key] = offset + 1
 
 
-def _candidate_dedupe_key(result: dict) -> tuple[str, str]:
+def _result_dedupe_key(result: dict) -> tuple[str, str] | None:
     chunk_id = result.get("chunk_id") or (result.get("metadata") or {}).get("chunk_id")
     if chunk_id:
         return ("chunk_id", str(chunk_id))
-    return ("text", str(result.get("text", "")))
+    text = str(result.get("text", ""))
+    if text:
+        return ("text", text)
+    return None
+
+
+def _dedupe_fetch_limit(max_docs: int) -> int:
+    return max_docs * DEDUPED_SEARCH_FETCH_MULTIPLIER
+
+
+def dedupe_ranked_results(
+    results: list[dict[str, Any]],
+    *,
+    max_docs: int,
+) -> list[dict[str, Any]]:
+    """Dedupe ranked search results while preserving first-seen order."""
+    if max_docs <= 0:
+        return []
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for result in results:
+        key = _result_dedupe_key(result)
+        if key is not None:
+            if key in seen:
+                continue
+            seen.add(key)
+        deduped.append(result)
+        if len(deduped) >= max_docs:
+            break
+    return deduped
 
 
 def _rrf_score(
@@ -710,7 +743,7 @@ class VectorRepository:
         statement = _build_search_statement(
             collection_id=collection_id,
             query_vector=query_vector,
-            max_docs=max_docs,
+            max_docs=_dedupe_fetch_limit(max_docs),
             score_threshold=score_threshold,
             organization_id=organization_id,
             metadata_filter=metadata_filter,
@@ -724,7 +757,7 @@ class VectorRepository:
             mapped = _map_search_row(row)
             if mapped is not None:
                 results.append(mapped)
-        return results
+        return dedupe_ranked_results(results, max_docs=max_docs)
 
     def lexical_search(
         self,
@@ -742,7 +775,7 @@ class VectorRepository:
         statement = _build_lexical_search_statement(
             collection_id=collection_id,
             query_text=query_text,
-            max_docs=max_docs,
+            max_docs=_dedupe_fetch_limit(max_docs),
             organization_id=organization_id,
             metadata_filter=metadata_filter,
             metadata_filters=metadata_filters,
@@ -755,7 +788,7 @@ class VectorRepository:
             mapped = _map_search_row(row)
             if mapped is not None:
                 results.append(mapped)
-        return results
+        return dedupe_ranked_results(results, max_docs=max_docs)
 
     def hybrid_search(
         self,
@@ -863,7 +896,7 @@ class AsyncVectorRepository:
         statement = _build_search_statement(
             collection_id=collection_id,
             query_vector=query_vector,
-            max_docs=max_docs,
+            max_docs=_dedupe_fetch_limit(max_docs),
             score_threshold=score_threshold,
             organization_id=organization_id,
             metadata_filter=metadata_filter,
@@ -876,7 +909,7 @@ class AsyncVectorRepository:
             mapped = _map_search_row(row)
             if mapped is not None:
                 mapped_rows.append(mapped)
-        return mapped_rows
+        return dedupe_ranked_results(mapped_rows, max_docs=max_docs)
 
     async def lexical_search(
         self,
@@ -896,7 +929,7 @@ class AsyncVectorRepository:
         statement = _build_lexical_search_statement(
             collection_id=collection_id,
             query_text=query_text,
-            max_docs=max_docs,
+            max_docs=_dedupe_fetch_limit(max_docs),
             organization_id=organization_id,
             metadata_filter=metadata_filter,
             metadata_filters=metadata_filters,
@@ -908,7 +941,7 @@ class AsyncVectorRepository:
             mapped = _map_search_row(row)
             if mapped is not None:
                 mapped_rows.append(mapped)
-        return mapped_rows
+        return dedupe_ranked_results(mapped_rows, max_docs=max_docs)
 
     async def hybrid_search(
         self,

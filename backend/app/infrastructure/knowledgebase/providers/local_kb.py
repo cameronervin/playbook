@@ -26,8 +26,6 @@ from app.core.exceptions import (
     KBValidationError,
 )
 from app.infrastructure.knowledgebase.context import assemble_context
-from app.infrastructure.knowledgebase.dedup import deduplicate_chunks
-from app.infrastructure.knowledgebase.ranking import rank_retrieved_chunks
 from app.schemas.knowledgebase import (
     KBConversationFileIngestRequest,
     KBDocumentIngestRequest,
@@ -168,7 +166,7 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
             )
             for item in raw_items
         ]
-        chunks = rank_retrieved_chunks(deduplicate_chunks(chunks))
+        chunks = _dedupe_preserving_kb_order(chunks)
         context = assemble_context(chunks, self.settings.KB_CONTEXT_MAX_TOKENS)
         latency_ms = int((time.monotonic() - start) * 1000)
 
@@ -390,6 +388,31 @@ def _chunk_metadata(item: dict[str, Any]) -> dict[str, Any]:
         if key in item and key not in metadata:
             metadata[key] = item[key]
     return metadata
+
+
+def _dedupe_preserving_kb_order(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """Defensively dedupe KB-service results without changing final rank order."""
+    deduped: list[RetrievedChunk] = []
+    seen: set[tuple[str, str]] = set()
+    for chunk in chunks:
+        key = _dedupe_key(chunk)
+        if key is None:
+            deduped.append(chunk)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(chunk)
+    return deduped
+
+
+def _dedupe_key(chunk: RetrievedChunk) -> tuple[str, str] | None:
+    chunk_id = chunk.metadata.get("chunk_id")
+    if chunk_id:
+        return ("chunk_id", str(chunk_id))
+    if chunk.text:
+        return ("text", chunk.text)
+    return None
 
 
 def _visibility_context(metadata_filter: dict | None) -> dict[str, Any]:

@@ -59,11 +59,12 @@ from trusted graph/runtime context and passed to the KB provider separately from
 model-visible tool arguments, so the model cannot choose or override tenant
 scope. Local KB results are normalized into citation-ready metadata including
 Playbook `document_id`, `kb_service_document_id`, stable `chunk_id`,
-`chunk_index`, score, source title/date, visibility policy, and metadata tags.
-All admin-uploaded shared KB documents are treated as official for MVP, and
-retrieval does not use priority ranking. `message_citations` stores the
-Playbook document and chunk IDs in columns and keeps the rest in
-`source_metadata`.
+`chunk_index`, final relevance score, source title/date, visibility policy, and
+metadata tags. Citation ranks follow KB-service retrieval order after temporary
+order-preserving defensive dedupe in the backend. All admin-uploaded shared KB
+documents are treated as official for MVP, and retrieval does not use priority
+ranking. `message_citations` stores the Playbook document and chunk IDs in
+columns and keeps the rest in `source_metadata`.
 
 Conversation-file retrieval is model-callable through
 `search_conversation_files`, but private scope is still backend-trusted. The

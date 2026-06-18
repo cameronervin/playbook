@@ -250,6 +250,76 @@ async def test_knowledgebase_tool_formats_citation_ready_metadata() -> None:
     assert "Chunk index: 4" in result
 
 
+async def test_knowledgebase_tool_uses_provider_order_for_ranks_and_sources() -> None:
+    provider = FakeKnowledgebaseProvider(
+        KnowledgebaseResult(
+            query="nil",
+            context="context",
+            sources=[
+                RetrievedChunk(
+                    text="KB-service ranked this source first.",
+                    similarity_score=0.77,
+                    metadata={
+                        "document_id": "00000000-0000-0000-0000-000000000011",
+                        "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                        "chunk_id": "00000000-0000-0000-0000-000000000012",
+                        "chunk_index": 1,
+                        "source_title": "First Ranked Source",
+                        "semantic_score": 0.91,
+                        "hybrid_score": 0.04,
+                        "rerank_score": 0.77,
+                        "ranking_strategy": "hybrid_rerank",
+                    },
+                ),
+                RetrievedChunk(
+                    text="KB-service ranked this source second.",
+                    similarity_score=0.98,
+                    metadata={
+                        "document_id": "00000000-0000-0000-0000-000000000031",
+                        "kb_service_document_id": "00000000-0000-0000-0000-000000000041",
+                        "chunk_id": "00000000-0000-0000-0000-000000000032",
+                        "chunk_index": 2,
+                        "source_title": "Second Ranked Source",
+                        "semantic_score": 0.99,
+                        "hybrid_score": 0.05,
+                        "rerank_score": 0.98,
+                        "ranking_strategy": "hybrid_rerank",
+                    },
+                ),
+            ],
+            confidence=0.77,
+            zero_hit=False,
+            latency_ms=12,
+        )
+    )
+    source_registry = {}
+    tool = create_knowledgebase_search_tool(
+        _profile(),
+        provider=provider,
+        source_registry=source_registry,
+    )
+
+    result = await _invoke_tool(tool, "nil disclosure")
+    registered_sources = list(source_registry.values())
+
+    assert result.index("First Ranked Source") < result.index("Second Ranked Source")
+    assert "Rank: 1" in result
+    assert "Rank: 2" in result
+    assert "Relevance: 0.770" in result
+    assert [source.source_title for source in registered_sources] == [
+        "First Ranked Source",
+        "Second Ranked Source",
+    ]
+    assert registered_sources[0].metadata["kb_service_document_id"] == (
+        "00000000-0000-0000-0000-000000000021"
+    )
+    assert registered_sources[0].metadata["chunk_id"] == (
+        "00000000-0000-0000-0000-000000000012"
+    )
+    assert registered_sources[0].metadata["rerank_score"] == 0.77
+    assert registered_sources[0].metadata["ranking_strategy"] == "hybrid_rerank"
+
+
 async def test_local_kb_provider_accepts_canonical_results_payload(
     test_settings,
 ) -> None:
@@ -294,7 +364,7 @@ async def test_local_kb_provider_accepts_canonical_results_payload(
     assert result.sources[0].metadata["score"] == 0.91
 
 
-async def test_local_kb_provider_ranks_near_matches_by_source_date_only(
+async def test_local_kb_provider_preserves_kb_service_order_over_source_date(
     test_settings,
 ) -> None:
     provider = _FakeLocalKBProvider(
@@ -339,8 +409,8 @@ async def test_local_kb_provider_ranks_near_matches_by_source_date_only(
     await provider.close()
 
     assert [chunk.metadata["source_title"] for chunk in result.sources] == [
-        "Newer Guide",
         "Older Guide",
+        "Newer Guide",
     ]
 
 

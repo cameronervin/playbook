@@ -424,7 +424,7 @@ def format_conversation_file_context(
                 + json.dumps(meta["source_locator"], sort_keys=True, default=str)
             )
         if source.similarity_score is not None:
-            lines.append(f"Similarity: {source.similarity_score:.3f}")
+            lines.append(f"Relevance: {source.similarity_score:.3f}")
         lines.append(f"Excerpt: {source.text}")
         sections.append("\n".join(lines))
 
@@ -485,7 +485,7 @@ def _format_source(source: KnowledgebaseSource, *, rank: int) -> str:
         if key in source.metadata and source.metadata[key] is not None:
             lines.append(f"{label}: {source.metadata[key]}")
     if source.similarity_score is not None:
-        lines.append(f"Similarity: {source.similarity_score:.3f}")
+        lines.append(f"Relevance: {source.similarity_score:.3f}")
     lines.append(f"Excerpt: {source.text}")
     return "\n".join(lines)
 

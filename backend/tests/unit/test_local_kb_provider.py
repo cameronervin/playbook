@@ -225,3 +225,163 @@ async def test_local_kb_provider_search_conversation_files_sends_private_scope(
         "type": "page",
         "page_number": 4,
     }
+
+
+@pytest.mark.asyncio
+async def test_local_kb_provider_preserves_kb_service_result_order(
+    test_settings,
+) -> None:
+    provider = _SearchRecordingLocalKBProvider(
+        test_settings,
+        {
+            "results": [
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000011",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                    "chunk_id": "00000000-0000-0000-0000-000000000012",
+                    "chunk_index": 1,
+                    "text": "Older lower-scored guidance appears first.",
+                    "score": 0.81,
+                    "metadata": {
+                        "source_title": "Older First Guide",
+                        "source_date": "2026-01-01",
+                        "ranking_strategy": "hybrid_rerank",
+                        "rerank_score": 0.81,
+                    },
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000031",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000041",
+                    "chunk_id": "00000000-0000-0000-0000-000000000032",
+                    "chunk_index": 2,
+                    "text": "Newer higher-scored guidance appears second.",
+                    "score": 0.99,
+                    "metadata": {
+                        "source_title": "Newer Second Guide",
+                        "source_date": "2026-03-01",
+                        "ranking_strategy": "hybrid_rerank",
+                        "rerank_score": 0.99,
+                    },
+                },
+            ],
+            "query": "nil disclosure",
+            "total": 2,
+        },
+    )
+
+    result = await provider.search("nil disclosure", organization_id=uuid4())
+
+    assert [chunk.metadata["source_title"] for chunk in result.sources] == [
+        "Older First Guide",
+        "Newer Second Guide",
+    ]
+    assert result.confidence == 0.81
+    assert result.context.index("Older lower-scored guidance") < result.context.index(
+        "Newer higher-scored guidance"
+    )
+
+
+@pytest.mark.asyncio
+async def test_local_kb_provider_defensive_dedupe_keeps_first_seen_chunk(
+    test_settings,
+) -> None:
+    duplicate_chunk_id = "00000000-0000-0000-0000-000000000012"
+    provider = _SearchRecordingLocalKBProvider(
+        test_settings,
+        {
+            "results": [
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000011",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                    "chunk_id": duplicate_chunk_id,
+                    "chunk_index": 1,
+                    "text": "The first chunk identity should win.",
+                    "score": 0.71,
+                    "metadata": {
+                        "source_title": "First Duplicate",
+                        "semantic_score": 0.88,
+                        "semantic_rank": 1,
+                        "hybrid_score": 0.04,
+                        "rerank_score": 0.71,
+                        "ranking_strategy": "hybrid_rerank",
+                    },
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000031",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000041",
+                    "chunk_id": duplicate_chunk_id,
+                    "chunk_index": 9,
+                    "text": "The later duplicate must not replace the first.",
+                    "score": 0.99,
+                    "metadata": {
+                        "source_title": "Later Duplicate",
+                        "semantic_score": 0.99,
+                        "semantic_rank": 2,
+                        "hybrid_score": 0.05,
+                        "rerank_score": 0.99,
+                        "ranking_strategy": "hybrid_rerank",
+                    },
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000051",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000061",
+                    "chunk_id": None,
+                    "chunk_index": 3,
+                    "text": "Exact duplicate text should keep first text result.",
+                    "score": 0.62,
+                    "metadata": {"source_title": "First Text Duplicate"},
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000071",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000081",
+                    "chunk_id": None,
+                    "chunk_index": 4,
+                    "text": "Exact duplicate text should keep first text result.",
+                    "score": 0.97,
+                    "metadata": {"source_title": "Later Text Duplicate"},
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000091",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000092",
+                    "chunk_id": None,
+                    "chunk_index": 5,
+                    "text": "",
+                    "score": 0.3,
+                    "metadata": {"source_title": "Empty Text One"},
+                },
+                {
+                    "document_id": "00000000-0000-0000-0000-000000000093",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000094",
+                    "chunk_id": None,
+                    "chunk_index": 6,
+                    "text": "",
+                    "score": 0.2,
+                    "metadata": {"source_title": "Empty Text Two"},
+                },
+            ],
+            "query": "nil disclosure",
+            "total": 6,
+        },
+    )
+
+    result = await provider.search("nil disclosure", organization_id=uuid4())
+
+    assert [chunk.metadata["source_title"] for chunk in result.sources] == [
+        "First Duplicate",
+        "First Text Duplicate",
+        "Empty Text One",
+        "Empty Text Two",
+    ]
+    first = result.sources[0]
+    assert first.text == "The first chunk identity should win."
+    assert first.similarity_score == 0.71
+    assert first.metadata["document_id"] == "00000000-0000-0000-0000-000000000011"
+    assert first.metadata["kb_service_document_id"] == (
+        "00000000-0000-0000-0000-000000000021"
+    )
+    assert first.metadata["chunk_id"] == duplicate_chunk_id
+    assert first.metadata["score"] == 0.71
+    assert first.metadata["semantic_score"] == 0.88
+    assert first.metadata["hybrid_score"] == 0.04
+    assert first.metadata["rerank_score"] == 0.71
+    assert first.metadata["ranking_strategy"] == "hybrid_rerank"

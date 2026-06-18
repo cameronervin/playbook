@@ -10,7 +10,7 @@ import structlog
 
 from app.core.config import settings
 from app.infrastructure.rerankers.base import RerankCandidate
-from app.repositories.vector_repo import AsyncVectorRepository
+from app.repositories.vector_repo import AsyncVectorRepository, dedupe_ranked_results
 from app.schemas.search import SearchRequest, SearchResponse, SearchResult
 from app.services.configuration_service import ConfigurationService
 
@@ -190,6 +190,7 @@ class SearchService:
                 score_threshold=score_threshold,
                 metadata_filters=metadata_filters,
             )
+            semantic_results = dedupe_ranked_results(semantic_results, max_docs=limit)
             return _annotate_semantic_results(semantic_results)
 
         should_rerank = self._should_rerank()
@@ -225,8 +226,10 @@ class SearchService:
                 score_threshold=score_threshold,
                 metadata_filters=metadata_filters,
             )
+            semantic_results = dedupe_ranked_results(semantic_results, max_docs=limit)
             return _annotate_semantic_results(semantic_results)
 
+        hybrid_results = dedupe_ranked_results(hybrid_results, max_docs=final_limit)
         if should_rerank:
             return await self._rerank_hybrid_results(
                 query=query,

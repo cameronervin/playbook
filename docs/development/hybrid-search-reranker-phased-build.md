@@ -242,9 +242,8 @@ Implementation status:
   hybrid candidates, optionally reranks them through the injected LiteLLM
   reranker provider, applies `limit` after reranking, and returns final scores
   plus ranking diagnostics in metadata.
-- Still deferred: backend `LocalKBProvider` continues defensive dedupe and
-  source-date ranking until Phase 5 makes KB-service order authoritative
-  end-to-end.
+- Phase 5 now makes backend `LocalKBProvider` preserve KB-service order
+  end-to-end after order-preserving defensive dedupe.
 
 Scope:
 
@@ -287,6 +286,17 @@ Do not do yet:
 - Do not make `priority` or `is_official` a ranking control.
 
 ## Phase 5: Backend Retrieval Cleanup
+
+Implementation status:
+
+- Implemented: `LocalKBProvider` treats KB-service result order as
+  authoritative, keeps only order-preserving defensive dedupe, and preserves
+  final ranking metadata through source registration and citation persistence.
+- Implemented: KB-service now dedupes all search modes, including
+  semantic-only, lexical-only, hybrid merge, and hybrid fallback-to-semantic
+  paths, before returning ranked results.
+- Backend source-date ranking remains available for mock/offline retrieval but
+  is no longer applied to local KB-service results.
 
 Scope:
 

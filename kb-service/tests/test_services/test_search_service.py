@@ -48,34 +48,22 @@ class FakeEmbedProvider:
 
 
 class FakeVectorRepository:
-    def __init__(self, *, fail_hybrid: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_hybrid: bool = False,
+        search_results: list[dict] | None = None,
+        hybrid_results: list[dict] | None = None,
+    ) -> None:
         self.requests: list[dict] = []
         self.hybrid_requests: list[dict] = []
         self.fail_hybrid = fail_hybrid
-        self.hybrid_results = [
-            _hybrid_result(
-                text="Hybrid first result",
-                hybrid_score=0.05,
-                semantic_rank=1,
-                lexical_rank=2,
-            ),
-            _hybrid_result(
-                text="Hybrid second result",
-                hybrid_score=0.04,
-                semantic_rank=2,
-                lexical_rank=1,
-            ),
-            _hybrid_result(
-                text="Hybrid third result",
-                hybrid_score=0.03,
-                semantic_rank=3,
-                lexical_rank=None,
-            ),
-        ]
+        self.search_results = search_results or []
+        self.hybrid_results = hybrid_results or _default_hybrid_results()
 
     async def search(self, **kwargs) -> list[dict]:
         self.requests.append(kwargs)
-        return []
+        return self.search_results[: kwargs.get("max_docs", len(self.search_results))]
 
     async def hybrid_search(self, **kwargs) -> list[dict]:
         self.hybrid_requests.append(kwargs)
@@ -132,13 +120,15 @@ def _hybrid_result(
     hybrid_score: float,
     semantic_rank: int | None,
     lexical_rank: int | None,
+    chunk_id: object | None = None,
 ) -> dict:
     semantic_score = None if semantic_rank is None else 1.0 - (semantic_rank * 0.1)
     lexical_score = None if lexical_rank is None else 0.9 - (lexical_rank * 0.1)
+    resolved_chunk_id = chunk_id if chunk_id is not None else uuid4()
     return {
         "document_id": uuid4(),
         "kb_service_document_id": uuid4(),
-        "chunk_id": uuid4(),
+        "chunk_id": resolved_chunk_id,
         "chunk_index": 0,
         "text": text,
         "score": hybrid_score,
@@ -150,8 +140,61 @@ def _hybrid_result(
             "hybrid_score": hybrid_score,
             "rerank_score": None,
             "ranking_strategy": "hybrid",
+            "chunk_id": str(resolved_chunk_id),
         },
     }
+
+
+def _default_hybrid_results() -> list[dict]:
+    return [
+        _hybrid_result(
+            text="Hybrid first result",
+            hybrid_score=0.05,
+            semantic_rank=1,
+            lexical_rank=2,
+        ),
+        _hybrid_result(
+            text="Hybrid second result",
+            hybrid_score=0.04,
+            semantic_rank=2,
+            lexical_rank=1,
+        ),
+        _hybrid_result(
+            text="Hybrid third result",
+            hybrid_score=0.03,
+            semantic_rank=3,
+            lexical_rank=None,
+        ),
+    ]
+
+
+def _search_result(
+    *,
+    text: str,
+    score: float,
+    chunk_id: str | None = None,
+) -> dict:
+    return {
+        "document_id": uuid4(),
+        "kb_service_document_id": uuid4(),
+        "chunk_id": chunk_id,
+        "chunk_index": 0,
+        "text": text,
+        "score": score,
+        "metadata": {"chunk_id": chunk_id} if chunk_id is not None else {},
+    }
+
+
+@pytest.fixture(autouse=True)
+def default_semantic_search_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.search_service.settings.KB_SEARCH_STRATEGY",
+        "semantic",
+    )
+    monkeypatch.setattr(
+        "app.services.search_service.settings.KB_RERANK_ENABLED",
+        False,
+    )
 
 
 @pytest.mark.asyncio
@@ -204,6 +247,47 @@ async def test_search_returns_zero_results_for_fresh_default_without_vectors() -
     assert response.total == 0
     assert config_service.resolve_calls == 1
     assert vector_repo.requests == []
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_returns_unique_chunks_in_repository_order() -> None:
+    duplicate_chunk_id = str(uuid4())
+    search_results = [
+        _search_result(
+            text="First duplicate from semantic search.",
+            score=0.91,
+            chunk_id=duplicate_chunk_id,
+        ),
+        _search_result(
+            text="Later duplicate from semantic search.",
+            score=0.99,
+            chunk_id=duplicate_chunk_id,
+        ),
+        _search_result(
+            text="Unique semantic search result.",
+            score=0.88,
+            chunk_id=str(uuid4()),
+        ),
+    ]
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository(search_results=search_results)
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+    )
+
+    response = await service.search(
+        SearchRequest(query="nil disclosure", organization_id=uuid4())
+    )
+
+    assert [result.text for result in response.results] == [
+        "First duplicate from semantic search.",
+        "Unique semantic search result.",
+    ]
+    assert response.results[0].score == 0.91
+    assert response.results[0].metadata["ranking_strategy"] == "semantic"
 
 
 @pytest.mark.asyncio
@@ -405,6 +489,62 @@ async def test_search_reranks_hybrid_candidates_before_applying_limit(
 
 
 @pytest.mark.asyncio
+async def test_search_sends_only_unique_hybrid_candidates_to_reranker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "hybrid")
+    monkeypatch.setattr("app.services.search_service.settings.KB_RERANK_ENABLED", True)
+    duplicate_chunk_id = uuid4()
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository(
+        hybrid_results=[
+            _hybrid_result(
+                text="First hybrid duplicate.",
+                hybrid_score=0.05,
+                semantic_rank=1,
+                lexical_rank=1,
+                chunk_id=duplicate_chunk_id,
+            ),
+            _hybrid_result(
+                text="Later hybrid duplicate.",
+                hybrid_score=0.04,
+                semantic_rank=2,
+                lexical_rank=2,
+                chunk_id=duplicate_chunk_id,
+            ),
+            _hybrid_result(
+                text="Unique hybrid candidate.",
+                hybrid_score=0.03,
+                semantic_rank=3,
+                lexical_rank=None,
+            ),
+        ]
+    )
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    rerank_provider = FakeRerankProvider(scores=[0.9, 0.8])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+        rerank_provider=rerank_provider,  # type: ignore[arg-type]
+    )
+
+    response = await service.search(
+        SearchRequest(query="nil disclosure", organization_id=uuid4())
+    )
+
+    candidates = rerank_provider.requests[0]["candidates"]
+    assert [candidate.text for candidate in candidates] == [
+        "First hybrid duplicate.",
+        "Unique hybrid candidate.",
+    ]
+    assert [result.text for result in response.results] == [
+        "First hybrid duplicate.",
+        "Unique hybrid candidate.",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_keeps_hybrid_order_when_reranker_fails_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -476,7 +616,27 @@ async def test_search_falls_back_to_semantic_when_hybrid_fails(
 ) -> None:
     monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "hybrid")
     config_service = FakeConfigurationService()
-    vector_repo = FakeVectorRepository(fail_hybrid=True)
+    duplicate_chunk_id = str(uuid4())
+    vector_repo = FakeVectorRepository(
+        fail_hybrid=True,
+        search_results=[
+            _search_result(
+                text="First fallback duplicate.",
+                score=0.91,
+                chunk_id=duplicate_chunk_id,
+            ),
+            _search_result(
+                text="Later fallback duplicate.",
+                score=0.99,
+                chunk_id=duplicate_chunk_id,
+            ),
+            _search_result(
+                text="Unique fallback result.",
+                score=0.88,
+                chunk_id=str(uuid4()),
+            ),
+        ],
+    )
     embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
     service = SearchService(
         configuration_service=config_service,  # type: ignore[arg-type]
@@ -493,7 +653,10 @@ async def test_search_falls_back_to_semantic_when_hybrid_fails(
         )
     )
 
-    assert response.total == 0
+    assert [result.text for result in response.results] == [
+        "First fallback duplicate.",
+        "Unique fallback result.",
+    ]
     assert len(vector_repo.hybrid_requests) == 1
     assert len(vector_repo.requests) == 1
     assert vector_repo.requests[0]["metadata_filters"] == (

@@ -117,7 +117,9 @@ No hard launch deadline was specified.
 ## Unresolved Items
 
 - Dev team should confirm the exact OAuth/OIDC implementation path and whether `fastapi-users` OAuth support is sufficient for MVP.
-- Dev team should keep MVP retrieval ranking deterministic: semantic relevance first, then newest applicable source within near-similar matches.
+- Dev team should keep MVP retrieval ranking deterministic inside KB-service;
+  the main backend preserves KB-service order while handling answer policy and
+  citations.
 - Product owner is building a separate design guide; visual styling should align once that guide is available.
 
 ## V1 Archive

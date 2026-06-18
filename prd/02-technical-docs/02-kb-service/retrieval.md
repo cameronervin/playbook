@@ -28,11 +28,13 @@ trusted scope from the backend.
    When `KB_SEARCH_STRATEGY=hybrid`, it also runs PostgreSQL full-text lexical
    search over chunk text and merges semantic plus lexical candidates with
    reciprocal-rank fusion.
-6. KB service returns chunk text, final caller-facing `score`, document IDs, and
+6. KB service dedupes ranked results by `chunk_id`, then exact non-empty text
+   fallback, preserving first-ranked order.
+7. KB service returns chunk text, final caller-facing `score`, document IDs, and
    metadata.
-7. Main backend currently keeps defensive dedupe and near-similar source-date
-   ordering during the retrieval-order transition.
-8. Assistant answer cites returned sources through `message_citations`.
+8. Main backend keeps temporary defensive dedupe only when needed, preserving
+   KB-service result order.
+9. Assistant answer cites returned sources through `message_citations`.
 
 Current hybrid candidate flow plus later rerank flow:
 
@@ -83,8 +85,10 @@ Default runtime ranking is semantic-only:
 - `score` is `1 - pgvector cosine_distance` after the request threshold is
   applied,
 - rows are ordered by ascending cosine distance in KB-service,
-- backend may still dedupe and prefer newer `source_date` within near-similar
-  relevance bands until the later backend cleanup phase.
+- KB-service performs bounded internal over-fetch and order-preserving dedupe so
+  duplicate rows do not consume the final requested `limit`,
+- backend context assembly and citations preserve KB-service order after
+  order-preserving defensive dedupe.
 
 When `KB_SEARCH_STRATEGY=hybrid`, KB-service retrieves bounded semantic and
 lexical candidates, dedupes them by `chunk_id` then exact text, and ranks them

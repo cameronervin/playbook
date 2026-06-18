@@ -124,11 +124,13 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
 
 1. Retrieve only documents with `processing_status = ready`.
 2. Apply active visibility policy; MVP policy is all athletes.
-3. Rank by semantic score first, then source date within near-similar matches.
-4. If sources conflict, prefer newest applicable document by default.
-5. Admin-uploaded shared KB documents are official by definition for MVP; priority does not override freshness.
-6. If conflict cannot be resolved, explain that guidance appears conflicting and direct the athlete to the athletic department.
-7. Never fabricate citations.
+3. Preserve KB-service retrieval order for semantic, hybrid, and hybrid-rerank
+   modes.
+4. If retrieved sources conflict, explain that guidance appears conflicting and
+   direct the athlete to the athletic department.
+5. Admin-uploaded shared KB documents are official by definition for MVP;
+   priority does not override retrieval order.
+6. Never fabricate citations.
 
 ## Refusal and Emergency Behavior
 
