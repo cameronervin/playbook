@@ -41,6 +41,21 @@ services:
         max-size: "100m"
         max-file: "10"
 
+  reranker:
+    env_file:
+      - ../envs/.env.prod
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
+
   backend:
     env_file:
       - ../envs/.env.prod

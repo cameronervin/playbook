@@ -92,11 +92,12 @@ Recommended deployment shape:
 | Component | Responsibility |
 |-----------|----------------|
 | `litellm` service | Runs LiteLLM Proxy on the internal network, usually port `4000` |
-| LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, `playbook-embed`, optional `playbook-ocr`, and later `playbook-rerank` |
+| `reranker` service | Optional Infinity reranker profile on the internal network, port `7997` |
+| LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, `playbook-embed`, optional `playbook-ocr`, and `playbook-rerank` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
 | Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200` |
 | KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`, and `KB_RERANK_ENABLED=false` for Phase 0 |
-| LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, and `LITELLM_DATABASE_URL` |
+| LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `LITELLM_DATABASE_URL`, `LITELLM_PLAYBOOK_RERANK_MODEL`, `INFINITY_API_BASE`, and `INFINITY_API_KEY` |
 
 Use a separate LiteLLM database or at least a separate database/user in the
 Postgres cluster. Do not add LiteLLM tables to the Playbook application data
@@ -108,9 +109,10 @@ features Playbook wants in scope: virtual keys, spend tracking, budgets, and the
 admin UI. That means the production deployment should include a LiteLLM DB
 connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
 Provider API keys such as `OPENAI_API_KEY` should be available only to the
-LiteLLM proxy service. Add other provider keys only when aliases use those
-providers. The backend and KB-service should hold only LiteLLM virtual/service
-keys.
+LiteLLM proxy service. `INFINITY_API_KEY` is an internal token shared by LiteLLM
+and the `reranker` service, not by application runtimes. Add other provider keys
+only when aliases use those providers. The backend and KB-service should hold
+only LiteLLM virtual/service keys.
 
 The project-owned LiteLLM image is defined in
 `deploy/docker/Dockerfile.litellm` and uses `deploy/litellm/config.yaml` for
@@ -122,7 +124,19 @@ model aliases:
 | `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries and fast agent paths |
 | `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
 | `playbook-ocr` | `LITELLM_PLAYBOOK_OCR_MODEL` | opt-in scanned PDF OCR when `OCR_PROVIDER=vlm` |
-| `playbook-rerank` | future reranker service alias | reserved for KB-service hybrid/rerank phases; not present in Phase 0 LiteLLM config |
+| `playbook-rerank` | `LITELLM_PLAYBOOK_RERANK_MODEL` | Infinity reranker alias for future KB-service hybrid/rerank phases |
+
+The Phase 1 reranker container is enabled with the `reranker` profile and uses
+`michaelf34/infinity:latest-cpu` by default:
+
+```bash
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
+  --profile reranker up -d --build reranker litellm
+```
+
+This only configures model serving and LiteLLM routing. KB-service search still
+uses semantic pgvector retrieval until later phases set `KB_RERANK_ENABLED=true`
+and add the KB-service reranker client.
 
 For local Compose, `litellm-db-init` creates a separate `litellm` database in
 the local Postgres container. Production should provision the LiteLLM database
@@ -144,6 +158,9 @@ curl http://<host>/api/v1/health
 # LiteLLM proxy health
 curl http://<host-or-internal-litellm>:4000/health/liveliness
 curl http://<host-or-internal-litellm>:4000/health/readiness
+
+# Infinity reranker health, when the reranker profile is enabled
+curl http://<host-or-internal-reranker>:7997/health
 ```
 
 To verify Python dependency resolution before a deploy:

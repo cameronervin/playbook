@@ -46,6 +46,10 @@ services:
       litellm-db-init:
         condition: service_completed_successfully
 
+  reranker:
+    env_file:
+      - ../envs/.env.dev
+
   backend:
     ports:
       - "8000:8000"

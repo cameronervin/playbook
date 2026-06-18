@@ -23,6 +23,12 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
       api_base: os.environ/OPENAI_API_BASE
 
+  - model_name: playbook-rerank
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_RERANK_MODEL
+      api_base: os.environ/INFINITY_API_BASE
+      api_key: os.environ/INFINITY_API_KEY
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/LITELLM_DATABASE_URL

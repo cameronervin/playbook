@@ -47,6 +47,43 @@ curl http://localhost:4000/health/liveliness
 curl http://localhost:4000/health/readiness
 ```
 
+The self-hosted Infinity reranker is optional during normal local boot. Start it
+when validating LiteLLM `/rerank` routing:
+
+```bash
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
+  --profile reranker up -d --build reranker litellm
+
+curl http://localhost:7997/health
+```
+
+On Apple Silicon, the Infinity CPU image currently runs as `linux/amd64` under
+Docker Desktop emulation. Keep `RERANKER_PLATFORM=linux/amd64` in
+`deploy/envs/.env.litellm.local` unless Infinity publishes an ARM64 CPU image.
+
+Then smoke the LiteLLM rerank alias:
+
+```bash
+source deploy/envs/.env.litellm.local
+
+curl -s -X POST "http://localhost:4000/rerank" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "playbook-rerank",
+    "query": "What must an athlete do before signing a NIL deal?",
+    "documents": [
+      "Athletes must disclose NIL agreements before signing.",
+      "Travel reimbursement forms are due after road games.",
+      "Equipment checkout happens at the start of each season."
+    ],
+    "top_n": 2
+  }'
+```
+
+`playbook-rerank` is configured for future KB-service hybrid/rerank phases, but
+KB-service search remains semantic-only while `KB_RERANK_ENABLED=false`.
+
 See [Self-Hosted LiteLLM](litellm_self_hosting.md) for key provisioning and
 security notes.
 
@@ -222,6 +259,7 @@ KB infrastructure definitions:
 | MinIO bucket bootstrap | `minio-bootstrap` | n/a | creates `S3_BUCKET_NAME` (`playbook-bucket`) |
 | KB broker/result backend | `kb-valkey` | `6380` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
 | LiteLLM proxy | `litellm` | `4000` | `deploy/litellm/config.yaml`, `deploy/envs/.env.litellm.local` |
+| Infinity reranker | `reranker` | `7997` | enabled with `--profile reranker`, env in `deploy/envs/.env.litellm.local` |
 | KB API container | `kb-api` | `8001` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
 | KB workers | `kb-worker-cpu`, `kb-worker-io` | n/a | enabled with `--profile worker` |
 
@@ -230,8 +268,11 @@ KB infrastructure definitions:
 1. Open http://localhost:3000.
 2. Confirm the backend health check is reachable.
 3. Confirm LiteLLM health is reachable on port `4000`.
-4. Confirm Playbook migrations apply against the local `playbook` database.
-5. From `kb-service/`, run `uv run alembic upgrade head` so the live KB schema
+4. If rerank routing is in scope, confirm the `reranker` health endpoint is
+   reachable on port `7997` and the LiteLLM `/rerank` smoke returns ranked
+   `results`.
+5. Confirm Playbook migrations apply against the local `playbook` database.
+6. From `kb-service/`, run `uv run alembic upgrade head` so the live KB schema
    matches the current models, then run `uv run python
    scripts/smoke_kb_service.py` for shared KB ingest/search. Add
    `--include-conversation-file` to also verify private conversation-file

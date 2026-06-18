@@ -244,7 +244,10 @@ keeps semantic relevance bands and prefers newer `source_date` within
 near-similar matches. Admin-uploaded shared KB documents are official by
 definition for MVP, and priority is not used as a ranking control.
 
-Phase 0 for hybrid search/reranking only reserves contracts and configuration:
+Phase 1 for hybrid search/reranking configures only model serving and routing:
+the self-hosted Infinity reranker is available through the LiteLLM
+`playbook-rerank` alias, but KB-service search does not call `/rerank` yet.
+The KB-service rerank placeholders remain
 `LITELLM_RERANK_MODEL=playbook-rerank`, `KB_RERANK_ENABLED=false`,
 `KB_RERANK_CANDIDATE_LIMIT=50`, `KB_RERANK_TIMEOUT_SECONDS=10.0`, and
 `KB_RERANK_FAIL_OPEN=true`. Later phases add lexical candidates,
