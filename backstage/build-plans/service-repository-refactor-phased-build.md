@@ -27,11 +27,11 @@ repositories for database access, and infrastructure modules for external
 systems. The current implementation follows that layering, but several files
 have grown large enough that unrelated responsibilities now change together.
 
-Confirmed hotspots:
+Original confirmed hotspots, with phase status where completed:
 
-| File | Current size | Main responsibilities mixed today |
+| File | Current size / status | Main responsibilities mixed before refactor |
 |------|--------------|-----------------------------------|
-| `kb-service/app/repositories/vector_repo.py` | 991 lines | chunk record shaping, metadata normalization, SQL statement construction, row mapping, semantic search, lexical search, hybrid ranking, dedupe, sync worker repository, async API repository |
+| `kb-service/app/repositories/vector_repo.py` | Phase 1 completed; was 991 lines before split | chunk record shaping, metadata normalization, SQL statement construction, row mapping, semantic search, lexical search, hybrid ranking, dedupe, sync worker repository, async API repository |
 | `backend/app/services/kb_document_service.py` | 865 lines | admin KB document CRUD, upload validation, direct-upload presign/complete, multipart upload, KB ingest handoff, audit/events, delete/retry, signed webhook processing |
 | `backend/app/services/conversation_service.py` | 835 lines | conversation CRUD, message submission, worker dispatch, stream authorization, conversation-file upload, direct-upload completion, ingest metadata, DTO mapping |
 | `kb-service/app/services/ingestion_service.py` | 578 lines | ingest metadata normalization, S3 size/hash inspection, dedupe/source identity rules, Celery pipeline dispatch, status response mapping, retry, delete |
@@ -138,6 +138,8 @@ Do not do yet:
 
 ## Phase 1: Split KB-Service Vector Repository Internals
 
+Status: Completed on 2026-06-18.
+
 Scope:
 
 - Extract pure vector helpers first while keeping
@@ -175,6 +177,13 @@ Relevant tests:
 - `cd kb-service && uv run pytest tests/test_app/test_repositories/test_vector_repository.py -v`
 - `cd kb-service && uv run pytest tests/test_services/test_search_service.py -v`
 - `cd kb-service && uv run ruff check app tests`
+
+Completed verification on 2026-06-18:
+
+- `cd kb-service && uv run pytest tests/test_app/test_repositories/test_vector_repository.py -v` -> 23 passed
+- `cd kb-service && uv run pytest tests/test_services/test_search_service.py -v` -> 15 passed
+- `cd kb-service && uv run ruff check app tests` -> passed
+- `cd kb-service && uv run python -m compileall app tests` -> passed
 
 Do not do yet:
 

@@ -207,10 +207,17 @@ Contract: search uses pgvector's `.cosine_distance()`; relevance is reported as
 deletes any existing rows for `document_id` (idempotent re-ingest) then inserts
 the new chunk vectors.
 
-The SQL itself lives in the vector repository
-(`app.repositories.vector_repo`) and the `VectorEmbedding` model
-(`app.models.vector_embedding`), authored separately. These imports resolve when
-those files land.
+Search repository internals are split by responsibility:
+
+- `app.repositories.vector_records` builds deterministic chunk/vector insert records.
+- `app.repositories.vector_queries` builds shared semantic and lexical SQLAlchemy statements.
+- `app.repositories.vector_mapping` maps raw DB rows into the KB search result shape.
+- `app.repositories.vector_ranking` owns dedupe, reciprocal-rank fusion, and ranking diagnostics.
+- `app.repositories.vector_sync` exposes the sync `VectorRepository` used by workers.
+- `app.repositories.vector_async` exposes the async `AsyncVectorRepository` used by API services.
+
+`app.repositories.vector_repo` remains an import-compatible facade for existing
+service, worker, test, and compatibility-wrapper imports.
 
 The repository also owns Phase 3 lexical and hybrid candidate generation:
 
