@@ -194,6 +194,8 @@ Do not do yet:
 
 ## Phase 2: Extract Backend Direct-Upload Workflow Helpers
 
+Status: Completed on 2026-06-18.
+
 Scope:
 
 - Reduce duplication between admin KB document uploads and conversation-file
@@ -213,6 +215,7 @@ Suggested files:
 - `backend/tests/integration/test_conversation_routes.py`
 - `backend/tests/integration/test_upload_request_repositories.py`
 - `backend/tests/integration/test_upload_request_reconciliation.py`
+- `backend/tests/unit/test_direct_upload_workflows.py`
 
 Acceptance criteria:
 
@@ -230,11 +233,18 @@ Acceptance criteria:
 
 Relevant tests:
 
+- `cd backend && uv run pytest tests/unit/test_direct_upload_workflows.py tests/unit/test_direct_upload_schemas.py -v`
 - `cd backend && uv run pytest tests/integration/test_kb_document_routes.py -v`
 - `cd backend && uv run pytest tests/integration/test_conversation_routes.py -v`
 - `cd backend && uv run pytest tests/integration/test_upload_request_repositories.py -v`
 - `cd backend && uv run pytest tests/integration/test_upload_request_reconciliation.py -v`
 - `cd backend && uv run ruff check app tests`
+
+Completed verification on 2026-06-18:
+
+- `cd backend && uv run pytest tests/unit/test_direct_upload_workflows.py tests/unit/test_direct_upload_schemas.py tests/integration/test_kb_document_routes.py tests/integration/test_conversation_routes.py tests/integration/test_upload_request_repositories.py tests/integration/test_upload_request_reconciliation.py -v` -> 47 passed
+- `cd backend && uv run ruff check app tests` -> passed
+- `cd backend && uv run python -m compileall app tests` -> passed
 
 Do not do yet:
 
