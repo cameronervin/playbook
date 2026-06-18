@@ -115,6 +115,7 @@ Once the API, Postgres, Valkey, S3/MinIO, LiteLLM, and KB workers are running:
 cd kb-service
 uv run python scripts/smoke_kb_service.py
 uv run python scripts/smoke_kb_service.py --include-conversation-file
+uv run python scripts/smoke_kb_service.py --check-litellm-rerank
 ```
 
 The script creates a tiny DOCX, uploads it to the configured bucket, ingests it,
@@ -124,9 +125,16 @@ conversation-file DOCX and verifies shared search excludes it while private
 conversation-scoped search can retrieve it. Use `--keep` to preserve uploaded
 objects and KB documents while debugging.
 
+When reranked retrieval is enabled with `KB_SEARCH_STRATEGY=hybrid` and
+`KB_RERANK_ENABLED=true`, add `--check-litellm-rerank` to validate the LiteLLM
+`/rerank` alias before ingestion. To validate the intentional fail-open path,
+run with the reranker unavailable and add `--expect-rerank-fail-open`; the smoke
+then expects hybrid result metadata with `rerank_score=null` instead of
+`ranking_strategy=hybrid_rerank`.
+
 ## Extending
 
-Read `../docs/guides/kb_service_extension_points.md` for: adding a
+Read `../backstage/guides/kb_service_extension_points.md` for: adding a
 parser/extractor, enabling the LiteLLM-routed VLM OCR path, and changing the
 embedding model or vector dimension (requires a migration — the `vector(N)`
 column dimension is fixed).

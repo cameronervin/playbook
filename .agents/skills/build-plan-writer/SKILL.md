@@ -1,6 +1,6 @@
 ---
 name: build-plan-writer
-description: Manual invocation only. Do not use this skill based on task content; use it only when the user explicitly invokes build-plan-writer or asks to use the build-plan-writer skill.
+description: Manual invocation only. Do not use this skill based on task content; use it only when the user explicitly invokes build-plan-writer or asks to use the build-plan-writer skill. New build plans should be written under backstage/build-plans/.
 ---
 
 # Build Plan Writer
@@ -20,7 +20,7 @@ Once explicitly invoked, use it for:
 - Creating a phased build plan or implementation handoff.
 - Breaking a large feature into slices for later agents.
 - Updating an existing build plan after code or scope changes.
-- Writing planning docs like `docs/development/*-phased-build.md`.
+- Writing new planning docs like `backstage/build-plans/*-phased-build.md`.
 
 ## Workflow
 
@@ -28,7 +28,7 @@ Once explicitly invoked, use it for:
 
 Before drafting, read the relevant sources:
 
-- Existing build or phase docs in `docs/development/` and `prd/`.
+- Existing build or phase docs in `backstage/build-plans/`, `backstage/development/`, and `backstage/prd/`.
 - Product specs, API docs, data model docs, and integration docs related to the feature.
 - Current code paths that prove what is already implemented.
 - Applicable rules and style guides for any area the future work will touch.
@@ -102,6 +102,15 @@ wire shapes, and fallback policies unless they are necessary to prevent a real
 implementation mistake.
 
 Use `references/build-plan-template.md` when starting a new plan from scratch.
+
+### 6) Choose the Output Path
+
+- Write new build plans under `backstage/build-plans/` using a descriptive kebab-case name
+  ending in `-phased-build.md`.
+- Update existing build plans in place, even if they already live outside
+  `backstage/build-plans/`, unless the user explicitly asks to move them.
+- Do not place new build plans under `backstage/development/`; reserve that folder
+  for trackers, bug logs, and legacy planning docs already present there.
 
 ## Output Rules
 

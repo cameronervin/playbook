@@ -35,7 +35,7 @@ The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callb
 
 ## Design System
 
-The visual source of truth is `docs/design/`, especially `docs/design/README.md`, `docs/design/frontend_wireframe_implementation_plan.md`, and `docs/design/source/colors_and_type.css`.
+The visual source of truth is `backstage/design/`, especially `backstage/design/README.md`, `backstage/design/frontend_wireframe_implementation_plan.md`, and `backstage/design/source/colors_and_type.css`.
 
 - Fonts are loaded locally in `src/app/layout.tsx`: Archivo, Sora, and Inter.
 - Tailwind v4 tokens live in `src/app/globals.css` using `@theme`.

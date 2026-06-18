@@ -10,7 +10,7 @@ A skill for drafting daily EOD handoff notes from a product lead to their dev te
 Writing handoff notes is time-consuming because the content lives in your head, not in a ticket board. This skill:
 
 - Accepts a brain dump and structures it into a consistent note format
-- Reads `prd/03-implementation/` to identify the current active phase and pull relevant context
+- Reads `backstage/prd/03-implementation/` to identify the current active phase and pull relevant context
 - Keeps a specific voice, section structure, and tone the team expects
 - Only asks clarifying questions when context is genuinely missing (max two)
 - Iterates quickly — most notes land in 1–2 revision passes
@@ -86,7 +86,7 @@ handoff-note-builder/
 ├── templates/
 │   └── note-skeleton.md          # Fillable structural template
 └── scripts/
-    └── gather_phase_context.py   # Reads prd/03-implementation/ to find active phase
+    └── gather_phase_context.py   # Reads backstage/prd/03-implementation/ to find active phase
 ```
 
 ## Things to watch for

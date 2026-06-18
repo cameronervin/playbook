@@ -330,7 +330,7 @@ def main():
     )
     parser.add_argument(
         "--output", "-o",
-        default=f"docs/sprint-reports/{date.today().isoformat()}/sprint-progress.png",
+        default=f"backstage/development/sprint-reports/{date.today().isoformat()}/sprint-progress.png",
         help="Output path for the generated image"
     )
     parser.add_argument(

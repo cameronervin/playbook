@@ -88,7 +88,7 @@ services:
       - /app/.next
     command: npm run dev
 
-  # Local S3-compatible object storage via MinIO (see docs/guides/minio_setup.md).
+  # Local S3-compatible object storage via MinIO (see backstage/guides/minio_setup.md).
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
@@ -123,7 +123,7 @@ services:
         /usr/bin/mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
         /usr/bin/mc mb --ignore-existing "local/$${S3_BUCKET_NAME}"
         echo "MinIO bucket ready for local direct-upload smoke: $${S3_BUCKET_NAME}"
-        echo "Validate browser preflight with docs/guides/minio_setup.md"
+        echo "Validate browser preflight with backstage/guides/minio_setup.md"
 
   celery-worker:
     env_file:

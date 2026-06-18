@@ -1,6 +1,6 @@
 # Playbook UI Patterns
 
-Use `docs/design/` as the visual source of truth.
+Use `backstage/design/` as the visual source of truth.
 
 ## Primitive Strategy
 

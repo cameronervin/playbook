@@ -2,7 +2,7 @@
 """
 gather_phase_context.py
 
-Helper for the handoff-note-builder skill. Reads the `prd/03-implementation/`
+Helper for the handoff-note-builder skill. Reads the `backstage/prd/03-implementation/`
 folder of a product codebase to identify the currently active phase and
 surface the items under it, so Claude can reference concrete action items
 from the plan when drafting the note.
@@ -13,7 +13,7 @@ Usage:
 Arguments:
     --repo <path>   Path to the product repo root. Defaults to the current
                     working directory. The script looks for
-                    <repo>/prd/03-implementation/ inside this path.
+                    <repo>/backstage/prd/03-implementation/ inside this path.
     --phase <N>     Force a specific phase number to load (e.g. --phase 5).
                     If omitted, the script infers the active phase from
                     file modification times (most recent phase file wins,
@@ -52,7 +52,7 @@ INDEX_FILE_CANDIDATES = ("_implementation-plan.md", "implementation-plan.md")
 def find_implementation_dir(repo_root: Path) -> Path | None:
     """Locate the implementation folder. Tries the canonical path first,
     then a shallow search so the skill works even when the folder moves."""
-    canonical = repo_root / "prd" / "03-implementation"
+    canonical = repo_root / "backstage" / "prd" / "03-implementation"
     if canonical.is_dir():
         return canonical
 
@@ -144,7 +144,7 @@ def build_output(repo_root: Path, forced_phase: int | None) -> dict:
             "status": "not_found",
             "error": (
                 f"Could not find an implementation folder under {repo_root}. "
-                "Expected prd/03-implementation/. "
+                "Expected backstage/prd/03-implementation/. "
                 "Fall back: ask the author which phase they're in and what the "
                 "priority items are."
             ),

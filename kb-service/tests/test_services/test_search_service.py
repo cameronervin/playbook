@@ -114,6 +114,17 @@ class FakeRerankProvider:
         ]
 
 
+class FakeLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def info(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def _hybrid_result(
     *,
     text: str,
@@ -438,6 +449,64 @@ async def test_search_uses_hybrid_repository_when_strategy_enabled(
 
 
 @pytest.mark.asyncio
+async def test_hybrid_search_sends_acronym_keyword_query_to_lexical_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "hybrid")
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+    )
+
+    await service.search(
+        SearchRequest(query="NIL disclosure", organization_id=uuid4())
+    )
+
+    assert vector_repo.hybrid_requests[0]["query_text"] == "NIL disclosure"
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_handles_paraphrase_query_without_reranker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_RERANK_ENABLED", True)
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository(
+        search_results=[
+            _search_result(
+                text="NIL policy applies to money earned from name, image, and likeness.",
+                score=0.86,
+                chunk_id=str(uuid4()),
+            )
+        ]
+    )
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    rerank_provider = FakeRerankProvider(scores=[0.99])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+        rerank_provider=rerank_provider,  # type: ignore[arg-type]
+    )
+
+    response = await service.search(
+        SearchRequest(
+            query="Can I get paid for using my personal brand?",
+            organization_id=uuid4(),
+        )
+    )
+
+    assert response.results[0].metadata["ranking_strategy"] == "semantic"
+    assert vector_repo.requests[0]["query_vector"] == [0.1, 0.2, 0.3]
+    assert vector_repo.hybrid_requests == []
+    assert rerank_provider.requests == []
+
+
+@pytest.mark.asyncio
 async def test_search_reranks_hybrid_candidates_before_applying_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -662,3 +731,57 @@ async def test_search_falls_back_to_semantic_when_hybrid_fails(
     assert vector_repo.requests[0]["metadata_filters"] == (
         vector_repo.hybrid_requests[0]["metadata_filters"]
     )
+
+
+@pytest.mark.asyncio
+async def test_search_logs_safe_hybrid_rerank_metadata_without_raw_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "hybrid")
+    monkeypatch.setattr("app.services.search_service.settings.KB_RERANK_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.search_service.settings.LITELLM_EMBED_MODEL",
+        "playbook-embed",
+    )
+    monkeypatch.setattr(
+        "app.services.search_service.settings.LITELLM_RERANK_MODEL",
+        "playbook-rerank",
+    )
+    fake_logger = FakeLogger()
+    monkeypatch.setattr("app.services.search_service.logger", fake_logger)
+    sensitive_query = "Can I sign this private NIL contract?"
+    sensitive_text = "source_uri=https://storage.test/private.pdf?signature=secret"
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository(
+        hybrid_results=[
+            _hybrid_result(
+                text=sensitive_text,
+                hybrid_score=0.05,
+                semantic_rank=1,
+                lexical_rank=1,
+            )
+        ]
+    )
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    rerank_provider = FakeRerankProvider(scores=[0.91])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+        rerank_provider=rerank_provider,  # type: ignore[arg-type]
+    )
+
+    await service.search(SearchRequest(query=sensitive_query, organization_id=uuid4()))
+
+    rendered_logs = repr(fake_logger.events)
+    assert sensitive_query not in rendered_logs
+    assert sensitive_text not in rendered_logs
+    assert "signature=secret" not in rendered_logs
+    assert "query_sha256" in rendered_logs
+    assert "embed_model" in rendered_logs
+    assert "playbook-embed" in rendered_logs
+    assert "rerank_model" in rendered_logs
+    assert "playbook-rerank" in rendered_logs
+    assert "candidate_count" in rendered_logs
+    assert "score_summary" in rendered_logs
+    assert "ranking_strategy_counts" in rendered_logs

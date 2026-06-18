@@ -48,4 +48,4 @@ release/2
 ```
 
 ## Branching Strategy
-See `docs/development/branching-strategy.md` for full model, release cadence, and merge rules.
+See `backstage/development/branching-strategy.md` for full model, release cadence, and merge rules.

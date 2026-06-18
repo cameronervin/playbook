@@ -27,6 +27,7 @@ class FakeKnowledgebaseProvider:
         self.requests: list[dict[str, object]] = []
         self.admin_upload_requests: list[dict[str, object]] = []
         self.conversation_file_requests: list[dict[str, object]] = []
+        self.admin_upload_chunks: list[RetrievedChunk] = []
         self.conversation_file_chunks: list[RetrievedChunk] = []
 
     async def search(
@@ -48,27 +49,28 @@ class FakeKnowledgebaseProvider:
                 "configuration_id": configuration_id,
             }
         )
+        chunks = self.admin_upload_chunks or [
+            RetrievedChunk(
+                text="NIL deals must be disclosed before participation.",
+                similarity_score=0.93,
+                metadata={
+                    "document_id": "00000000-0000-0000-0000-000000000011",
+                    "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
+                    "chunk_id": "00000000-0000-0000-0000-000000000012",
+                    "chunk_index": 5,
+                    "source_title": "NIL Handbook",
+                    "source_date": "2026-01-15",
+                    "is_official": True,
+                    "priority": 10,
+                },
+            )
+        ]
         return KnowledgebaseResult(
             query=query,
-            context="context",
-            sources=[
-                RetrievedChunk(
-                    text="NIL deals must be disclosed before participation.",
-                    similarity_score=0.93,
-                    metadata={
-                        "document_id": "00000000-0000-0000-0000-000000000011",
-                        "kb_service_document_id": "00000000-0000-0000-0000-000000000021",
-                        "chunk_id": "00000000-0000-0000-0000-000000000012",
-                        "chunk_index": 5,
-                        "source_title": "NIL Handbook",
-                        "source_date": "2026-01-15",
-                        "is_official": True,
-                        "priority": 10,
-                    },
-                )
-            ],
-            confidence=0.93,
-            zero_hit=False,
+            context="\n\n".join(chunk.text for chunk in chunks),
+            sources=chunks,
+            confidence=chunks[0].similarity_score if chunks else None,
+            zero_hit=not chunks,
             latency_ms=7,
         )
 
@@ -153,6 +155,27 @@ class ToolCallingChain:
                 answer="Yes, disclose it first.",
                 answer_type="grounded_answer",
                 cited_source_keys=[source_key],
+                topic_labels=["nil"],
+                risk_labels=["compliance"],
+            )
+        }
+
+
+class MultiSourceToolCallingChain:
+    def __init__(self, tool) -> None:
+        self.tool = tool
+
+    async def ainvoke(
+        self,
+        input: dict,
+    ) -> dict[str, AthleteChatStructuredResponse]:
+        tool_result = await self.tool.ainvoke({"query": "nil disclosure"})
+        source_keys = re.findall(r"\[(S-[^\]]+)\]", tool_result)
+        return {
+            "structured_response": AthleteChatStructuredResponse(
+                answer="Follow the first and second cited sources in order.",
+                answer_type="grounded_answer",
+                cited_source_keys=source_keys[:2],
                 topic_labels=["nil"],
                 risk_labels=["compliance"],
             )
@@ -260,6 +283,14 @@ def fake_chain_with_tool(*, tools: list, **_: object) -> ToolCallingChain:
     return ToolCallingChain(tools[0])
 
 
+def fake_chain_with_multi_source_tool(
+    *,
+    tools: list,
+    **_: object,
+) -> MultiSourceToolCallingChain:
+    return MultiSourceToolCallingChain(tools[0])
+
+
 def fake_chain_without_tool(**_: object) -> NoToolChain:
     return NoToolChain()
 
@@ -364,6 +395,112 @@ async def test_athlete_chat_executor_persists_grounded_answer_and_citations(
     assert kb_provider.requests[0]["organization_id"] == str(organization.id)
     assert records[-1].event.event_type == "complete"
     assert records[-1].event.data["citation_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_executor_persists_citations_in_kb_service_order(
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        chains_builder,
+        "create_athlete_chat_chain",
+        fake_chain_with_multi_source_tool,
+    )
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-agent-ranked-citations",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-ranked-citations@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-ranked-citations",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    user_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="Can I sign this NIL deal?",
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={
+            "task_id": "task-ranked-citations",
+            "user_message_id": str(user_message.id),
+        },
+    )
+    kb_provider = FakeKnowledgebaseProvider()
+    kb_provider.admin_upload_chunks = [
+        RetrievedChunk(
+            text="KB-service ranked this lower-scored rerank result first.",
+            similarity_score=0.71,
+            metadata={
+                "document_id": "00000000-0000-0000-0000-000000000101",
+                "kb_service_document_id": "00000000-0000-0000-0000-000000000201",
+                "chunk_id": "00000000-0000-0000-0000-000000000301",
+                "chunk_index": 1,
+                "source_title": "First Ranked NIL Guide",
+                "score": 0.71,
+                "hybrid_score": 0.04,
+                "rerank_score": 0.71,
+                "ranking_strategy": "hybrid_rerank",
+            },
+        ),
+        RetrievedChunk(
+            text="KB-service ranked this higher-scored rerank result second.",
+            similarity_score=0.99,
+            metadata={
+                "document_id": "00000000-0000-0000-0000-000000000102",
+                "kb_service_document_id": "00000000-0000-0000-0000-000000000202",
+                "chunk_id": "00000000-0000-0000-0000-000000000302",
+                "chunk_index": 2,
+                "source_title": "Second Ranked NIL Guide",
+                "score": 0.99,
+                "hybrid_score": 0.05,
+                "rerank_score": 0.99,
+                "ranking_strategy": "hybrid_rerank",
+            },
+        ),
+    ]
+
+    await AthleteChatExecutor(
+        session=db_session,
+        chat_model=object(),
+        knowledgebase_provider=kb_provider,
+        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
+        settings=test_settings,
+    ).execute(
+        task_id="task-ranked-citations",
+        conversation_id=conversation.id,
+        athlete_user_id=athlete.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant_message.id,
+        organization_id=organization.id,
+        attached_file_ids=[],
+    )
+
+    citations = await MessageCitationRepository(db_session).list_by_message(
+        assistant_message.id
+    )
+
+    assert [citation.rank for citation in citations] == [1, 2]
+    assert [citation.source_title for citation in citations] == [
+        "First Ranked NIL Guide",
+        "Second Ranked NIL Guide",
+    ]
+    assert [citation.source_metadata["score"] for citation in citations] == [0.71, 0.99]
+    assert citations[0].source_metadata["rerank_score"] == 0.71
+    assert citations[1].source_metadata["rerank_score"] == 0.99
+    assert citations[0].source_metadata["ranking_strategy"] == "hybrid_rerank"
 
 
 @pytest.mark.asyncio

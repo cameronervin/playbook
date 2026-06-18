@@ -78,6 +78,41 @@ def _query_log_metadata(query: str) -> dict[str, object]:
     }
 
 
+def _search_log_settings() -> dict[str, object]:
+    return {
+        "search_strategy": settings.KB_SEARCH_STRATEGY,
+        "rerank_enabled": settings.KB_RERANK_ENABLED,
+        "embed_model": settings.LITELLM_EMBED_MODEL,
+        "rerank_model": settings.LITELLM_RERANK_MODEL,
+        "hybrid_candidate_limit": settings.KB_HYBRID_CANDIDATE_LIMIT,
+        "rerank_candidate_limit": settings.KB_RERANK_CANDIDATE_LIMIT,
+    }
+
+
+def _ranking_strategy_counts(results: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for result in results:
+        metadata = result.get("metadata") or {}
+        strategy = str(metadata.get("ranking_strategy") or "unknown")
+        counts[strategy] = counts.get(strategy, 0) + 1
+    return counts
+
+
+def _score_summary(results: list[dict]) -> dict[str, float | int | None]:
+    scores = [
+        float(result["score"])
+        for result in results
+        if isinstance(result.get("score"), int | float)
+    ]
+    if not scores:
+        return {"count": len(results), "min": None, "max": None}
+    return {
+        "count": len(results),
+        "min": round(min(scores), 4),
+        "max": round(max(scores), 4),
+    }
+
+
 def _annotate_semantic_results(results: list[dict]) -> list[dict]:
     annotated: list[dict] = []
     for result in results:
@@ -117,7 +152,7 @@ class SearchService:
             visibility_context_keys=sorted(req.visibility_context.keys()),
             source_types=req.source_types,
             has_file_filter=bool(req.file_ids),
-            search_strategy=settings.KB_SEARCH_STRATEGY,
+            **_search_log_settings(),
         )
 
         # embed() is a sync, network-bound call. Run it in a worker thread so we
@@ -131,7 +166,7 @@ class SearchService:
                 configuration_id=str(config.id),
                 total=0,
                 results=[],
-                search_strategy=settings.KB_SEARCH_STRATEGY,
+                **_search_log_settings(),
             )
             return SearchResponse(results=[], query=req.query, total=0)
         query_vector = vectors[0]
@@ -153,7 +188,9 @@ class SearchService:
             configuration_id=str(config.id),
             configuration_name=config.name,
             total=len(response_results),
-            search_strategy=settings.KB_SEARCH_STRATEGY,
+            ranking_strategy_counts=_ranking_strategy_counts(chunk_results),
+            score_summary=_score_summary(chunk_results),
+            **_search_log_settings(),
             results=[
                 {
                     "document_id": str(c.document_id),
@@ -230,6 +267,17 @@ class SearchService:
             return _annotate_semantic_results(semantic_results)
 
         hybrid_results = dedupe_ranked_results(hybrid_results, max_docs=final_limit)
+        logger.info(
+            "kb_hybrid_search_candidates",
+            **_query_log_metadata(query),
+            organization_id=str(organization_id),
+            configuration_id=str(configuration_id),
+            candidate_count=len(hybrid_results),
+            final_limit=final_limit,
+            ranking_strategy_counts=_ranking_strategy_counts(hybrid_results),
+            score_summary=_score_summary(hybrid_results),
+            **_search_log_settings(),
+        )
         if should_rerank:
             return await self._rerank_hybrid_results(
                 query=query,
@@ -269,8 +317,10 @@ class SearchService:
             organization_id=str(organization_id),
             configuration_id=str(configuration_id),
             provider=self._rerank_provider.provider_name,
+            rerank_model=settings.LITELLM_RERANK_MODEL,
             candidate_count=len(candidates),
             top_n=limit,
+            score_summary=_score_summary(hybrid_results),
         )
         reranked_results = await asyncio.to_thread(
             self._rerank_provider.rerank,
@@ -291,7 +341,9 @@ class SearchService:
                 item["score"] = reranked.rerank_score
                 metadata["ranking_strategy"] = RANKING_STRATEGY_HYBRID_RERANK
             else:
-                item["score"] = float(metadata.get("hybrid_score") or item.get("score") or 0.0)
+                item["score"] = float(
+                    metadata.get("hybrid_score") or item.get("score") or 0.0
+                )
                 metadata["ranking_strategy"] = RANKING_STRATEGY_HYBRID
             item["metadata"] = metadata
             final_results.append(item)
@@ -302,9 +354,12 @@ class SearchService:
             organization_id=str(organization_id),
             configuration_id=str(configuration_id),
             provider=self._rerank_provider.provider_name,
+            rerank_model=settings.LITELLM_RERANK_MODEL,
             candidate_count=len(candidates),
             result_count=len(final_results),
             top_n=limit,
+            ranking_strategy_counts=_ranking_strategy_counts(final_results),
+            score_summary=_score_summary(final_results),
             used_rerank_scores=any(
                 result.get("metadata", {}).get("rerank_score") is not None
                 for result in final_results

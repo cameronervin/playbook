@@ -6,6 +6,10 @@ Describe why this build plan exists, what outcome it enables, and how later
 coding agents should use it. State clearly whether this is a planning artifact
 or a description of implemented behavior.
 
+Default location for new build plans:
+
+- `backstage/build-plans/<descriptive-kebab-name>-phased-build.md`
+
 Primary source documents:
 
 - `path/to/source.md`
@@ -121,7 +125,7 @@ Do not do yet:
   them.
 - Prefer existing providers, repositories, hooks, and service seams over new
   abstractions.
-- Track shortcuts or deferred cleanup in `docs/development/tech-debt-tracker.md`
+- Track shortcuts or deferred cleanup in `backstage/development/tech-debt-tracker.md`
   when relevant.
 
 ## Explicit Non-Goals
@@ -134,4 +138,3 @@ Do not do yet:
 
 - List decisions intentionally left for later after implementation evidence,
   product feedback, or performance data exists.
-

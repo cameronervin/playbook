@@ -4,7 +4,7 @@ Step-by-step checklist for Test-Driven Development workflow.
 
 ## Before Starting
 
-- [ ] Read relevant documentation (`docs/`, `prd/`, `implementation/`)
+- [ ] Read relevant documentation (`backstage/`, `backstage/prd/`, `implementation/`)
 - [ ] Identify affected layers and files
 - [ ] Check for existing tests and patterns
 - [ ] Understand the user story requirements
@@ -50,8 +50,8 @@ Step-by-step checklist for Test-Driven Development workflow.
 
 ## Documentation
 
-- [ ] Update API docs if endpoint changed (`docs/api/endpoints.md`)
-- [ ] Update tool docs if tool changed (`docs/agents/tools.md`)
+- [ ] Update API docs if endpoint changed (`backstage/api/endpoints.md`)
+- [ ] Update tool docs if tool changed (`backstage/agents/tools.md`)
 - [ ] Create ADR if architectural decision made
 - [ ] Update remaining-work.md if completing a tracked item
 

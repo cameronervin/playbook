@@ -11,7 +11,7 @@ Most daily notes are focused on a single product. Rare cross-product days are ha
 - **State:** `<e.g. Active development; Release 2 in testing>`
 - **Codebase:** `<git remote URL>`
 - **Branches:** `<e.g. dev, staging, main (prod)>`. Describe the merge flow (e.g. dev → staging → main for releases).
-- **Implementation plan location:** `prd/03-implementation/` (`_implementation-plan.md` + `phase-*.md` files)
+- **Implementation plan location:** `backstage/prd/03-implementation/` (`_implementation-plan.md` + `phase-*.md` files)
 - **Active phase (as of most recent notes):** `<Phase N — Title>`. Update this line as phases advance.
 - **Key integrations:** `<e.g. LLM gateway, S3, cache/broker, task queue, vector store>`
 - **Notable context the dev team may need reminded of:**

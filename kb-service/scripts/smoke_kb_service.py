@@ -46,6 +46,12 @@ MATCH_TERMS = ("nil", "disclose", "compliance")
 PRIVATE_MATCH_TERMS = ("private", "approval", "contract")
 TERMINAL_SUCCESS_STATUSES = {"success", "completed", "complete"}
 TERMINAL_FAILURE_STATUSES = {"failed", "error"}
+RERANK_SMOKE_QUERY = "What must an athlete do before signing a NIL deal?"
+RERANK_SMOKE_DOCUMENTS = (
+    "Athletes must disclose NIL agreements before signing.",
+    "Travel reimbursement forms are due after road games.",
+    "Equipment checkout happens at the start of each season.",
+)
 
 
 class SmokeTestError(RuntimeError):
@@ -134,6 +140,91 @@ def _assert_rerank_metadata_if_enabled(
     )
 
 
+def _assert_rerank_fail_open_metadata_if_expected(
+    results: list[dict[str, Any]],
+    runtime_settings: Any,
+    *,
+    expect_fail_open: bool,
+) -> None:
+    if not expect_fail_open:
+        return
+    if not _rerank_smoke_required(runtime_settings):
+        raise SmokeTestError(
+            "--expect-rerank-fail-open requires KB_SEARCH_STRATEGY=hybrid "
+            "and KB_RERANK_ENABLED=true"
+        )
+    if any(
+        (result.get("metadata") or {}).get("ranking_strategy") == "hybrid"
+        and (result.get("metadata") or {}).get("rerank_score") is None
+        for result in results
+    ):
+        return
+    raise SmokeTestError(
+        "expected rerank fail-open hybrid result metadata, but no matching "
+        "ranking_strategy=hybrid result with rerank_score=null was returned"
+    )
+
+
+def _assert_rerank_metadata(
+    results: list[dict[str, Any]],
+    runtime_settings: Any,
+    *,
+    expect_fail_open: bool,
+) -> None:
+    if expect_fail_open:
+        _assert_rerank_fail_open_metadata_if_expected(
+            results,
+            runtime_settings,
+            expect_fail_open=True,
+        )
+        return
+    _assert_rerank_metadata_if_enabled(results, runtime_settings)
+
+
+def _litellm_rerank_payload(runtime_settings: Any) -> dict[str, Any]:
+    return {
+        "model": getattr(runtime_settings, "LITELLM_RERANK_MODEL", "playbook-rerank"),
+        "query": RERANK_SMOKE_QUERY,
+        "documents": list(RERANK_SMOKE_DOCUMENTS),
+        "top_n": 2,
+    }
+
+
+def _assert_litellm_rerank_response(payload: dict[str, Any]) -> None:
+    results = payload.get("results")
+    if not isinstance(results, list) or not results:
+        raise SmokeTestError("LiteLLM rerank response did not include results")
+    first = results[0]
+    if not isinstance(first, dict):
+        raise SmokeTestError("LiteLLM rerank first result was not an object")
+    if int(first.get("index", -1)) != 0:
+        raise SmokeTestError(
+            "LiteLLM rerank smoke expected NIL disclosure document to rank first"
+        )
+    if "relevance_score" not in first:
+        raise SmokeTestError("LiteLLM rerank first result had no relevance_score")
+
+
+def _check_litellm_rerank(runtime_settings: Any) -> None:
+    base_url = str(getattr(runtime_settings, "LITELLM_BASE_URL", "") or "").rstrip("/")
+    api_key = str(getattr(runtime_settings, "LITELLM_API_KEY", "") or "")
+    if not base_url:
+        raise SmokeTestError("LITELLM_BASE_URL is required for --check-litellm-rerank")
+    if not api_key:
+        raise SmokeTestError("LITELLM_API_KEY is required for --check-litellm-rerank")
+    with httpx.Client(base_url=base_url, timeout=HTTP_TIMEOUT_SECONDS) as client:
+        response_payload = _request_json(
+            client,
+            "POST",
+            "/rerank",
+            expected_statuses={httpx.codes.OK},
+            headers=_auth_headers(api_key),
+            json=_litellm_rerank_payload(runtime_settings),
+        )
+    _assert_litellm_rerank_response(response_payload)
+    _emit("  litellm_rerank=ok")
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a sanitized end-to-end KB service smoke test."
@@ -165,6 +256,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Also ingest and search a conversation_file source, verifying it is "
             "excluded from default shared search and included by private scope."
+        ),
+    )
+    parser.add_argument(
+        "--check-litellm-rerank",
+        action="store_true",
+        help="Also smoke LiteLLM /rerank directly through LITELLM_RERANK_MODEL.",
+    )
+    parser.add_argument(
+        "--expect-rerank-fail-open",
+        action="store_true",
+        help=(
+            "Expect KB-service search to preserve hybrid order with rerank_score=null. "
+            "Use only when reranking is enabled but the reranker is intentionally down."
         ),
     )
     return parser.parse_args(argv)
@@ -307,6 +411,8 @@ def _run_smoke(args: argparse.Namespace) -> None:
     _emit(f"  object_key={s3_key}")
     if args.include_conversation_file:
         _emit(f"  private_object_key={private_s3_key}")
+    if args.check_litellm_rerank:
+        _check_litellm_rerank(runtime_settings)
 
     with tempfile.TemporaryDirectory(prefix="kb-smoke-") as tmp_dir:
         docx_path = Path(tmp_dir) / SMOKE_FILENAME
@@ -402,7 +508,11 @@ def _run_smoke(args: argparse.Namespace) -> None:
                     raise SmokeTestError(
                         f"search returned {search.get('total', 0)} results but no smoke-text match"
                     )
-                _assert_rerank_metadata_if_enabled(matches, runtime_settings)
+                _assert_rerank_metadata(
+                    matches,
+                    runtime_settings,
+                    expect_fail_open=args.expect_rerank_fail_open,
+                )
                 _emit(f"  search_results={search.get('total', len(search.get('results') or []))}")
 
                 private_search_total = None

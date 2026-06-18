@@ -15,19 +15,19 @@ Use this checklist to verify documentation completeness.
 - [ ] Rules table references correct files
 - [ ] Commands section has working examples
 
-### docs/architecture/
+### backstage/architecture/
 - [ ] `overview.md` - System diagram is current
 - [ ] `overview.md` - Layer descriptions are accurate
 - [ ] `db.md` - Database schema matches models
 - [ ] `decisions/` - ADRs exist for major decisions
 - [ ] `decisions/` - ADRs are not contradicted by code
 
-### docs/api/
+### backstage/api/
 - [ ] `endpoints.md` - All endpoints documented
 - [ ] `endpoints.md` - Request/response schemas accurate
 - [ ] `endpoints.md` - Error responses documented
 
-### docs/guides/
+### backstage/guides/
 - [ ] `setup.md` - Local setup instructions work
 - [ ] `setup.md` - Dependencies are correct versions
 - [ ] `deployment.md` - Deploy instructions are current
@@ -35,19 +35,19 @@ Use this checklist to verify documentation completeness.
 - [ ] `postgresql_setup.md` - PostgreSQL setup works
 - [ ] `localstack_setup.md` - LocalStack setup works
 
-### docs/agents/
+### backstage/agents/
 - [ ] `tools.md` - All tools documented
 - [ ] `tools.md` - Tool signatures are accurate
 - [ ] `context-engineering.md` - Context engineering guidance is current
 
 ## Product Documentation
 
-### prd/
+### backstage/prd/
 - [ ] `01-user-stories/` - User stories are complete
 - [ ] `02-technical-docs/` - Technical specs match implementation
 - [ ] `02-technical-docs/api-specification.md` - API spec matches endpoints.md
 
-### prd/03-implementation/
+### backstage/prd/03-implementation/
 - [ ] Current phase file reflects actual progress
 - [ ] `_implementation-plan.md` - Gap analysis is accurate
 - [ ] Completed phases are marked correctly
@@ -73,11 +73,11 @@ Check last modified dates:
 
 | File | Max Age | Check |
 |------|---------|-------|
-| `docs/api/endpoints.md` | 30 days | After any API change |
-| `docs/guides/setup.md` | 60 days | After dependency updates |
+| `backstage/api/endpoints.md` | 30 days | After any API change |
+| `backstage/guides/setup.md` | 60 days | After dependency updates |
 | `AGENTS.md` | 30 days | After structure changes |
 | `implementation/remaining-work.md` | 7 days | Weekly update |
-| `docs/architecture/decisions/` | N/A | Decisions don't expire |
+| `backstage/architecture/decisions/` | N/A | Decisions don't expire |
 
 ## Cross-Reference Checks
 

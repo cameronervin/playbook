@@ -49,9 +49,9 @@ Checkpoint to `prd-v2/.harness-v2/` (cleaned up at the end).
 ### 1.0 — Detect V1 harness
 
 Before anything else, check if a V1 harness exists. Look for:
-- `prd/01-user-stories/_master-user-stories.md`
-- `prd/03-implementation/_implementation-plan.md`
-- Any `prd/03-implementation/phase-*.md` files
+- `backstage/prd/01-user-stories/_master-user-stories.md`
+- `backstage/prd/03-implementation/_implementation-plan.md`
+- Any `backstage/prd/03-implementation/phase-*.md` files
 
 **If ALL of these exist:** This is the HARNESSED path. The V1 team
 used the harness process. Proceed with sections 1.1 through 1.6
@@ -100,11 +100,11 @@ about what was built. Additionally extract:
 
 ### 1.2 — Analyze the V1 harness
 Read the EXISTING V1 harness docs:
-- `prd/01-user-stories/_master-user-stories.md` — what was scoped
-- `prd/03-implementation/_implementation-plan.md` — all phases
-- Every `prd/03-implementation/phase-*.md` — completion status
-- Every `prd/03-implementation/phase-*.deviations.md` — what changed
-- All technical docs in `prd/02-technical-docs/`
+- `backstage/prd/01-user-stories/_master-user-stories.md` — what was scoped
+- `backstage/prd/03-implementation/_implementation-plan.md` — all phases
+- Every `backstage/prd/03-implementation/phase-*.md` — completion status
+- Every `backstage/prd/03-implementation/phase-*.deviations.md` — what changed
+- All technical docs in `backstage/prd/02-technical-docs/`
 
 Extract:
 - Which user stories were fully implemented (☑ across all phases)
@@ -596,24 +596,24 @@ docs. Any format deviation breaks continuity. Specifically:
 - Technical docs: same patterns (endpoint tables, CREATE TABLE
   statements, LLM service catalog tables)
 
-Generate FRESH V2 specs. These replace the V1 PRD. The V1 prd/
+Generate FRESH V2 specs. These replace the V1 PRD. The V1 backstage/prd/
 folder is archived first.
 
 ### 3.0 — Archive V1 harness (HARNESSED ONLY)
 
 **If HARNESSED:** Move the existing V1 PRD to an archive:
 ```bash
-mv prd prd-v1-archive
+mv backstage/prd backstage/prd-v1-archive
 ```
 
 This preserves V1 docs for reference. All new V2 docs go in a
-fresh `prd/` directory.
+fresh `backstage/prd/` directory.
 
 **If UNHARNESSED:** No archive needed — there's no V1 harness to
-preserve. Just create a fresh `prd/` directory. If a `prd/`
+preserve. Just create a fresh `backstage/prd/` directory. If a `backstage/prd/`
 directory exists with partial or unstructured content, move it:
 ```bash
-mv prd prd-v1-unstructured
+mv backstage/prd backstage/prd-v1-unstructured
 ```
 
 Do NOT archive or modify:
@@ -626,11 +626,11 @@ Do NOT archive or modify:
 2. Technical docs (fresh from V1 codebase analysis)
 3. Implementation plan (master scope + Phase 1 detail)
 4. Update CLAUDE.md (update PRD pointers, keep everything else)
-5. prd/README.md (V2 landing page)
+5. backstage/prd/README.md (V2 landing page)
 
 ### 3.1 — User stories
 
-**Create prd/01-user-stories/_master-user-stories.md**
+**Create backstage/prd/01-user-stories/_master-user-stories.md**
 
 FRESH user stories for V2. Same format as harness-init:
 - Sequential IDs: US-01 → US-N (V2 numbering, not continuing V1)
@@ -689,7 +689,7 @@ annotates what V2 needs to change. Use this format for changes:
 
 ### 3.3 — Implementation plan
 
-**Create prd/03-implementation/_implementation-plan.md**
+**Create backstage/prd/03-implementation/_implementation-plan.md**
 
 V2 master plan at scope level. Phase structure for V2:
 
@@ -702,7 +702,7 @@ V2 master plan at scope level. Phase structure for V2:
 Phase 1 is always hardening-first for V2. The product owner's
 priority ordering (Domain 7) determines the feature phase order.
 
-**Create prd/03-implementation/phase-1-hardening.md**
+**Create backstage/prd/03-implementation/phase-1-hardening.md**
 
 Detailed task file using the EXACT same format as V1 phase files.
 
@@ -710,7 +710,7 @@ Task table — same columns, same format:
 ```markdown
 | Status | Goal | User Stories | Validation | PRD Docs |
 |--------|------|-------------|------------|----------|
-| ☐ | **[Goal]** — [Description] | US-XX | [Assertion chain] | prd/02-technical-docs/[spec].md |
+| ☐ | **[Goal]** — [Description] | US-XX | [Assertion chain] | backstage/prd/02-technical-docs/[spec].md |
 ```
 
 Status symbols — same as V1:
@@ -763,15 +763,15 @@ to the new V2 docs:
 
 ```markdown
 ## PRD
-Specification docs live in prd/. V1 docs archived in prd-v1-archive/.
+Specification docs live in backstage/prd/. V1 docs archived in backstage/prd-v1-archive/.
 
-- User stories: prd/01-user-stories/_master-user-stories.md
-- Implementation: prd/03-implementation/_implementation-plan.md
+- User stories: backstage/prd/01-user-stories/_master-user-stories.md
+- Implementation: backstage/prd/03-implementation/_implementation-plan.md
 {List all V2 technical docs with paths}
 
 V1 reference (archived):
-- V1 user stories: prd-v1-archive/01-user-stories/_master-user-stories.md
-- V1 implementation: prd-v1-archive/03-implementation/_implementation-plan.md
+- V1 user stories: backstage/prd-v1-archive/01-user-stories/_master-user-stories.md
+- V1 implementation: backstage/prd-v1-archive/03-implementation/_implementation-plan.md
 ```
 
 Also update the product description at the top of CLAUDE.md if the
@@ -809,10 +809,10 @@ Fill in what's discoverable, [PLACEHOLDER] for the rest.}
 - `[PLACEHOLDER]` — Lint/format check
 
 ## PRD
-Specification docs live in prd/.
+Specification docs live in backstage/prd/.
 
-- User stories: prd/01-user-stories/_master-user-stories.md
-- Implementation: prd/03-implementation/_implementation-plan.md
+- User stories: backstage/prd/01-user-stories/_master-user-stories.md
+- Implementation: backstage/prd/03-implementation/_implementation-plan.md
 {List all V2 technical docs with paths}
 
 ## ALWAYS
@@ -830,9 +830,9 @@ Specification docs live in prd/.
 Also create `.claude/rules/README.md` and `.claude/settings.json`
 using the same templates as harness-init if they don't already exist.
 
-### 3.5 — prd/README.md
+### 3.5 — backstage/prd/README.md
 
-**Create prd/README.md** — V2 landing page.
+**Create backstage/prd/README.md** — V2 landing page.
 
 Contents:
 
@@ -857,7 +857,7 @@ hardening.
 The project is already set up — repo, CLAUDE.md, rules all carry
 forward from V1.
 
-1. Open prd/03-implementation/phase-1-hardening.md
+1. Open backstage/prd/03-implementation/phase-1-hardening.md
 2. Start building — Phase 1 is hardening before new features
 ```
 
@@ -911,7 +911,7 @@ forward and items dropped, with product owner's reasoning.
    - (HARNESSED) All DRIFT items resolved (either in Phase 1 tasks
      or spec updated to match code)
    - CLAUDE.md PRD section lists all V2 tech doc files
-   - (HARNESSED) V1 archive is intact at prd-v1-archive/
+   - (HARNESSED) V1 archive is intact at backstage/prd-v1-archive/
    - (UNHARNESSED) CLAUDE.md, .claude/rules/, and .claude/settings.json
      all exist and are populated
 3. Format alignment check:
@@ -932,21 +932,21 @@ Say:
 **If HARNESSED:**
 "V2 harness complete. {N} files created.
 
-V1 docs are archived at prd-v1-archive/. Fresh V2 specs are in prd/.
+V1 docs are archived at backstage/prd-v1-archive/. Fresh V2 specs are in backstage/prd/.
 CLAUDE.md has been updated to point to V2 docs. Your rules and
 settings carry forward unchanged.
 
 Phase 1 is hardening — stabilize before adding features. Open
-prd/03-implementation/phase-1-hardening.md to get started."
+backstage/prd/03-implementation/phase-1-hardening.md to get started."
 
 **If UNHARNESSED:**
 "V2 harness complete. {N} files created.
 
 This is the first structured harness for this project. Fresh specs
-are in prd/. CLAUDE.md, rules, and settings have been created.
+are in backstage/prd/. CLAUDE.md, rules, and settings have been created.
 
 Phase 1 is hardening — stabilize the existing codebase before adding
-features. Open prd/03-implementation/phase-1-hardening.md to get
+features. Open backstage/prd/03-implementation/phase-1-hardening.md to get
 started."
 
 ---
@@ -967,7 +967,7 @@ started."
 - No codebase found (empty repo): "This skill expects an existing V1
   codebase to analyze. If this is a fresh project, run /harness-init
   instead."
-- No V1 harness found (no prd/ directory or incomplete harness):
+- No V1 harness found (no backstage/prd/ directory or incomplete harness):
   Switch to UNHARNESSED mode. Inform the user and proceed with
   codebase-only analysis + full interview.
 - No phase files found but other harness docs exist: "Partial V1
