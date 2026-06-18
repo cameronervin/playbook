@@ -111,6 +111,29 @@ def _matching_results(
     return matches
 
 
+def _rerank_smoke_required(runtime_settings: Any) -> bool:
+    return (
+        getattr(runtime_settings, "KB_SEARCH_STRATEGY", None) == "hybrid"
+        and getattr(runtime_settings, "KB_RERANK_ENABLED", False) is True
+    )
+
+
+def _assert_rerank_metadata_if_enabled(
+    results: list[dict[str, Any]],
+    runtime_settings: Any,
+) -> None:
+    if not _rerank_smoke_required(runtime_settings):
+        return
+    if any(
+        (result.get("metadata") or {}).get("ranking_strategy") == "hybrid_rerank"
+        for result in results
+    ):
+        return
+    raise SmokeTestError(
+        "rerank-enabled search returned no result with ranking_strategy=hybrid_rerank"
+    )
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a sanitized end-to-end KB service smoke test."
@@ -379,6 +402,7 @@ def _run_smoke(args: argparse.Namespace) -> None:
                     raise SmokeTestError(
                         f"search returned {search.get('total', 0)} results but no smoke-text match"
                     )
+                _assert_rerank_metadata_if_enabled(matches, runtime_settings)
                 _emit(f"  search_results={search.get('total', len(search.get('results') or []))}")
 
                 private_search_total = None

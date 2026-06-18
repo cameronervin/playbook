@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from app.core.config import settings
+from app.infrastructure.rerankers.base import RerankCandidate
 from app.repositories.vector_repo import AsyncVectorRepository
 from app.schemas.search import SearchRequest, SearchResponse, SearchResult
 from app.services.configuration_service import ConfigurationService
@@ -17,8 +18,12 @@ if TYPE_CHECKING:
     # Imported only for typing — the concrete provider (and its openai dependency)
     # is built by another agent and resolved at runtime via the DI factory.
     from app.infrastructure.embedders.base import BaseEmbedProvider
+    from app.infrastructure.rerankers.base import BaseRerankProvider
 
 logger = structlog.get_logger(__name__)
+
+RANKING_STRATEGY_HYBRID = "hybrid"
+RANKING_STRATEGY_HYBRID_RERANK = "hybrid_rerank"
 
 
 def _metadata_filter_from_visibility_context(
@@ -90,10 +95,12 @@ class SearchService:
         configuration_service: ConfigurationService,
         vector_repo: AsyncVectorRepository,
         embed_provider: "BaseEmbedProvider",
+        rerank_provider: "BaseRerankProvider | None" = None,
     ) -> None:
         self._config_service = configuration_service
         self._vector_repo = vector_repo
         self._embed_provider = embed_provider
+        self._rerank_provider = rerank_provider
 
     async def search(self, req: SearchRequest) -> SearchResponse:
         config = await self._config_service.resolve()
@@ -185,14 +192,16 @@ class SearchService:
             )
             return _annotate_semantic_results(semantic_results)
 
+        should_rerank = self._should_rerank()
+        final_limit = settings.KB_RERANK_CANDIDATE_LIMIT if should_rerank else limit
         try:
-            return await self._vector_repo.hybrid_search(
+            hybrid_results = await self._vector_repo.hybrid_search(
                 configuration_id=configuration_id,
                 organization_id=organization_id,
                 query_vector=query_vector,
                 query_text=query,
                 max_docs=settings.KB_HYBRID_CANDIDATE_LIMIT,
-                final_limit=limit,
+                final_limit=final_limit,
                 score_threshold=score_threshold,
                 rrf_k=settings.KB_RRF_K,
                 metadata_filters=metadata_filters,
@@ -217,3 +226,85 @@ class SearchService:
                 metadata_filters=metadata_filters,
             )
             return _annotate_semantic_results(semantic_results)
+
+        if should_rerank:
+            return await self._rerank_hybrid_results(
+                query=query,
+                hybrid_results=hybrid_results,
+                limit=limit,
+                organization_id=organization_id,
+                configuration_id=configuration_id,
+            )
+        return hybrid_results[:limit]
+
+    def _should_rerank(self) -> bool:
+        return bool(settings.KB_RERANK_ENABLED and self._rerank_provider is not None)
+
+    async def _rerank_hybrid_results(
+        self,
+        *,
+        query: str,
+        hybrid_results: list[dict],
+        limit: int,
+        organization_id: uuid.UUID,
+        configuration_id: uuid.UUID,
+    ) -> list[dict]:
+        if not hybrid_results or self._rerank_provider is None:
+            return hybrid_results[:limit]
+
+        candidates = [
+            RerankCandidate(
+                original_index=index,
+                chunk_id=result.get("chunk_id"),
+                text=str(result.get("text") or ""),
+            )
+            for index, result in enumerate(hybrid_results)
+        ]
+        logger.info(
+            "kb_hybrid_rerank_started",
+            **_query_log_metadata(query),
+            organization_id=str(organization_id),
+            configuration_id=str(configuration_id),
+            provider=self._rerank_provider.provider_name,
+            candidate_count=len(candidates),
+            top_n=limit,
+        )
+        reranked_results = await asyncio.to_thread(
+            self._rerank_provider.rerank,
+            query=query,
+            candidates=candidates,
+            top_n=limit,
+        )
+
+        final_results: list[dict] = []
+        for reranked in reranked_results[:limit]:
+            original_index = reranked.candidate.original_index
+            if original_index < 0 or original_index >= len(hybrid_results):
+                continue
+            item = dict(hybrid_results[original_index])
+            metadata = dict(item.get("metadata") or {})
+            metadata["rerank_score"] = reranked.rerank_score
+            if reranked.rerank_score is not None:
+                item["score"] = reranked.rerank_score
+                metadata["ranking_strategy"] = RANKING_STRATEGY_HYBRID_RERANK
+            else:
+                item["score"] = float(metadata.get("hybrid_score") or item.get("score") or 0.0)
+                metadata["ranking_strategy"] = RANKING_STRATEGY_HYBRID
+            item["metadata"] = metadata
+            final_results.append(item)
+
+        logger.info(
+            "kb_hybrid_rerank_completed",
+            **_query_log_metadata(query),
+            organization_id=str(organization_id),
+            configuration_id=str(configuration_id),
+            provider=self._rerank_provider.provider_name,
+            candidate_count=len(candidates),
+            result_count=len(final_results),
+            top_n=limit,
+            used_rerank_scores=any(
+                result.get("metadata", {}).get("rerank_score") is not None
+                for result in final_results
+            ),
+        )
+        return final_results

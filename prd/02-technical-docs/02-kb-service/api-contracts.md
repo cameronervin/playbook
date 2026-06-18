@@ -210,12 +210,18 @@ Response:
 
 `score` is always the final retrieval score exposed to service callers. Default
 runtime responses use semantic cosine similarity for `score`. When
-`KB_SEARCH_STRATEGY=hybrid`, responses use reciprocal-rank-fusion
-`hybrid_score` as `score` after semantic and lexical candidate merge. The Phase
-2 reranker provider is internal infrastructure and does not add top-level
-search response fields or run during Phase 3. Raw semantic, lexical, hybrid,
-and future rerank diagnostics live inside `metadata` only. Reserved metadata
-keys are
+`KB_SEARCH_STRATEGY=hybrid` and `KB_RERANK_ENABLED=false`, responses use
+reciprocal-rank-fusion `hybrid_score` as `score` after semantic and lexical
+candidate merge. When `KB_SEARCH_STRATEGY=hybrid` and
+`KB_RERANK_ENABLED=true`, KB-service reranks the bounded hybrid candidate list
+through LiteLLM `/rerank`, applies the request `limit` after reranking, and uses
+the returned `relevance_score` as final `score`. Retryable fail-open reranker
+failures preserve hybrid order and hybrid scores. `score_threshold` remains a
+semantic candidate-generation threshold and is not applied again to hybrid or
+rerank scores.
+
+Raw semantic, lexical, hybrid, and rerank diagnostics live inside `metadata`
+only. Reserved metadata keys are
 `semantic_score`, `semantic_rank`, `lexical_score`, `lexical_rank`,
 `hybrid_score`, `rerank_score`, and `ranking_strategy`.
 

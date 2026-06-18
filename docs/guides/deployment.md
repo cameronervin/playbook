@@ -96,7 +96,7 @@ Recommended deployment shape:
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, `playbook-embed`, optional `playbook-ocr`, and `playbook-rerank` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
 | Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200` |
-| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`, and `KB_RERANK_ENABLED=false` until search orchestration enables reranking |
+| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`; keep `KB_SEARCH_STRATEGY=semantic` and `KB_RERANK_ENABLED=false` by default, then enable `KB_SEARCH_STRATEGY=hybrid` plus `KB_RERANK_ENABLED=true` for reranked retrieval |
 | LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `LITELLM_DATABASE_URL`, `LITELLM_PLAYBOOK_RERANK_MODEL`, `INFINITY_API_BASE`, and `INFINITY_API_KEY` |
 
 Use a separate LiteLLM database or at least a separate database/user in the
@@ -134,9 +134,10 @@ docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
   --profile reranker up -d --build reranker litellm
 ```
 
-This configures model serving and LiteLLM routing. KB-service now also has an
-internal LiteLLM `/rerank` provider, but search still uses semantic pgvector
-retrieval until later phases wire reranking into `SearchService`.
+This configures model serving and LiteLLM routing. KB-service uses semantic
+pgvector retrieval by default; reranked retrieval requires
+`KB_SEARCH_STRATEGY=hybrid`, `KB_RERANK_ENABLED=true`, and a KB-service LiteLLM
+virtual key that can call `playbook-rerank`.
 
 For local Compose, `litellm-db-init` creates a separate `litellm` database in
 the local Postgres container. Production should provision the LiteLLM database

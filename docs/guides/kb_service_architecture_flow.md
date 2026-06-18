@@ -244,13 +244,17 @@ keeps semantic relevance bands and prefers newer `source_date` within
 near-similar matches. Admin-uploaded shared KB documents are official by
 definition for MVP, and priority is not used as a ranking control.
 
-Hybrid search/reranking now has model serving, routing, and a reusable
-KB-service LiteLLM `/rerank` provider. The self-hosted Infinity reranker is
-available through the LiteLLM `playbook-rerank` alias, but KB-service search
-does not call the provider yet. The KB-service rerank settings remain
-`LITELLM_RERANK_MODEL=playbook-rerank`, `KB_RERANK_ENABLED=false`,
-`KB_RERANK_CANDIDATE_LIMIT=50`, `KB_RERANK_TIMEOUT_SECONDS=10.0`, and
-`KB_RERANK_FAIL_OPEN=true`. Later phases add lexical candidates,
-reciprocal-rank fusion, and SearchService orchestration; until then `score` is
-semantic cosine similarity and any future raw ranking diagnostics belong in
-result `metadata`.
+Hybrid search/reranking uses PostgreSQL full-text lexical candidates,
+reciprocal-rank fusion, and the reusable KB-service LiteLLM `/rerank` provider.
+The self-hosted Infinity reranker is available through the LiteLLM
+`playbook-rerank` alias. Keep `KB_SEARCH_STRATEGY=semantic` for the local and
+regression fallback path; set `KB_SEARCH_STRATEGY=hybrid` and
+`KB_RERANK_ENABLED=true` to send up to `KB_RERANK_CANDIDATE_LIMIT` hybrid
+candidates through the reranker before applying the request `limit`.
+
+`score` is semantic cosine similarity in semantic mode, `hybrid_score` in
+hybrid mode without reranking, and reranker relevance score in hybrid rerank
+mode when a rerank score is returned. `score_threshold` remains a semantic
+candidate-generation threshold and is not re-applied to RRF or rerank scores.
+Raw ranking diagnostics belong in result `metadata`. Until Phase 5, the backend
+still keeps defensive dedupe and source-date ranking during context assembly.

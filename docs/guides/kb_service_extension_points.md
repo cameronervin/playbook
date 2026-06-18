@@ -186,9 +186,10 @@ When `KB_RERANK_FAIL_OPEN=true`, retryable LiteLLM failures return candidates in
 input order with `rerank_score=None`. Fail-closed mode raises instead. Malformed
 or non-retryable responses always raise.
 
-`SearchService` does not call the reranker yet. Phase 3 hybrid candidate search
-can produce reciprocal-rank-fused candidates, but Phase 4 will be responsible
-for passing the bounded candidate list to this reranker provider.
+`SearchService` calls the reranker only when `KB_SEARCH_STRATEGY=hybrid` and
+`KB_RERANK_ENABLED=true`. It passes the bounded hybrid candidate list, applies
+the request `limit` after reranking, and keeps semantic, lexical, hybrid, and
+rerank diagnostics inside result metadata.
 
 ---
 

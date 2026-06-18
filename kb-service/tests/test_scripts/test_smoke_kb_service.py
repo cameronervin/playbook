@@ -114,6 +114,41 @@ def test_extract_matching_results_accepts_private_terms() -> None:
     ]
 
 
+def test_rerank_metadata_assertion_is_noop_when_rerank_disabled() -> None:
+    smoke = _load_smoke_module()
+    settings = SimpleNamespace(KB_SEARCH_STRATEGY="hybrid", KB_RERANK_ENABLED=False)
+
+    smoke._assert_rerank_metadata_if_enabled(
+        [{"metadata": {"ranking_strategy": "hybrid"}}],
+        settings,
+    )
+
+
+def test_rerank_metadata_assertion_passes_when_hybrid_rerank_present() -> None:
+    smoke = _load_smoke_module()
+    settings = SimpleNamespace(KB_SEARCH_STRATEGY="hybrid", KB_RERANK_ENABLED=True)
+
+    smoke._assert_rerank_metadata_if_enabled(
+        [{"metadata": {"ranking_strategy": "hybrid_rerank"}}],
+        settings,
+    )
+
+
+def test_rerank_metadata_assertion_fails_when_enabled_but_missing() -> None:
+    smoke = _load_smoke_module()
+    settings = SimpleNamespace(KB_SEARCH_STRATEGY="hybrid", KB_RERANK_ENABLED=True)
+
+    try:
+        smoke._assert_rerank_metadata_if_enabled(
+            [{"metadata": {"ranking_strategy": "hybrid"}}],
+            settings,
+        )
+    except smoke.SmokeTestError as exc:
+        assert "ranking_strategy=hybrid_rerank" in str(exc)
+    else:
+        raise AssertionError("expected SmokeTestError")
+
+
 def test_parse_args_supports_conversation_file_smoke_flag() -> None:
     smoke = _load_smoke_module()
 

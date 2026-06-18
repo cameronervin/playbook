@@ -45,10 +45,10 @@ query embedding
   -> final ranked chunks
 ```
 
-Phase 2 adds the internal LiteLLM `/rerank` provider for that target, but runtime
-search does not call it yet. Phase 3 adds the lexical candidate path and
-reciprocal-rank fusion behind internal `KB_SEARCH_STRATEGY=hybrid`; Phase 4
-will call the reranker and finalize response metadata behavior.
+Phase 2 added the internal LiteLLM `/rerank` provider, Phase 3 added lexical
+candidate retrieval and reciprocal-rank fusion behind
+`KB_SEARCH_STRATEGY=hybrid`, and Phase 4 wires the optional reranker into
+hybrid search when `KB_RERANK_ENABLED=true`.
 
 ## Required Filtering
 
@@ -88,8 +88,19 @@ Default runtime ranking is semantic-only:
 
 When `KB_SEARCH_STRATEGY=hybrid`, KB-service retrieves bounded semantic and
 lexical candidates, dedupes them by `chunk_id` then exact text, and ranks them
-with reciprocal-rank fusion. Hybrid `score` is the final `hybrid_score` exposed
-to callers for that mode. Raw ranking diagnostics remain in `metadata`:
+with reciprocal-rank fusion. If `KB_RERANK_ENABLED=false`, hybrid `score` is
+the final `hybrid_score` exposed to callers for that mode. If
+`KB_RERANK_ENABLED=true`, KB-service sends up to `KB_RERANK_CANDIDATE_LIMIT`
+hybrid-ranked candidates to LiteLLM `/rerank`, applies the request `limit`
+after reranking, and uses the reranker `relevance_score` as the final `score`
+when the reranker returns one. Retryable fail-open reranker failures preserve
+hybrid ordering and hybrid scores.
+
+`score_threshold` remains a semantic candidate-generation threshold. Hybrid RRF
+scores and rerank relevance scores are strategy-specific final scores and are
+not post-filtered by the semantic cosine threshold.
+
+Raw ranking diagnostics remain in `metadata`:
 - `semantic_score`,
 - `semantic_rank`,
 - `lexical_score`,

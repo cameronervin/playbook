@@ -58,9 +58,9 @@ class SearchRequest(BaseModel):
         ge=0.0,
         le=1.0,
         description=(
-            "Minimum final retrieval score to include. Current semantic search "
-            "maps this to pgvector cosine similarity; future hybrid/rerank "
-            "scores remain exposed through the final score contract."
+            "Minimum semantic cosine similarity used during semantic candidate "
+            "generation. Hybrid RRF and rerank scores remain strategy-specific "
+            "final scores and are not post-filtered by this threshold."
         ),
     )
 
@@ -113,17 +113,17 @@ class SearchResult(BaseModel):
     text: str = Field(description="Retrieved chunk text.")
     score: float = Field(
         description=(
-            "Final caller-facing retrieval score. Current runtime behavior is "
-            "semantic cosine similarity (1 - pgvector cosine distance); future "
-            "semantic, lexical, hybrid, and rerank diagnostics belong in metadata."
+            "Final caller-facing retrieval score: semantic cosine similarity in "
+            "semantic mode, hybrid RRF score in hybrid mode, or reranker "
+            "relevance score in hybrid rerank mode."
         )
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "Citation/source metadata. Reserved future ranking diagnostics include "
-            "semantic_score, semantic_rank, lexical_score, lexical_rank, "
-            "hybrid_score, rerank_score, and ranking_strategy."
+            "Citation/source metadata. Ranking diagnostics include semantic_score, "
+            "semantic_rank, lexical_score, lexical_rank, hybrid_score, "
+            "rerank_score, and ranking_strategy."
         ),
     )
 

@@ -83,7 +83,8 @@ curl -s -X POST "http://localhost:4000/rerank" \
 
 `playbook-rerank` is configured for KB-service hybrid/rerank phases, and the
 KB-service has an internal LiteLLM `/rerank` provider. Search remains
-semantic-only while `KB_RERANK_ENABLED=false`.
+semantic-only while `KB_SEARCH_STRATEGY=semantic`; hybrid reranking requires
+`KB_SEARCH_STRATEGY=hybrid` and `KB_RERANK_ENABLED=true`.
 
 See [Self-Hosted LiteLLM](litellm_self_hosting.md) for key provisioning and
 security notes.

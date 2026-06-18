@@ -162,8 +162,8 @@ Implementation status:
 - Implemented: KB-service now has `infrastructure/rerankers/` with a LiteLLM
   `/rerank` provider, cached HTTPX client construction, fail-open/fail-closed
   behavior, sanitized structured logs, and provider unit tests.
-- Still deferred: `SearchService` does not call this provider until later
-  hybrid candidate and orchestration phases.
+- Phase 4 connected this provider to hybrid search orchestration behind
+  `KB_SEARCH_STRATEGY=hybrid` and `KB_RERANK_ENABLED=true`.
 
 Scope:
 
@@ -204,8 +204,8 @@ Implementation status:
   `ts_rank_cd`, shared semantic/lexical source-scope filters, hybrid
   reciprocal-rank fusion, and dedupe by `chunk_id` then exact text.
 - Runtime default remains `KB_SEARCH_STRATEGY=semantic`; hybrid candidate search
-  is enabled only by internal server config. Cross-encoder reranking remains
-  deferred to Phase 4.
+  is enabled only by internal server config. Phase 4 adds optional
+  cross-encoder reranking on top of this hybrid candidate path.
 
 Scope:
 
@@ -236,6 +236,16 @@ Do not do yet:
 
 ## Phase 4: Search Orchestration and Response Metadata
 
+Implementation status:
+
+- Implemented: `SearchService` keeps semantic-only fallback, requests bounded
+  hybrid candidates, optionally reranks them through the injected LiteLLM
+  reranker provider, applies `limit` after reranking, and returns final scores
+  plus ranking diagnostics in metadata.
+- Still deferred: backend `LocalKBProvider` continues defensive dedupe and
+  source-date ranking until Phase 5 makes KB-service order authoritative
+  end-to-end.
+
 Scope:
 
 - Update `SearchService.search()` to orchestrate:
@@ -257,6 +267,10 @@ Scope:
 - Keep `score` as the final caller-facing retrieval score.
 - Make semantic-only behavior configurable for local fallback and regression
   comparison.
+
+`score_threshold` remains a semantic candidate-generation threshold. Hybrid
+RRF scores and rerank relevance scores are strategy-specific final scores and
+are not post-filtered by the semantic cosine threshold.
 
 Acceptance criteria:
 

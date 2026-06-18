@@ -29,8 +29,8 @@ KB service owns:
 - ingestion lifecycle status,
 - semantic search over ready shared KB documents and private conversation-file
   chunks when the backend supplies trusted private scope,
-- final candidate ordering once hybrid search and reranking are enabled in
-  later phases.
+- final candidate ordering for semantic, hybrid, and hybrid-rerank search modes
+  inside KB-service.
 
 Athlete-uploaded conversation files are outside the shared admin KB corpus, but
 they use the same KB-service parser/chunker/embedder/vector pipeline with
@@ -49,14 +49,15 @@ POST /api/kb/ingest/document
 
 POST /api/kb/search
   -> query embedding -> pgvector cosine search -> ranked chunks
+  -> optional PostgreSQL FTS + RRF hybrid candidates
+  -> optional LiteLLM rerank
 ```
 
-The implemented search path is still semantic-only. It does not perform
-PostgreSQL full-text lexical search, reciprocal-rank fusion, or call the
-cross-encoder reranker during `/search`. Phase 2 adds the reusable internal
-LiteLLM `/rerank` provider; later phases keep the same `/search` contract while
-adding lexical candidates and reranker orchestration behind the service
-boundary.
+The default search path is semantic-only. Setting `KB_SEARCH_STRATEGY=hybrid`
+adds PostgreSQL full-text lexical candidates, reciprocal-rank fusion, and
+metadata diagnostics behind the same `/search` contract. Setting
+`KB_RERANK_ENABLED=true` in hybrid mode sends bounded hybrid candidates through
+the LiteLLM `/rerank` provider before the request `limit` is applied.
 
 Stack:
 - FastAPI on port 8001.

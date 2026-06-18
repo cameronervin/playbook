@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.infrastructure.rerankers.base import RerankCandidate, RerankedCandidate
 from app.schemas.search import SearchRequest
 from app.services.configuration_service import (
     DEFAULT_COLLECTION_NAME,
@@ -51,6 +52,26 @@ class FakeVectorRepository:
         self.requests: list[dict] = []
         self.hybrid_requests: list[dict] = []
         self.fail_hybrid = fail_hybrid
+        self.hybrid_results = [
+            _hybrid_result(
+                text="Hybrid first result",
+                hybrid_score=0.05,
+                semantic_rank=1,
+                lexical_rank=2,
+            ),
+            _hybrid_result(
+                text="Hybrid second result",
+                hybrid_score=0.04,
+                semantic_rank=2,
+                lexical_rank=1,
+            ),
+            _hybrid_result(
+                text="Hybrid third result",
+                hybrid_score=0.03,
+                semantic_rank=3,
+                lexical_rank=None,
+            ),
+        ]
 
     async def search(self, **kwargs) -> list[dict]:
         self.requests.append(kwargs)
@@ -60,20 +81,77 @@ class FakeVectorRepository:
         self.hybrid_requests.append(kwargs)
         if self.fail_hybrid:
             raise RuntimeError("lexical path failed")
-        return [
+        return self.hybrid_results[: kwargs.get("final_limit", len(self.hybrid_results))]
+
+
+class FakeRerankProvider:
+    provider_name = "fake"
+
+    def __init__(
+        self,
+        *,
+        reranked_indexes: list[int] | None = None,
+        scores: list[float | None] | None = None,
+    ) -> None:
+        self.requests: list[dict] = []
+        self.reranked_indexes = reranked_indexes or []
+        self.scores = scores or []
+
+    def rerank(
+        self,
+        *,
+        query: str,
+        candidates: list[RerankCandidate],
+        top_n: int | None = None,
+    ) -> list[RerankedCandidate]:
+        self.requests.append(
             {
-                "document_id": uuid4(),
-                "kb_service_document_id": uuid4(),
-                "chunk_id": uuid4(),
-                "chunk_index": 0,
-                "text": "Hybrid result",
-                "score": 0.05,
-                "metadata": {
-                    "hybrid_score": 0.05,
-                    "ranking_strategy": "hybrid",
-                },
+                "query": query,
+                "candidates": candidates,
+                "top_n": top_n,
             }
+        )
+        indexes = self.reranked_indexes or list(range(len(candidates)))
+        if top_n is not None:
+            indexes = indexes[:top_n]
+        return [
+            RerankedCandidate(
+                candidate=candidates[index],
+                rerank_score=self.scores[offset]
+                if offset < len(self.scores)
+                else None,
+                rank=offset + 1,
+            )
+            for offset, index in enumerate(indexes)
         ]
+
+
+def _hybrid_result(
+    *,
+    text: str,
+    hybrid_score: float,
+    semantic_rank: int | None,
+    lexical_rank: int | None,
+) -> dict:
+    semantic_score = None if semantic_rank is None else 1.0 - (semantic_rank * 0.1)
+    lexical_score = None if lexical_rank is None else 0.9 - (lexical_rank * 0.1)
+    return {
+        "document_id": uuid4(),
+        "kb_service_document_id": uuid4(),
+        "chunk_id": uuid4(),
+        "chunk_index": 0,
+        "text": text,
+        "score": hybrid_score,
+        "metadata": {
+            "semantic_score": semantic_score,
+            "semantic_rank": semantic_rank,
+            "lexical_score": lexical_score,
+            "lexical_rank": lexical_rank,
+            "hybrid_score": hybrid_score,
+            "rerank_score": None,
+            "ranking_strategy": "hybrid",
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -261,7 +339,7 @@ async def test_search_uses_hybrid_repository_when_strategy_enabled(
         )
     )
 
-    assert response.total == 1
+    assert response.total == 3
     assert response.results[0].metadata["ranking_strategy"] == "hybrid"
     assert vector_repo.requests == []
     assert vector_repo.hybrid_requests[0]["max_docs"] == 25
@@ -273,6 +351,123 @@ async def test_search_uses_hybrid_repository_when_strategy_enabled(
             "visibility_policy": {"scope": "all_athletes"},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_search_reranks_hybrid_candidates_before_applying_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "hybrid")
+    monkeypatch.setattr("app.services.search_service.settings.KB_RERANK_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.search_service.settings.KB_RERANK_CANDIDATE_LIMIT",
+        50,
+    )
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    rerank_provider = FakeRerankProvider(
+        reranked_indexes=[1, 0, 2],
+        scores=[0.98, 0.72, 0.51],
+    )
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+        rerank_provider=rerank_provider,  # type: ignore[arg-type]
+    )
+
+    response = await service.search(
+        SearchRequest(
+            query="nil disclosure",
+            organization_id=uuid4(),
+            limit=2,
+            visibility_context={"role": "athlete"},
+        )
+    )
+
+    assert [result.text for result in response.results] == [
+        "Hybrid second result",
+        "Hybrid first result",
+    ]
+    assert response.results[0].score == 0.98
+    assert response.results[0].metadata["rerank_score"] == 0.98
+    assert response.results[0].metadata["hybrid_score"] == 0.04
+    assert response.results[0].metadata["ranking_strategy"] == "hybrid_rerank"
+    assert response.results[1].score == 0.72
+    assert vector_repo.hybrid_requests[0]["final_limit"] == 50
+    assert rerank_provider.requests[0]["query"] == "nil disclosure"
+    assert rerank_provider.requests[0]["top_n"] == 2
+    assert [
+        candidate.original_index
+        for candidate in rerank_provider.requests[0]["candidates"]
+    ] == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_search_keeps_hybrid_order_when_reranker_fails_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "hybrid")
+    monkeypatch.setattr("app.services.search_service.settings.KB_RERANK_ENABLED", True)
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    rerank_provider = FakeRerankProvider(scores=[None, None, None])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+        rerank_provider=rerank_provider,  # type: ignore[arg-type]
+    )
+
+    response = await service.search(
+        SearchRequest(
+            query="nil disclosure",
+            organization_id=uuid4(),
+            limit=2,
+            visibility_context={"role": "athlete"},
+        )
+    )
+
+    assert [result.text for result in response.results] == [
+        "Hybrid first result",
+        "Hybrid second result",
+    ]
+    assert response.results[0].score == 0.05
+    assert response.results[0].metadata["rerank_score"] is None
+    assert response.results[0].metadata["ranking_strategy"] == "hybrid"
+    assert response.results[1].score == 0.04
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_does_not_call_reranker_when_rerank_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.search_service.settings.KB_SEARCH_STRATEGY", "semantic")
+    monkeypatch.setattr("app.services.search_service.settings.KB_RERANK_ENABLED", True)
+    config_service = FakeConfigurationService()
+    vector_repo = FakeVectorRepository()
+    embed_provider = FakeEmbedProvider([[0.1, 0.2, 0.3]])
+    rerank_provider = FakeRerankProvider(scores=[0.9])
+    service = SearchService(
+        configuration_service=config_service,  # type: ignore[arg-type]
+        vector_repo=vector_repo,  # type: ignore[arg-type]
+        embed_provider=embed_provider,  # type: ignore[arg-type]
+        rerank_provider=rerank_provider,  # type: ignore[arg-type]
+    )
+
+    await service.search(
+        SearchRequest(
+            query="nil disclosure",
+            organization_id=uuid4(),
+            visibility_context={"role": "athlete"},
+        )
+    )
+
+    assert vector_repo.hybrid_requests == []
+    assert vector_repo.requests
+    assert rerank_provider.requests == []
 
 
 @pytest.mark.asyncio

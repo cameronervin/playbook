@@ -26,9 +26,9 @@ the LiteLLM service key required to call the gateway; provider credentials remai
 owned by the gateway.
 
 KB-service reranking also routes through LiteLLM, using the
-`LITELLM_RERANK_MODEL` alias (`playbook-rerank` by default). The Phase 2
-provider exists, but `KB_RERANK_ENABLED=false` keeps `/search` from calling the
-reranker until later orchestration phases enable it.
+`LITELLM_RERANK_MODEL` alias (`playbook-rerank` by default). Search calls the
+reranker only when `KB_SEARCH_STRATEGY=hybrid` and `KB_RERANK_ENABLED=true`;
+semantic search remains the default fallback path.
 
 Direct provider API keys are allowed only for local development, smoke tests, or
 an explicit break-glass path. Production ingestion should not require OpenAI,

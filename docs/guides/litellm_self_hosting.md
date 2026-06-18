@@ -25,8 +25,9 @@ Configured aliases:
 - `playbook-rerank` for KB-service hybrid/rerank phases through LiteLLM
   `/rerank`. Local defaults route to the self-hosted Infinity service using
   `infinity/BAAI/bge-reranker-base`. KB-service has an internal LiteLLM
-  `/rerank` provider, but search remains semantic-only while
-  `KB_RERANK_ENABLED=false`.
+  `/rerank` provider; semantic-only fallback is controlled by
+  `KB_SEARCH_STRATEGY=semantic`, and reranked retrieval requires
+  `KB_SEARCH_STRATEGY=hybrid` plus `KB_RERANK_ENABLED=true`.
 
 Provider API keys belong only in the LiteLLM env/secrets. For the local OpenAI
 defaults, set:
