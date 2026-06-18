@@ -197,6 +197,16 @@ Do not do yet:
 
 ## Phase 3: Hybrid Candidate Search
 
+Implementation status:
+
+- Implemented: KB-service has a generated PostgreSQL `search_vector` column with
+  GIN index, lexical candidate retrieval with `websearch_to_tsquery` and
+  `ts_rank_cd`, shared semantic/lexical source-scope filters, hybrid
+  reciprocal-rank fusion, and dedupe by `chunk_id` then exact text.
+- Runtime default remains `KB_SEARCH_STRATEGY=semantic`; hybrid candidate search
+  is enabled only by internal server config. Cross-encoder reranking remains
+  deferred to Phase 4.
+
 Scope:
 
 - Add PostgreSQL full-text support for chunk text in

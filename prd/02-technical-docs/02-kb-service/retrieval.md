@@ -1,8 +1,8 @@
 # KB Service Retrieval
 
-This document defines the current semantic retrieval behavior for shared
-Playbook KB documents and private conversation-file context, plus the reserved
-contract shape for later hybrid search and reranking.
+This document defines the current retrieval behavior for shared Playbook KB
+documents and private conversation-file context, plus the reserved contract
+shape for reranking.
 
 ## Search Scope
 
@@ -24,15 +24,17 @@ trusted scope from the backend.
 3. Main backend calls KB service search with query, organization ID, source type
    scope, limit, threshold, and visibility context.
 4. KB service embeds the query through the configured embedding provider.
-5. KB service currently runs pgvector cosine similarity search against ready
-   vectors.
+5. KB service runs pgvector cosine similarity search against ready vectors.
+   When `KB_SEARCH_STRATEGY=hybrid`, it also runs PostgreSQL full-text lexical
+   search over chunk text and merges semantic plus lexical candidates with
+   reciprocal-rank fusion.
 6. KB service returns chunk text, final caller-facing `score`, document IDs, and
    metadata.
 7. Main backend currently keeps defensive dedupe and near-similar source-date
-   ordering during the semantic-only transition.
+   ordering during the retrieval-order transition.
 8. Assistant answer cites returned sources through `message_citations`.
 
-Target hybrid/rerank flow, implemented in later phases:
+Current hybrid candidate flow plus later rerank flow:
 
 ```text
 query embedding
@@ -44,8 +46,9 @@ query embedding
 ```
 
 Phase 2 adds the internal LiteLLM `/rerank` provider for that target, but runtime
-search ordering remains semantic-only until later search orchestration phases
-call it.
+search does not call it yet. Phase 3 adds the lexical candidate path and
+reciprocal-rank fusion behind internal `KB_SEARCH_STRATEGY=hybrid`; Phase 4
+will call the reranker and finalize response metadata behavior.
 
 ## Required Filtering
 
@@ -76,15 +79,17 @@ only when the backend supplies the trusted private conversation scope.
 
 ## Ranking Signals
 
-Current runtime ranking is semantic-only:
+Default runtime ranking is semantic-only:
 - `score` is `1 - pgvector cosine_distance` after the request threshold is
   applied,
 - rows are ordered by ascending cosine distance in KB-service,
 - backend may still dedupe and prefer newer `source_date` within near-similar
-  semantic bands until the later backend cleanup phase.
+  relevance bands until the later backend cleanup phase.
 
-Target hybrid/rerank behavior keeps `score` as the final retrieval score exposed
-to callers. Raw ranking diagnostics are reserved for `metadata`:
+When `KB_SEARCH_STRATEGY=hybrid`, KB-service retrieves bounded semantic and
+lexical candidates, dedupes them by `chunk_id` then exact text, and ranks them
+with reciprocal-rank fusion. Hybrid `score` is the final `hybrid_score` exposed
+to callers for that mode. Raw ranking diagnostics remain in `metadata`:
 - `semantic_score`,
 - `semantic_rank`,
 - `lexical_score`,

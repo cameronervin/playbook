@@ -18,8 +18,10 @@ from sqlalchemy.dialects import postgresql
 from app.repositories.vector_repo import (
     VectorRepository,
     _build_chunk_records,
+    _build_lexical_search_statement,
     _build_search_statement,
     _deterministic_chunk_id,
+    _merge_hybrid_candidates,
     _map_search_row,
 )
 
@@ -325,6 +327,42 @@ def test_search_statement_applies_or_scoped_source_filters() -> None:
     assert metadata_filters[1] in compiled.params.values()
 
 
+def test_lexical_search_statement_uses_fts_and_shared_filters() -> None:
+    conversation_id = uuid.uuid4()
+    metadata_filters = [
+        {
+            "source_type": "admin_upload",
+            "visibility_policy": {"scope": "all_athletes"},
+        },
+        {
+            "source_type": "conversation_file",
+            "conversation_id": str(conversation_id),
+            "visibility_policy": {"scope": "conversation"},
+        },
+    ]
+
+    statement = _build_lexical_search_statement(
+        collection_id=uuid.uuid4(),
+        query_text="NIL contract approval",
+        max_docs=10,
+        organization_id=ORG_ID,
+        metadata_filter=None,
+        metadata_filters=metadata_filters,
+    )
+
+    compiled = statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "websearch_to_tsquery" in sql
+    assert "@@" in sql
+    assert "ts_rank_cd" in sql
+    assert "JOIN kb.documents" in sql
+    assert "kb.documents.status = " in sql
+    assert " OR " in sql
+    assert {"organization_id": str(ORG_ID)} in compiled.params.values()
+    assert metadata_filters[0] in compiled.params.values()
+    assert metadata_filters[1] in compiled.params.values()
+
+
 def test_search_statement_only_selects_successful_document_rows() -> None:
     statement = _build_search_statement(
         collection_id=uuid.uuid4(),
@@ -341,6 +379,72 @@ def test_search_statement_only_selects_successful_document_rows() -> None:
     assert "kb.documents.id = CAST(coalesce" in sql
     assert "kb.documents.status = " in sql
     assert "success" in compiled.params.values()
+
+
+def test_hybrid_merge_returns_vector_only_lexical_only_and_overlap_once() -> None:
+    shared_chunk = uuid.uuid4()
+    vector_only = uuid.uuid4()
+    lexical_only = uuid.uuid4()
+    semantic_results = [
+        _candidate("shared semantic", shared_chunk, 0.90),
+        _candidate("vector only", vector_only, 0.80),
+    ]
+    lexical_results = [
+        _candidate("shared lexical", shared_chunk, 0.70),
+        _candidate("lexical only", lexical_only, 0.60),
+    ]
+
+    results = _merge_hybrid_candidates(
+        semantic_results=semantic_results,
+        lexical_results=lexical_results,
+        max_docs=10,
+        rrf_k=60,
+    )
+
+    assert [item["chunk_id"] for item in results] == [
+        shared_chunk,
+        vector_only,
+        lexical_only,
+    ]
+    assert results[0]["metadata"]["semantic_rank"] == 1
+    assert results[0]["metadata"]["lexical_rank"] == 1
+    assert results[0]["metadata"]["ranking_strategy"] == "hybrid"
+    assert results[1]["metadata"]["lexical_score"] is None
+    assert results[2]["metadata"]["semantic_score"] is None
+
+
+def test_hybrid_merge_dedupes_by_exact_text_when_chunk_id_missing() -> None:
+    semantic_results = [
+        _candidate("same text", None, 0.90),
+    ]
+    lexical_results = [
+        _candidate("same text", None, 0.75),
+    ]
+
+    results = _merge_hybrid_candidates(
+        semantic_results=semantic_results,
+        lexical_results=lexical_results,
+        max_docs=10,
+        rrf_k=60,
+    )
+
+    assert len(results) == 1
+    assert results[0]["metadata"]["semantic_rank"] == 1
+    assert results[0]["metadata"]["lexical_rank"] == 1
+
+
+def test_hybrid_merge_tie_breaks_are_deterministic() -> None:
+    first = _candidate("first", uuid.uuid4(), 0.5)
+    second = _candidate("second", uuid.uuid4(), 0.5)
+
+    results = _merge_hybrid_candidates(
+        semantic_results=[first, second],
+        lexical_results=[],
+        max_docs=10,
+        rrf_k=60,
+    )
+
+    assert [item["text"] for item in results] == ["first", "second"]
 
 
 def test_search_returns_results_ordered_most_similar_first() -> None:
@@ -416,3 +520,41 @@ def test_search_returns_empty_for_non_positive_max_docs() -> None:
         score_threshold=0.7,
         organization_id=ORG_ID,
     ) == []
+
+
+def test_vector_embedding_model_declares_search_vector_column() -> None:
+    from app.models.vector_embedding import VectorEmbedding
+
+    assert "search_vector" in VectorEmbedding.__table__.columns
+
+
+def test_phase3_migration_adds_search_vector_and_gin_index() -> None:
+    migration = (
+        __file__.rsplit("/tests/", maxsplit=1)[0]
+        + "/alembic/versions/0003_add_embedding_search_vector.py"
+    )
+    with open(migration) as migration_file:
+        contents = migration_file.read()
+
+    assert "search_vector" in contents
+    assert "to_tsvector('english'::regconfig, coalesce(document, ''))" in contents
+    assert "USING gin (search_vector)" in contents
+
+
+def _candidate(
+    text: str,
+    chunk_id: uuid.UUID | None,
+    score: float,
+) -> dict:
+    return {
+        "document_id": uuid.uuid4(),
+        "kb_service_document_id": uuid.uuid4(),
+        "chunk_id": chunk_id,
+        "chunk_index": 0,
+        "text": text,
+        "score": score,
+        "metadata": {
+            "chunk_id": str(chunk_id) if chunk_id else None,
+            "source_type": "admin_upload",
+        },
+    }

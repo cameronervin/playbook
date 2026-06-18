@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import uuid
 from typing import TYPE_CHECKING
 
 import structlog
 
+from app.core.config import settings
 from app.repositories.vector_repo import AsyncVectorRepository
 from app.schemas.search import SearchRequest, SearchResponse, SearchResult
 from app.services.configuration_service import ConfigurationService
@@ -62,6 +65,25 @@ def _metadata_filters_from_search_request(req: SearchRequest) -> list[dict[str, 
     return filters
 
 
+def _query_log_metadata(query: str) -> dict[str, object]:
+    normalized = query.strip().encode("utf-8")
+    return {
+        "query_length": len(query),
+        "query_sha256": hashlib.sha256(normalized).hexdigest()[:16],
+    }
+
+
+def _annotate_semantic_results(results: list[dict]) -> list[dict]:
+    annotated: list[dict] = []
+    for result in results:
+        item = dict(result)
+        metadata = dict(item.get("metadata") or {})
+        metadata.setdefault("ranking_strategy", "semantic")
+        item["metadata"] = metadata
+        annotated.append(item)
+    return annotated
+
+
 class SearchService:
     def __init__(
         self,
@@ -79,15 +101,16 @@ class SearchService:
 
         logger.info(
             "kb_embed_search_request",
-            query=req.query,
+            **_query_log_metadata(req.query),
             organization_id=str(req.organization_id),
             configuration_id=str(config.id),
             configuration_name=config.name,
             limit=req.limit,
             score_threshold=req.score_threshold,
-            visibility_context=req.visibility_context,
+            visibility_context_keys=sorted(req.visibility_context.keys()),
             source_types=req.source_types,
             has_file_filter=bool(req.file_ids),
+            search_strategy=settings.KB_SEARCH_STRATEGY,
         )
 
         # embed() is a sync, network-bound call. Run it in a worker thread so we
@@ -96,31 +119,34 @@ class SearchService:
         if not vectors:
             logger.info(
                 "kb_embed_search_response",
-                query=req.query,
+                **_query_log_metadata(req.query),
                 organization_id=str(req.organization_id),
                 configuration_id=str(config.id),
                 total=0,
                 results=[],
+                search_strategy=settings.KB_SEARCH_STRATEGY,
             )
             return SearchResponse(results=[], query=req.query, total=0)
         query_vector = vectors[0]
 
-        chunk_results = await self._vector_repo.search(
+        chunk_results = await self._search_chunks(
             configuration_id=config.id,
             organization_id=req.organization_id,
+            query=req.query,
             query_vector=query_vector,
-            max_docs=req.limit,
+            limit=req.limit,
             score_threshold=req.score_threshold,
             metadata_filters=metadata_filters,
         )
         response_results = [SearchResult(**chunk) for chunk in chunk_results]
         logger.info(
             "kb_embed_search_response",
-            query=req.query,
+            **_query_log_metadata(req.query),
             organization_id=str(req.organization_id),
             configuration_id=str(config.id),
             configuration_name=config.name,
             total=len(response_results),
+            search_strategy=settings.KB_SEARCH_STRATEGY,
             results=[
                 {
                     "document_id": str(c.document_id),
@@ -136,3 +162,58 @@ class SearchService:
             query=req.query,
             total=len(response_results),
         )
+
+    async def _search_chunks(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        query: str,
+        query_vector: list[float],
+        limit: int,
+        score_threshold: float,
+        metadata_filters: list[dict[str, object]],
+    ) -> list[dict]:
+        if settings.KB_SEARCH_STRATEGY != "hybrid":
+            semantic_results = await self._vector_repo.search(
+                configuration_id=configuration_id,
+                organization_id=organization_id,
+                query_vector=query_vector,
+                max_docs=limit,
+                score_threshold=score_threshold,
+                metadata_filters=metadata_filters,
+            )
+            return _annotate_semantic_results(semantic_results)
+
+        try:
+            return await self._vector_repo.hybrid_search(
+                configuration_id=configuration_id,
+                organization_id=organization_id,
+                query_vector=query_vector,
+                query_text=query,
+                max_docs=settings.KB_HYBRID_CANDIDATE_LIMIT,
+                final_limit=limit,
+                score_threshold=score_threshold,
+                rrf_k=settings.KB_RRF_K,
+                metadata_filters=metadata_filters,
+            )
+        except Exception as exc:
+            logger.warning(
+                "kb_hybrid_search_failed_fallback_semantic",
+                **_query_log_metadata(query),
+                organization_id=str(organization_id),
+                configuration_id=str(configuration_id),
+                candidate_limit=settings.KB_HYBRID_CANDIDATE_LIMIT,
+                final_limit=limit,
+                failure_class=type(exc).__name__,
+                exc_info=True,
+            )
+            semantic_results = await self._vector_repo.search(
+                configuration_id=configuration_id,
+                organization_id=organization_id,
+                query_vector=query_vector,
+                max_docs=limit,
+                score_threshold=score_threshold,
+                metadata_filters=metadata_filters,
+            )
+            return _annotate_semantic_results(semantic_results)

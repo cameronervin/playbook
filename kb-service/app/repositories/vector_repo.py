@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 SEARCHABLE_DOCUMENT_STATUS = "success"
 _CHUNK_ID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "playbook.kb-service.chunk")
+RANKING_STRATEGY_HYBRID = "hybrid"
 
 
 def _build_chunk_records(
@@ -260,23 +261,19 @@ def _map_search_row(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _build_search_statement(
+def _build_search_common(
     *,
     collection_id: uuid.UUID,
-    query_vector: list[float],
-    max_docs: int,
-    score_threshold: float,
     organization_id: uuid.UUID | str,
     metadata_filter: dict[str, Any] | None,
     metadata_filters: list[dict[str, Any]] | None = None,
-):
-    """Build the cosine-distance similarity SELECT shared by both repos.
-
-    score = 1 - cosine_distance, so a score_threshold maps to a maximum
-    allowable distance of (1 - score_threshold). Rows are ordered by ascending
-    distance (most similar first) and capped at max_docs.
-    """
-    distance_expr = VectorEmbedding.embedding.cosine_distance(query_vector)
+) -> tuple[
+    Any,
+    Any,
+    Any,
+    Any,
+    list[Any],
+]:
     metadata = VectorEmbedding.cmetadata
     document_id_expr = func.cast(
         metadata["document_id"].astext,
@@ -295,18 +292,14 @@ def _build_search_statement(
         UUID(as_uuid=True),
     )
     chunk_index_expr = cast(metadata["chunk_index"].astext, Integer)
-    distance_threshold = max(0.0, 1.0 - score_threshold)
 
     conditions = [
         VectorEmbedding.collection_id == collection_id,
         Document.status == SEARCHABLE_DOCUMENT_STATUS,
-        distance_expr <= distance_threshold,
-    ]
-    conditions.append(
         VectorEmbedding.cmetadata.contains(
             {"organization_id": str(organization_id)}
-        )
-    )
+        ),
+    ]
     if metadata_filters:
         conditions.append(
             or_(
@@ -318,6 +311,47 @@ def _build_search_statement(
         )
     elif metadata_filter:
         conditions.append(VectorEmbedding.cmetadata.contains(metadata_filter))
+
+    return (
+        document_id_expr,
+        kb_service_document_id_expr,
+        chunk_id_expr,
+        chunk_index_expr,
+        conditions,
+    )
+
+
+def _build_search_statement(
+    *,
+    collection_id: uuid.UUID,
+    query_vector: list[float],
+    max_docs: int,
+    score_threshold: float,
+    organization_id: uuid.UUID | str,
+    metadata_filter: dict[str, Any] | None,
+    metadata_filters: list[dict[str, Any]] | None = None,
+):
+    """Build the cosine-distance similarity SELECT shared by both repos.
+
+    score = 1 - cosine_distance, so a score_threshold maps to a maximum
+    allowable distance of (1 - score_threshold). Rows are ordered by ascending
+    distance (most similar first) and capped at max_docs.
+    """
+    distance_expr = VectorEmbedding.embedding.cosine_distance(query_vector)
+    (
+        document_id_expr,
+        kb_service_document_id_expr,
+        chunk_id_expr,
+        chunk_index_expr,
+        conditions,
+    ) = _build_search_common(
+        collection_id=collection_id,
+        organization_id=organization_id,
+        metadata_filter=metadata_filter,
+        metadata_filters=metadata_filters,
+    )
+    distance_threshold = max(0.0, 1.0 - score_threshold)
+    conditions.append(distance_expr <= distance_threshold)
 
     score_expr = (1.0 - distance_expr).label("score")
     return (
@@ -338,6 +372,166 @@ def _build_search_statement(
         .order_by(distance_expr)
         .limit(max_docs)
     )
+
+
+def _build_lexical_search_statement(
+    *,
+    collection_id: uuid.UUID,
+    query_text: str,
+    max_docs: int,
+    organization_id: uuid.UUID | str,
+    metadata_filter: dict[str, Any] | None,
+    metadata_filters: list[dict[str, Any]] | None = None,
+):
+    """Build the PostgreSQL full-text lexical SELECT.
+
+    Lexical search uses the generated ``search_vector`` column and mirrors the
+    semantic path's collection/status/org/source-scope filters.
+    """
+    (
+        document_id_expr,
+        kb_service_document_id_expr,
+        chunk_id_expr,
+        chunk_index_expr,
+        conditions,
+    ) = _build_search_common(
+        collection_id=collection_id,
+        organization_id=organization_id,
+        metadata_filter=metadata_filter,
+        metadata_filters=metadata_filters,
+    )
+    query_expr = func.websearch_to_tsquery("english", query_text)
+    match_expr = VectorEmbedding.search_vector.bool_op("@@")(query_expr)
+    score_expr = func.ts_rank_cd(VectorEmbedding.search_vector, query_expr).label(
+        "score"
+    )
+    conditions.append(match_expr)
+
+    return (
+        select(
+            VectorEmbedding.id.label("embedding_id"),
+            document_id_expr.label("document_id"),
+            kb_service_document_id_expr.label("kb_service_document_id"),
+            chunk_id_expr.label("chunk_id"),
+            chunk_index_expr.label("chunk_index"),
+            VectorEmbedding.document.label("document"),
+            Document.summary.label("source_summary"),
+            VectorEmbedding.cmetadata.label("cmetadata"),
+            score_expr,
+        )
+        .select_from(VectorEmbedding)
+        .join(Document, Document.id == kb_service_document_id_expr)
+        .where(*conditions)
+        .order_by(score_expr.desc(), VectorEmbedding.id)
+        .limit(max_docs)
+    )
+
+
+def _merge_hybrid_candidates(
+    *,
+    semantic_results: list[dict],
+    lexical_results: list[dict],
+    max_docs: int,
+    rrf_k: int,
+) -> list[dict]:
+    """Dedupe semantic/lexical candidates and rank with reciprocal rank fusion."""
+    if max_docs <= 0:
+        return []
+
+    merged: dict[tuple[str, str], dict[str, Any]] = {}
+    insertion_order = 0
+    _record_ranked_candidates(
+        merged=merged,
+        results=semantic_results,
+        score_key="semantic_score",
+        rank_key="semantic_rank",
+        insertion_order_start=insertion_order,
+    )
+    insertion_order += len(semantic_results)
+    _record_ranked_candidates(
+        merged=merged,
+        results=lexical_results,
+        score_key="lexical_score",
+        rank_key="lexical_rank",
+        insertion_order_start=insertion_order,
+    )
+
+    ranked_candidates: list[dict[str, Any]] = []
+    for candidate in merged.values():
+        semantic_rank = candidate.get("semantic_rank")
+        lexical_rank = candidate.get("lexical_rank")
+        hybrid_score = _rrf_score(semantic_rank, lexical_rank, rrf_k=rrf_k)
+        result = dict(candidate["result"])
+        metadata = dict(result.get("metadata") or {})
+        metadata.update(
+            {
+                "semantic_score": candidate.get("semantic_score"),
+                "semantic_rank": semantic_rank,
+                "lexical_score": candidate.get("lexical_score"),
+                "lexical_rank": lexical_rank,
+                "hybrid_score": hybrid_score,
+                "rerank_score": None,
+                "ranking_strategy": RANKING_STRATEGY_HYBRID,
+            }
+        )
+        result["metadata"] = metadata
+        result["score"] = hybrid_score
+        result["_hybrid_sort"] = (
+            -hybrid_score,
+            candidate["first_seen"],
+        )
+        ranked_candidates.append(result)
+
+    ranked_candidates.sort(key=lambda item: item["_hybrid_sort"])
+    final_results: list[dict] = []
+    for item in ranked_candidates[:max_docs]:
+        item.pop("_hybrid_sort", None)
+        final_results.append(item)
+    return final_results
+
+
+def _record_ranked_candidates(
+    *,
+    merged: dict[tuple[str, str], dict[str, Any]],
+    results: list[dict],
+    score_key: str,
+    rank_key: str,
+    insertion_order_start: int,
+) -> None:
+    for offset, result in enumerate(results):
+        key = _candidate_dedupe_key(result)
+        if key not in merged:
+            merged[key] = {
+                "result": result,
+                "first_seen": insertion_order_start + offset,
+                "semantic_score": None,
+                "semantic_rank": None,
+                "lexical_score": None,
+                "lexical_rank": None,
+            }
+        merged[key][score_key] = result.get("score")
+        merged[key][rank_key] = offset + 1
+
+
+def _candidate_dedupe_key(result: dict) -> tuple[str, str]:
+    chunk_id = result.get("chunk_id") or (result.get("metadata") or {}).get("chunk_id")
+    if chunk_id:
+        return ("chunk_id", str(chunk_id))
+    return ("text", str(result.get("text", "")))
+
+
+def _rrf_score(
+    semantic_rank: int | None,
+    lexical_rank: int | None,
+    *,
+    rrf_k: int,
+) -> float:
+    score = 0.0
+    if semantic_rank is not None:
+        score += 1.0 / (rrf_k + semantic_rank)
+    if lexical_rank is not None:
+        score += 1.0 / (rrf_k + lexical_rank)
+    return score
 
 
 class VectorRepository:
@@ -532,6 +726,75 @@ class VectorRepository:
                 results.append(mapped)
         return results
 
+    def lexical_search(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        query_text: str,
+        max_docs: int,
+        organization_id: uuid.UUID | str,
+        metadata_filter: dict[str, Any] | None = None,
+        metadata_filters: list[dict[str, Any]] | None = None,
+    ) -> list[dict]:
+        if max_docs <= 0:
+            return []
+        collection_id = self.resolve_collection_id_for_configuration(configuration_id)
+        statement = _build_lexical_search_statement(
+            collection_id=collection_id,
+            query_text=query_text,
+            max_docs=max_docs,
+            organization_id=organization_id,
+            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
+        )
+        with self._pg_engine.begin() as conn:
+            rows = conn.execute(statement).mappings().all()
+
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            mapped = _map_search_row(row)
+            if mapped is not None:
+                results.append(mapped)
+        return results
+
+    def hybrid_search(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID | str,
+        query_vector: list[float],
+        query_text: str,
+        max_docs: int,
+        final_limit: int,
+        score_threshold: float,
+        rrf_k: int,
+        metadata_filter: dict[str, Any] | None = None,
+        metadata_filters: list[dict[str, Any]] | None = None,
+    ) -> list[dict]:
+        semantic_results = self.search(
+            configuration_id=configuration_id,
+            organization_id=organization_id,
+            query_vector=query_vector,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
+        )
+        lexical_results = self.lexical_search(
+            configuration_id=configuration_id,
+            organization_id=organization_id,
+            query_text=query_text,
+            max_docs=max_docs,
+            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
+        )
+        return _merge_hybrid_candidates(
+            semantic_results=semantic_results,
+            lexical_results=lexical_results,
+            max_docs=final_limit,
+            rrf_k=rrf_k,
+        )
+
     def delete_document_embeddings(self, document_id: uuid.UUID) -> int:
         """Delete all vector embeddings for a document. Returns row count."""
         with self._pg_engine.begin() as conn:
@@ -614,6 +877,76 @@ class AsyncVectorRepository:
             if mapped is not None:
                 mapped_rows.append(mapped)
         return mapped_rows
+
+    async def lexical_search(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        query_text: str,
+        max_docs: int,
+        organization_id: uuid.UUID | str,
+        metadata_filter: dict[str, Any] | None = None,
+        metadata_filters: list[dict[str, Any]] | None = None,
+    ) -> list[dict]:
+        if max_docs <= 0:
+            return []
+        collection_id = await self.resolve_collection_id_for_configuration(
+            configuration_id
+        )
+        statement = _build_lexical_search_statement(
+            collection_id=collection_id,
+            query_text=query_text,
+            max_docs=max_docs,
+            organization_id=organization_id,
+            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
+        )
+        result = await self._session.execute(statement)
+        rows = result.mappings().all()
+        mapped_rows: list[dict[str, Any]] = []
+        for row in rows:
+            mapped = _map_search_row(row)
+            if mapped is not None:
+                mapped_rows.append(mapped)
+        return mapped_rows
+
+    async def hybrid_search(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID | str,
+        query_vector: list[float],
+        query_text: str,
+        max_docs: int,
+        final_limit: int,
+        score_threshold: float,
+        rrf_k: int,
+        metadata_filter: dict[str, Any] | None = None,
+        metadata_filters: list[dict[str, Any]] | None = None,
+    ) -> list[dict]:
+        semantic_results = await self.search(
+            configuration_id=configuration_id,
+            organization_id=organization_id,
+            query_vector=query_vector,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
+        )
+        lexical_results = await self.lexical_search(
+            configuration_id=configuration_id,
+            organization_id=organization_id,
+            query_text=query_text,
+            max_docs=max_docs,
+            metadata_filter=metadata_filter,
+            metadata_filters=metadata_filters,
+        )
+        return _merge_hybrid_candidates(
+            semantic_results=semantic_results,
+            lexical_results=lexical_results,
+            max_docs=final_limit,
+            rrf_k=rrf_k,
+        )
 
     async def delete_document_embeddings(self, document_id: uuid.UUID) -> int:
         result = await self._session.execute(

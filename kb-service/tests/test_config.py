@@ -79,6 +79,26 @@ def test_rerank_placeholders_default_to_disabled_litellm_alias() -> None:
     assert settings.KB_RERANK_FAIL_OPEN is True
 
 
+def test_hybrid_search_defaults_to_semantic_only() -> None:
+    settings = _base_settings()
+
+    assert settings.KB_SEARCH_STRATEGY == "semantic"
+    assert settings.KB_HYBRID_CANDIDATE_LIMIT == 50
+    assert settings.KB_RRF_K == 60
+
+
+def test_hybrid_search_settings_accept_env_overrides() -> None:
+    settings = _base_settings(
+        KB_SEARCH_STRATEGY="hybrid",
+        KB_HYBRID_CANDIDATE_LIMIT="25",
+        KB_RRF_K="42",
+    )
+
+    assert settings.KB_SEARCH_STRATEGY == "hybrid"
+    assert settings.KB_HYBRID_CANDIDATE_LIMIT == 25
+    assert settings.KB_RRF_K == 42
+
+
 def test_rerank_placeholders_accept_env_overrides() -> None:
     settings = _base_settings(
         LITELLM_RERANK_MODEL="custom-rerank",

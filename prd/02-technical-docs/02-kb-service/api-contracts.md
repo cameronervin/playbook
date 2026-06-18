@@ -165,6 +165,8 @@ If omitted, `source_types` defaults to `["admin_upload"]` so existing backend
 shared-KB retrieval cannot accidentally include conversation-file chunks.
 Frontend/browser callers never choose arbitrary KB-service `source_types`; the
 backend derives trusted source scope before calling this service.
+Search strategy is also internal server configuration. Callers do not send a
+semantic/hybrid/rerank selector in the request body.
 
 Private conversation-file retrieval requires trusted backend scope:
 
@@ -206,12 +208,14 @@ Response:
 }
 ```
 
-`score` is always the final retrieval score exposed to service callers. Current
-runtime responses use semantic cosine similarity for `score`; the Phase 2
-reranker provider is internal infrastructure and does not add top-level search
-response fields. Later hybrid/rerank orchestration may populate raw semantic,
-lexical, hybrid, and rerank diagnostics inside `metadata` only. Reserved
-metadata keys are
+`score` is always the final retrieval score exposed to service callers. Default
+runtime responses use semantic cosine similarity for `score`. When
+`KB_SEARCH_STRATEGY=hybrid`, responses use reciprocal-rank-fusion
+`hybrid_score` as `score` after semantic and lexical candidate merge. The Phase
+2 reranker provider is internal infrastructure and does not add top-level
+search response fields or run during Phase 3. Raw semantic, lexical, hybrid,
+and future rerank diagnostics live inside `metadata` only. Reserved metadata
+keys are
 `semantic_score`, `semantic_rank`, `lexical_score`, `lexical_rank`,
 `hybrid_score`, `rerank_score`, and `ranking_strategy`.
 

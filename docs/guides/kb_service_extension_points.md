@@ -186,13 +186,13 @@ When `KB_RERANK_FAIL_OPEN=true`, retryable LiteLLM failures return candidates in
 input order with `rerank_score=None`. Fail-closed mode raises instead. Malformed
 or non-retryable responses always raise.
 
-`SearchService` does not call the reranker yet. Later hybrid search phases will
-use this provider after lexical candidates, dedupe, and reciprocal-rank fusion
-exist.
+`SearchService` does not call the reranker yet. Phase 3 hybrid candidate search
+can produce reciprocal-rank-fused candidates, but Phase 4 will be responsible
+for passing the bounded candidate list to this reranker provider.
 
 ---
 
-## 5. pgvector cosine search
+## 5. Search repository: semantic and hybrid candidates
 
 `vectorstore/pgvector.py` exposes:
 
@@ -210,6 +210,29 @@ The SQL itself lives in the vector repository
 (`app.repositories.vector_repo`) and the `VectorEmbedding` model
 (`app.models.vector_embedding`), authored separately. These imports resolve when
 those files land.
+
+The repository also owns Phase 3 lexical and hybrid candidate generation:
+
+- lexical search uses `websearch_to_tsquery('english', query)` against the
+  generated `VectorEmbedding.search_vector` column,
+- lexical relevance uses `ts_rank_cd`,
+- semantic and lexical statements share the same collection, successful
+  document status, organization, visibility, source-type, conversation, and
+  file-scope filters,
+- hybrid search dedupes candidates by `chunk_id`, then exact text fallback, and
+  ranks them with reciprocal-rank fusion.
+
+Runtime selection is internal config only:
+
+```env
+KB_SEARCH_STRATEGY=semantic  # semantic | hybrid
+KB_HYBRID_CANDIDATE_LIMIT=50
+KB_RRF_K=60
+```
+
+Do not expose search strategy, arbitrary metadata filters, or source type
+selection to browser callers. The backend must continue deriving trusted
+retrieval scope before calling KB-service.
 
 ---
 

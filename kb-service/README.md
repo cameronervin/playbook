@@ -30,6 +30,8 @@ POST /api/kb/ingest/document ───────▶ IngestionService ─▶ Ce
                                                                   └─ last batch dispatches load_vector_task (finalize)
 
 POST /api/kb/search ────────────────▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ semantic results
+                                                                  └─▶ optional PostgreSQL FTS lexical candidates
+                                                                      + RRF hybrid merge
 ```
 
 `/configuration/resolve` owns the singleton Playbook defaults
@@ -38,12 +40,14 @@ database. Search resolves that default internally before vector lookup, so a
 new database returns zero results instead of requiring manual configuration
 seeding.
 
-Search is still intentionally semantic-only. The self-hosted Infinity reranker,
-LiteLLM `playbook-rerank` alias, and reusable KB-service LiteLLM `/rerank`
-provider exist for later phases, but `SearchService` does not call the reranker
-yet. Hybrid lexical candidates, reciprocal-rank fusion, and search
-orchestration are reserved for later phases; the current `score` is pgvector
-cosine similarity (`1 - distance`).
+Search defaults to semantic-only. Setting `KB_SEARCH_STRATEGY=hybrid` enables
+Phase 3 hybrid candidate search: PostgreSQL full-text lexical candidates are
+merged with pgvector semantic candidates by reciprocal-rank fusion. The
+self-hosted Infinity reranker, LiteLLM `playbook-rerank` alias, and reusable
+KB-service LiteLLM `/rerank` provider exist for later phases, but
+`SearchService` does not call the reranker yet. In semantic mode, `score` is
+pgvector cosine similarity (`1 - distance`); in hybrid mode, `score` is the
+RRF `hybrid_score`.
 
 ## Stack
 
@@ -55,8 +59,9 @@ cosine similarity (`1 - distance`).
 | OCR | Opt-in scanned PDF OCR via LiteLLM VLM alias (`OCR_PROVIDER=vlm`); default is `NullOCRProvider` |
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
 | Embeddings | OpenAI direct or LiteLLM mode (`EmbedProviderMode`), 1536-dim |
-| Reranking | LiteLLM alias `playbook-rerank` points to self-hosted Infinity; `infrastructure/rerankers/` has a reusable LiteLLM `/rerank` provider, while KB-service search keeps orchestration disabled with `KB_RERANK_ENABLED=false` |
-| Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
+| Search | Semantic pgvector by default; optional internal hybrid mode with PostgreSQL FTS + RRF |
+| Reranking | LiteLLM alias `playbook-rerank` points to self-hosted Infinity; `infrastructure/rerankers/` has a reusable LiteLLM `/rerank` provider, while KB-service search does not call it until Phase 4 |
+| Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) plus generated FTS `search_vector` in the `kb` schema |
 | Storage | S3-compatible storage / MinIO locally (boto3), streamed to tempfiles |
 
 ## Layout

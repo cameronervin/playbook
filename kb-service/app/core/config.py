@@ -125,6 +125,9 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     KB_SEARCH_MAX_DOCS: int = 10
     KB_SEARCH_SCORE_THRESHOLD: float = 0.7
+    KB_SEARCH_STRATEGY: Literal["semantic", "hybrid"] = "semantic"
+    KB_HYBRID_CANDIDATE_LIMIT: int = Field(default=50, ge=1)
+    KB_RRF_K: int = Field(default=60, ge=1)
 
     # -------------------------------------------------------------------------
     # Worker / vectorstore tuning

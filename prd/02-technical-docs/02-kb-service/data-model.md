@@ -18,6 +18,7 @@ signed status webhooks.
 | Original conversation-file binary | Main backend blob storage | Referenced by `conversation_files.storage_key`; KB service reads via signed/presigned URL after backend authorization |
 | Parsed text-segment records | Temporary KB staging storage | NDJSON staging used between parse/chunk tasks; includes text plus source locators and is deleted after terminal cleanup |
 | Chunk text | `kb.langchain_pg_embedding.document` or equivalent text column | Durable retrieval text returned in search results |
+| Lexical search vector | `kb.langchain_pg_embedding.search_vector` | Generated `tsvector` from chunk text for PostgreSQL full-text search |
 | Embedding vectors | `kb.langchain_pg_embedding.embedding` | `vector(1536)` for the `playbook-embed` LiteLLM alias |
 | Chunk metadata | `kb.langchain_pg_embedding.cmetadata` | Includes Playbook document ID, source fields, visibility policy, and chunk locator |
 | Ingestion lifecycle | `kb.documents`, `kb.ingestion_logs` | KB service internal source of truth |
@@ -120,7 +121,13 @@ Required MVP fields:
 - `collection_id`
 - `embedding`
 - `document`
+- `search_vector`
 - `cmetadata`
+
+`search_vector` is a stored generated `tsvector` derived from
+`to_tsvector('english'::regconfig, coalesce(document, ''))` and indexed with a
+GIN index. It supports Phase 3 lexical candidate generation without re-ingesting
+existing chunks.
 
 Required `cmetadata` keys:
 - `organization_id`
