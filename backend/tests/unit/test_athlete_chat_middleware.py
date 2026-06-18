@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.agents.context.middleware.athlete_chat_middleware import (
     create_athlete_chat_middleware,
+    format_uploaded_file_manifest,
 )
 from app.core.exceptions import ValidationError
 
@@ -38,7 +39,9 @@ async def _capture_messages(request: ModelRequest) -> list:
 
 
 @pytest.mark.asyncio
-async def test_athlete_chat_middleware_filters_blank_messages_and_preserves_tools() -> None:
+async def test_athlete_chat_middleware_filters_blank_messages_and_preserves_tools() -> (
+    None
+):
     tool_call = AIMessage(
         content="",
         tool_calls=[
@@ -104,6 +107,7 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
                 "conversation_id": "conversation-123",
                 "user_message_content": "Can I accept this NIL deal?",
                 "attached_file_ids": ["file-1", "file-2"],
+                "conversation_file_ready_file_ids": ["file-1"],
                 "requires_kb_support": True,
                 "topic_labels": ["nil"],
                 "risk_labels": ["compliance"],
@@ -119,11 +123,80 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
     assert "Risk labels: compliance" in context
     assert "Attached file count: 2" in context
     assert "Attached file IDs: file-1, file-2" in context
+    assert "Ready conversation file count: 1" in context
     assert "Source result" not in context
 
 
 @pytest.mark.asyncio
-async def test_athlete_chat_middleware_appends_file_context_after_runtime_context() -> None:
+async def test_athlete_chat_middleware_appends_uploaded_file_manifest() -> None:
+    manifest = "## Uploaded File Manifest\nFile: nil-contract.pdf"
+    messages = await _capture_messages(
+        _request(
+            messages=[HumanMessage(content="Does this contract require approval?")],
+            state={
+                "task_id": "task-123",
+                "conversation_id": "conversation-123",
+                "user_message_content": "Does this contract require approval?",
+                "conversation_file_ready_file_ids": ["file-1"],
+                "conversation_file_manifest": manifest,
+            },
+        )
+    )
+
+    assert len(messages) == 3
+    assert "## Athlete Chat Runtime Context" in messages[-2].content
+    assert messages[-1].content == manifest
+
+
+def test_uploaded_file_manifest_formats_and_truncates_summaries() -> None:
+    manifest = format_uploaded_file_manifest(
+        [
+            {
+                "id": "file-1",
+                "filename": "nil-contract.pdf",
+                "chunk_count": 2,
+                "summary": "A" * 320,
+            },
+            {
+                "id": "file-2",
+                "filename": "empty-summary.pdf",
+                "chunk_count": 1,
+                "summary": None,
+            },
+        ],
+        max_summary_chars=40,
+    )
+
+    assert "## Uploaded File Manifest" in manifest
+    assert "These summaries identify available uploaded files." in manifest
+    assert "File: nil-contract.pdf" in manifest
+    assert "Conversation file ID: file-1" in manifest
+    assert "Chunk count: 2" in manifest
+    assert f"Summary: {'A' * 40}..." in manifest
+    assert "Summary: unavailable" in manifest
+
+
+def test_uploaded_file_manifest_bounds_file_count() -> None:
+    manifest = format_uploaded_file_manifest(
+        [
+            {
+                "id": f"file-{index}",
+                "filename": f"file-{index}.pdf",
+                "chunk_count": 1,
+                "summary": "summary",
+            }
+            for index in range(10)
+        ],
+        max_files=8,
+    )
+
+    assert "File: file-7.pdf" in manifest
+    assert "File: file-8.pdf" not in manifest
+    assert "Additional ready uploaded files omitted: 2" in manifest
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_middleware_does_not_append_file_context_snippets() -> None:
     messages = await _capture_messages(
         _request(
             messages=[HumanMessage(content="Does this contract require approval?")],
@@ -139,8 +212,9 @@ async def test_athlete_chat_middleware_appends_file_context_after_runtime_contex
         )
     )
 
-    assert "## Athlete Chat Runtime Context" in messages[-2].content
-    assert messages[-1].content == "## Conversation File Context\n[S-file] Contract"
+    assert len(messages) == 2
+    assert "## Athlete Chat Runtime Context" in messages[-1].content
+    assert "## Conversation File Context" not in messages[-1].content
 
 
 @pytest.mark.asyncio

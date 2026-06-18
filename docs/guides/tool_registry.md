@@ -14,7 +14,10 @@ For athlete chat, the final assignment looks like:
 ```python
 {
     "athlete_chat": {
-        "athlete_chat": [search_playbook_knowledgebase],
+        "athlete_chat": [
+            search_playbook_knowledgebase,
+            search_conversation_files,
+        ],
     }
 }
 ```

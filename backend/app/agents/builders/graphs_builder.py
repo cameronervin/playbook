@@ -20,7 +20,10 @@ from app.agents.tools.tool_assignment import (
     build_workflow_chain_tool_map,
     resolve_active_tools,
 )
-from app.agents.tools.tool_registry import ToolBuildContext
+from app.agents.tools.tool_registry import (
+    ATHLETE_CHAT_SOURCE_REGISTRY_KEY,
+    ToolBuildContext,
+)
 from app.core.config import Settings
 from app.infrastructure.knowledgebase import BaseKnowledgebaseProvider
 from app.services.agent_stream_service import AgentStreamService
@@ -54,7 +57,7 @@ def compose_athlete_chat_dependencies(
     chain_tool_map = build_workflow_chain_tool_map(active_tools)
     athlete_tools = chain_tool_map["athlete_chat"]["athlete_chat"]
     source_registry = tool_context.source_registries.get(
-        "search_playbook_knowledgebase",
+        ATHLETE_CHAT_SOURCE_REGISTRY_KEY,
         {},
     )
     chains = create_athlete_chat_chain_set(

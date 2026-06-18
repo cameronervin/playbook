@@ -59,9 +59,8 @@ class AthleteChatState(TypedDict, total=False):
     attached_file_ids: list[str]
 
     user_message_content: str
-    conversation_file_context: str
-    conversation_file_source_count: int
     conversation_file_ready_file_ids: list[str]
+    conversation_file_manifest: str
     should_bypass_agent: bool
     requires_kb_support: bool
 

@@ -20,6 +20,8 @@ from app.agents.guardrails.guardrails import assert_message_loop_bounded
 from app.core.config import Settings
 
 logger = structlog.get_logger(__name__)
+MAX_MANIFEST_FILES = 8
+MAX_MANIFEST_SUMMARY_CHARS = 280
 
 
 def create_athlete_chat_middleware(settings: Settings | None = None) -> Callable:
@@ -27,8 +29,8 @@ def create_athlete_chat_middleware(settings: Settings | None = None) -> Callable
 
     The athlete workflow intentionally keeps the bounded history loaded by the
     graph's ``load_state`` node. This middleware removes blank message noise,
-    applies the loop guard, and appends compact runtime flags plus any
-    pre-retrieved conversation-file snippets prepared by the graph.
+    applies the loop guard, and appends compact runtime flags prepared by the
+    graph.
     """
 
     @wrap_model_call
@@ -40,9 +42,7 @@ def create_athlete_chat_middleware(settings: Settings | None = None) -> Callable
         conversation_id = _string_value(state.get("conversation_id"), "unknown")
         task_id = _string_value(state.get("task_id"), "unknown")
         telemetry_id = (
-            conversation_id
-            if conversation_id != "unknown"
-            else f"task:{task_id}"
+            conversation_id if conversation_id != "unknown" else f"task:{task_id}"
         )
 
         valid_messages, filtered_count = _filter_blank_messages(request.messages)
@@ -61,17 +61,21 @@ def create_athlete_chat_middleware(settings: Settings | None = None) -> Callable
                 filtered_count=filtered_count,
             )
 
-        appended_context = [HumanMessage(content=_build_runtime_context(state))]
-        file_context = _build_conversation_file_context(state)
-        if file_context:
-            appended_context.append(HumanMessage(content=file_context))
-        messages = [*valid_messages, *appended_context]
+        messages = [
+            *valid_messages,
+            HumanMessage(content=_build_runtime_context(state)),
+        ]
+        manifest = _string_value(state.get("conversation_file_manifest"))
+        if manifest:
+            messages.append(HumanMessage(content=manifest))
         return await handler(request.override(messages=messages))
 
     return athlete_chat_context
 
 
-def _filter_blank_messages(messages: Sequence[BaseMessage]) -> tuple[list[BaseMessage], int]:
+def _filter_blank_messages(
+    messages: Sequence[BaseMessage],
+) -> tuple[list[BaseMessage], int]:
     """Drop blank human/AI messages while preserving tool-call exchanges."""
     valid_messages: list[BaseMessage] = []
     filtered_count = 0
@@ -100,6 +104,7 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
     topic_labels = _string_list(state.get("topic_labels"))
     risk_labels = _string_list(state.get("risk_labels"))
     attached_file_ids = _string_list(state.get("attached_file_ids"))
+    ready_file_ids = _string_list(state.get("conversation_file_ready_file_ids"))
 
     return "\n".join(
         [
@@ -110,14 +115,56 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
             f"Risk labels: {_csv_or_none(risk_labels)}",
             f"Attached file count: {len(attached_file_ids)}",
             f"Attached file IDs: {_csv_or_none(attached_file_ids)}",
+            f"Ready conversation file count: {len(ready_file_ids)}",
         ]
     )
 
 
-def _build_conversation_file_context(state: dict[str, Any]) -> str:
-    """Return pre-retrieved private file snippets for model-call injection."""
-    context = _string_value(state.get("conversation_file_context"))
-    return context
+def format_uploaded_file_manifest(
+    files: Sequence[dict[str, Any]],
+    *,
+    max_files: int = MAX_MANIFEST_FILES,
+    max_summary_chars: int = MAX_MANIFEST_SUMMARY_CHARS,
+) -> str:
+    """Format ready uploaded-file summaries for non-evidence orientation."""
+    if not files:
+        return ""
+
+    displayed_files = list(files[:max_files])
+    sections = [
+        "## Uploaded File Manifest",
+        (
+            "These summaries identify available uploaded files. They are "
+            "orientation only; use search_conversation_files excerpts as evidence."
+        ),
+    ]
+    for file in displayed_files:
+        sections.append(
+            "\n".join(
+                [
+                    f"File: {_string_value(file.get('filename'), 'unknown')}",
+                    f"Conversation file ID: {_string_value(file.get('id'), 'unknown')}",
+                    f"Chunk count: {_string_value(file.get('chunk_count'), '0')}",
+                    "Summary: "
+                    + _truncate_summary(file.get("summary"), max_summary_chars),
+                ]
+            )
+        )
+
+    omitted_count = len(files) - len(displayed_files)
+    if omitted_count > 0:
+        sections.append(f"Additional ready uploaded files omitted: {omitted_count}")
+
+    return "\n\n".join(sections)
+
+
+def _truncate_summary(value: Any, max_chars: int) -> str:
+    summary = _string_value(value)
+    if not summary:
+        return "unavailable"
+    if len(summary) <= max_chars:
+        return summary
+    return summary[:max_chars].rstrip() + "..."
 
 
 def _content_has_text(content: Any) -> bool:

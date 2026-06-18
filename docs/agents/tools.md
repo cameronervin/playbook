@@ -26,6 +26,7 @@ tool — nodes give you better retry handling and clearer separation of concerns
 | Tool | Description |
 |------|-------------|
 | `search_playbook_knowledgebase` | Athlete chat profile for searching official shared Playbook KB sources before NIL, compliance, recruiting, reporting, or process guidance. |
+| `search_conversation_files` | Athlete chat profile for searching ready uploaded files scoped to the current conversation. |
 
 The reusable implementation lives in `backend/app/agents/tools/knowledgebase.py`
 as a profile-based factory, and active product tools are declared in
@@ -37,6 +38,13 @@ ToolSpec(
     factory=_create_athlete_kb_tool,
     workflow_chain_targets={"athlete_chat": ("athlete_chat",)},
     prompt_keys=(ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"),),
+)
+
+ToolSpec(
+    tool_name="search_conversation_files",
+    factory=_create_athlete_conversation_file_tool,
+    workflow_chain_targets={"athlete_chat": ("athlete_chat",)},
+    prompt_keys=(ToolPromptKey("athlete_chat", "search_conversation_files"),),
 )
 ```
 
@@ -53,18 +61,21 @@ scope. Local KB results are normalized into citation-ready metadata including
 Playbook `document_id`, `kb_service_document_id`, stable `chunk_id`,
 `chunk_index`, score, source title/date, visibility policy, and metadata tags.
 All admin-uploaded shared KB documents are treated as official for MVP, and
-retrieval does not use priority ranking. `message_citations` stores the Playbook document and
-chunk IDs in columns and keeps the rest in `source_metadata`.
+retrieval does not use priority ranking. `message_citations` stores the
+Playbook document and chunk IDs in columns and keeps the rest in
+`source_metadata`.
 
-Conversation-file retrieval is not model-callable. The athlete graph runs a
-deterministic `prepare_conversation_file_snippets` node before generation,
-selects ready files from backend metadata, calls the provider's private
-`search_conversation_files(...)` method with trusted `organization_id`,
-`conversation_id`, and backend-selected `file_ids`, and registers returned
-source keys in the same citation registry. The prepared snippets are appended
-by athlete chat middleware on model call. The model may cite those
-conversation-file source keys, but it cannot choose `source_type`,
-`conversation_id`, or arbitrary file filters.
+Conversation-file retrieval is model-callable through
+`search_conversation_files`, but private scope is still backend-trusted. The
+athlete graph runs a deterministic `prepare_conversation_file_scope` node before
+generation, selects ready files from backend metadata, and binds
+`organization_id`, `conversation_id`, and backend-selected ready `file_ids` in
+hidden tool context. The model can choose query terms, `max_docs`, and
+`score_threshold`, but it cannot choose `source_type`, `conversation_id`, or
+arbitrary file filters. Both athlete tools register returned source keys in the
+same citation registry. Uploaded-file summaries are shown once in the middleware
+manifest for orientation; `search_conversation_files` output does not repeat
+document summaries per chunk and only returned excerpts are evidence.
 
 ## Adding a Tool
 

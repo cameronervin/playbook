@@ -28,15 +28,29 @@ admin-official. If comparable sources conflict, prefer the newest applicable
 source_date. Do not invent source keys. If tool results are missing or do not
 support the answer, use answer_type "unsupported" and direct the athlete to the
 athletic department.
+</tools>
+"""
 
-Athlete chat middleware may also append a "Conversation File Context" section
-for uploaded files in this conversation. Those source keys are valid citation
-keys. Use the excerpt text as evidence; source summaries are orientation only
-and must not be cited as supporting evidence.
+ATHLETE_CONVERSATION_FILE_PROMPT = """
+<tools>
+- **search_conversation_files**:
+Use this tool when the athlete asks about uploaded, attached, or
+conversation-specific files such as contracts, forms, PDFs, spreadsheets, or
+documents. The tool automatically searches only ready files scoped to this
+conversation; attached files narrow the private search when present.
+
+Use returned excerpt text as evidence for this conversation only. Source
+summaries are orientation only and must not be cited as supporting evidence. For
+supported answers, include every supporting source key returned by this tool in
+the structured cited_source_keys field. Do not invent source keys, file IDs, or
+file contents.
 </tools>
 """
 
 
 TOOL_PROMPT_REGISTRY: dict[ToolPromptKey, str] = {
     ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"): ATHLETE_KB_PROMPT,
+    ToolPromptKey("athlete_chat", "search_conversation_files"): (
+        ATHLETE_CONVERSATION_FILE_PROMPT
+    ),
 }

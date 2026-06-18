@@ -21,11 +21,11 @@ def create_athlete_chat_graph(nodes: dict[str, object]) -> StateGraph:
         "safety_check",
         _route_after_safety,
         {
-            "prepare_conversation_file_snippets": "prepare_conversation_file_snippets",
+            "prepare_conversation_file_scope": "prepare_conversation_file_scope",
             "save_state": "save_state",
         },
     )
-    builder.add_edge("prepare_conversation_file_snippets", "run_agent")
+    builder.add_edge("prepare_conversation_file_scope", "run_agent")
     builder.add_edge("run_agent", "save_state")
     builder.add_edge("save_state", END)
     return builder
@@ -33,7 +33,7 @@ def create_athlete_chat_graph(nodes: dict[str, object]) -> StateGraph:
 
 def _route_after_safety(
     state: AthleteChatState,
-) -> Literal["prepare_conversation_file_snippets", "save_state"]:
+) -> Literal["prepare_conversation_file_scope", "save_state"]:
     if state.get("should_bypass_agent", False):
         return "save_state"
-    return "prepare_conversation_file_snippets"
+    return "prepare_conversation_file_scope"

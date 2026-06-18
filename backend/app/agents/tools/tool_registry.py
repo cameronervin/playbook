@@ -15,8 +15,10 @@ import structlog
 from langchain_core.tools import BaseTool
 
 from app.agents.tools.knowledgebase import (
+    ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
     ATHLETE_KB_TOOL_PROFILE,
     SourceRegistry,
+    create_conversation_file_search_tool,
     create_knowledgebase_search_tool,
 )
 from app.agents.tools.tool_prompts import ToolPromptKey
@@ -30,6 +32,7 @@ logger = structlog.get_logger(__name__)
 ToolWorkflow = Literal["athlete_chat"]
 
 ATHLETE_CHAT_CHAIN_NAMES: tuple[str, ...] = ("athlete_chat",)
+ATHLETE_CHAT_SOURCE_REGISTRY_KEY = "athlete_chat"
 
 WORKFLOW_CHAIN_NAMES: dict[ToolWorkflow, tuple[str, ...]] = {
     "athlete_chat": ATHLETE_CHAT_CHAIN_NAMES,
@@ -70,16 +73,25 @@ def _kb_tools_enabled(context: ToolBuildContext) -> bool:
 
 
 def _create_athlete_kb_tool(context: ToolBuildContext) -> BaseTool:
-    source_registry = context.source_registries.setdefault(
-        ATHLETE_KB_TOOL_PROFILE.tool_name,
-        {},
-    )
     return create_knowledgebase_search_tool(
         ATHLETE_KB_TOOL_PROFILE,
         provider=context.knowledgebase_provider,
         app_settings=context.settings,  # type: ignore[arg-type]
-        source_registry=source_registry,
+        source_registry=_athlete_chat_source_registry(context),
     )
+
+
+def _create_athlete_conversation_file_tool(context: ToolBuildContext) -> BaseTool:
+    return create_conversation_file_search_tool(
+        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
+        provider=context.knowledgebase_provider,
+        app_settings=context.settings,  # type: ignore[arg-type]
+        source_registry=_athlete_chat_source_registry(context),
+    )
+
+
+def _athlete_chat_source_registry(context: ToolBuildContext) -> SourceRegistry:
+    return context.source_registries.setdefault(ATHLETE_CHAT_SOURCE_REGISTRY_KEY, {})
 
 
 TOOL_REGISTRY: tuple[ToolSpec, ...] = (
@@ -90,8 +102,20 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         workflow_chain_targets={
             "athlete_chat": ("athlete_chat",),
         },
+        prompt_keys=(ToolPromptKey("athlete_chat", ATHLETE_KB_TOOL_PROFILE.tool_name),),
+    ),
+    ToolSpec(
+        tool_name=ATHLETE_CONVERSATION_FILE_TOOL_PROFILE.tool_name,
+        factory=_create_athlete_conversation_file_tool,
+        enabled_predicate=_kb_tools_enabled,
+        workflow_chain_targets={
+            "athlete_chat": ("athlete_chat",),
+        },
         prompt_keys=(
-            ToolPromptKey("athlete_chat", ATHLETE_KB_TOOL_PROFILE.tool_name),
+            ToolPromptKey(
+                "athlete_chat",
+                ATHLETE_CONVERSATION_FILE_TOOL_PROFILE.tool_name,
+            ),
         ),
     ),
 )

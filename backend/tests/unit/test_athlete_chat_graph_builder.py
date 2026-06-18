@@ -86,6 +86,9 @@ def test_compile_athlete_chat_graph_uses_injected_dependencies(
     )
 
     assert hasattr(graph, "astream")
-    assert captured_chain_tool_names == ["search_playbook_knowledgebase"]
+    assert captured_chain_tool_names == [
+        "search_playbook_knowledgebase",
+        "search_conversation_files",
+    ]
     assert captured_source_registries == [{}]
     assert not hasattr(graphs_builder, "ATHLETE_KB_TOOL_PROFILE")

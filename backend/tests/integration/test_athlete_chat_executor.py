@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from uuid import UUID
 import re
+from uuid import UUID
 
 import pytest
 
@@ -10,9 +10,9 @@ from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
 from app.agents.states.athlete_chat_state import AthleteChatStructuredResponse
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.repositories.conversations import (
+    ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
-    ConversationFileRepository,
     MessageCitationRepository,
 )
 from app.repositories.identity import OrganizationRepository, UserRepository
@@ -183,7 +183,15 @@ class FailIfInvokedChain:
         pytest.fail("safety bypass should not invoke the athlete chat agent")
 
 
-class FileContextChain:
+def _source_key_from_tool_result(tool_result: str) -> str | None:
+    match = re.search(r"\[(S-[^\]]+)\]", tool_result)
+    return match.group(1) if match else None
+
+
+class FileToolChain:
+    def __init__(self, file_tool) -> None:
+        self.file_tool = file_tool
+
     async def ainvoke(
         self,
         input: dict,
@@ -192,9 +200,14 @@ class FileContextChain:
             str(getattr(message, "content", "")) for message in input["messages"]
         )
         assert "## Conversation File Context" not in message_render
-        rendered = str(input.get("conversation_file_context", ""))
-        match = re.search(r"\[(S-[^\]]+)\]", rendered)
-        if match is None:
+        assert not input.get("conversation_file_context")
+        if input.get("conversation_file_ready_file_ids"):
+            manifest = str(input.get("conversation_file_manifest", ""))
+            assert "## Uploaded File Manifest" in manifest
+            assert "search_conversation_files excerpts as evidence" in manifest
+        tool_result = await self.file_tool.ainvoke({"query": "contract approval"})
+        source_key = _source_key_from_tool_result(tool_result)
+        if source_key is None:
             return {
                 "structured_response": AthleteChatStructuredResponse(
                     answer="I do not have file support.",
@@ -208,7 +221,7 @@ class FileContextChain:
             "structured_response": AthleteChatStructuredResponse(
                 answer="The uploaded contract requires department approval.",
                 answer_type="grounded_answer",
-                cited_source_keys=[match.group(1)],
+                cited_source_keys=[source_key],
                 topic_labels=["nil"],
                 risk_labels=["compliance"],
             )
@@ -216,18 +229,19 @@ class FileContextChain:
 
 
 class MixedSourceChain:
-    def __init__(self, tool) -> None:
-        self.tool = tool
+    def __init__(self, kb_tool, file_tool) -> None:
+        self.kb_tool = kb_tool
+        self.file_tool = file_tool
 
     async def ainvoke(
         self,
         input: dict,
     ) -> dict[str, AthleteChatStructuredResponse]:
-        tool_result = await self.tool.ainvoke({"query": "nil disclosure"})
-        admin_source_key = tool_result.split("]", maxsplit=1)[0].lstrip("[")
-        rendered_file_context = str(input.get("conversation_file_context", ""))
-        file_match = re.search(r"\[(S-[^\]]+)\]", rendered_file_context)
-        assert file_match is not None
+        kb_result = await self.kb_tool.ainvoke({"query": "nil disclosure"})
+        admin_source_key = kb_result.split("]", maxsplit=1)[0].lstrip("[")
+        file_result = await self.file_tool.ainvoke({"query": "contract approval"})
+        file_source_key = _source_key_from_tool_result(file_result)
+        assert file_source_key is not None
         return {
             "structured_response": AthleteChatStructuredResponse(
                 answer=(
@@ -235,7 +249,7 @@ class MixedSourceChain:
                     "contract clause."
                 ),
                 answer_type="grounded_answer",
-                cited_source_keys=[admin_source_key, file_match.group(1)],
+                cited_source_keys=[admin_source_key, file_source_key],
                 topic_labels=["nil"],
                 risk_labels=["compliance"],
             )
@@ -254,12 +268,17 @@ def fake_chain_that_fails(**_: object) -> FailIfInvokedChain:
     return FailIfInvokedChain()
 
 
-def fake_file_context_chain(**_: object) -> FileContextChain:
-    return FileContextChain()
+def fake_file_context_chain(*, tools: list, **_: object) -> FileToolChain:
+    tools_by_name = {tool.name: tool for tool in tools}
+    return FileToolChain(tools_by_name["search_conversation_files"])
 
 
 def fake_mixed_source_chain(*, tools: list, **_: object) -> MixedSourceChain:
-    return MixedSourceChain(tools[0])
+    tools_by_name = {tool.name: tool for tool in tools}
+    return MixedSourceChain(
+        tools_by_name["search_playbook_knowledgebase"],
+        tools_by_name["search_conversation_files"],
+    )
 
 
 @pytest.mark.asyncio
@@ -476,7 +495,8 @@ async def test_athlete_chat_executor_safety_bypass_skips_agent_and_persists_inst
         assistant_message.id
     )
     records = [
-        record async for record in provider.iter_events("task-emergency", after_id="0-0")
+        record
+        async for record in provider.iter_events("task-emergency", after_id="0-0")
     ]
 
     assert result["answer_type"] == "emergency_instruction"
@@ -537,7 +557,11 @@ async def test_athlete_chat_executor_retrieves_attached_ready_file_and_persists_
         storage_key="conversation-files/originals/nil-contract.pdf",
         extraction_status="ready",
     )
-    await file_repo.update_ingestion_mirror(file, chunk_count=2)
+    await file_repo.update_ingestion_mirror(
+        file,
+        chunk_count=2,
+        summary="Uploaded contract orientation summary.",
+    )
     kb_provider = FakeKnowledgebaseProvider()
     kb_provider.conversation_file_chunks = [
         RetrievedChunk(
@@ -640,7 +664,11 @@ async def test_athlete_chat_executor_persists_mixed_admin_and_file_citations(
         storage_key="conversation-files/originals/nil-contract.pdf",
         extraction_status="ready",
     )
-    await file_repo.update_ingestion_mirror(file, chunk_count=1)
+    await file_repo.update_ingestion_mirror(
+        file,
+        chunk_count=1,
+        summary="Uploaded contract orientation summary.",
+    )
     kb_provider = FakeKnowledgebaseProvider()
     kb_provider.conversation_file_chunks = [
         RetrievedChunk(
@@ -758,7 +786,11 @@ async def test_athlete_chat_executor_searches_all_ready_files_when_none_attached
         storage_key="conversation-files/originals/empty.pdf",
         extraction_status="ready",
     )
-    await file_repo.update_ingestion_mirror(ready_file, chunk_count=1)
+    await file_repo.update_ingestion_mirror(
+        ready_file,
+        chunk_count=1,
+        summary="Ready file orientation summary.",
+    )
     await file_repo.update_ingestion_mirror(failed_file, chunk_count=4)
     await file_repo.update_ingestion_mirror(zero_chunk_file, chunk_count=0)
     kb_provider = FakeKnowledgebaseProvider()
@@ -794,6 +826,78 @@ async def test_athlete_chat_executor_searches_all_ready_files_when_none_attached
         attached_file_ids=[],
     )
 
-    assert kb_provider.conversation_file_requests[0]["file_ids"] == [
-        str(ready_file.id)
-    ]
+    assert kb_provider.conversation_file_requests[0]["file_ids"] == [str(ready_file.id)]
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_executor_file_tool_skips_provider_when_no_ready_files(
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        chains_builder,
+        "create_athlete_chat_chain",
+        fake_file_context_chain,
+    )
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-agent-file-none",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-file-none@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-file-none",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    user_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="What does my uploaded file say about approval?",
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={"task_id": "task-file-none", "user_message_id": str(user_message.id)},
+    )
+    file = await ConversationFileRepository(db_session).create(
+        conversation_id=conversation.id,
+        uploaded_by=athlete.id,
+        filename="pending.pdf",
+        content_type="application/pdf",
+        size_bytes=123,
+        storage_key="conversation-files/originals/pending.pdf",
+        extraction_status="uploaded",
+    )
+    kb_provider = FakeKnowledgebaseProvider()
+
+    result = await AthleteChatExecutor(
+        session=db_session,
+        chat_model=object(),
+        knowledgebase_provider=kb_provider,
+        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
+        settings=test_settings,
+    ).execute(
+        task_id="task-file-none",
+        conversation_id=conversation.id,
+        athlete_user_id=athlete.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant_message.id,
+        organization_id=organization.id,
+        attached_file_ids=[file.id],
+    )
+
+    citations = await MessageCitationRepository(db_session).list_by_message(
+        assistant_message.id
+    )
+
+    assert result["answer_type"] == "unsupported"
+    assert kb_provider.conversation_file_requests == []
+    assert citations == []

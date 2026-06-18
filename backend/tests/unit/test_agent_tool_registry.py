@@ -7,6 +7,7 @@ from app.agents.tools.tool_assignment import (
 )
 from app.agents.tools.tool_prompts import ToolPromptKey
 from app.agents.tools.tool_registry import (
+    ATHLETE_CHAT_SOURCE_REGISTRY_KEY,
     TOOL_REGISTRY,
     WORKFLOW_CHAIN_NAMES,
     ToolBuildContext,
@@ -35,20 +36,26 @@ class FakeKnowledgebaseProvider:
         )
 
 
-def test_registry_declares_athlete_chat_knowledgebase_tool() -> None:
+def test_registry_declares_athlete_chat_knowledgebase_tools() -> None:
     assert WORKFLOW_CHAIN_NAMES == {"athlete_chat": ("athlete_chat",)}
 
-    spec = next(
-        spec for spec in TOOL_REGISTRY if spec.tool_name == "search_playbook_knowledgebase"
-    )
+    specs = {spec.tool_name: spec for spec in TOOL_REGISTRY}
 
-    assert spec.workflow_chain_targets == {"athlete_chat": ("athlete_chat",)}
-    assert spec.prompt_keys == (
+    kb_spec = specs["search_playbook_knowledgebase"]
+    file_spec = specs["search_conversation_files"]
+    assert kb_spec.workflow_chain_targets == {"athlete_chat": ("athlete_chat",)}
+    assert file_spec.workflow_chain_targets == {"athlete_chat": ("athlete_chat",)}
+    assert kb_spec.prompt_keys == (
         ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"),
     )
+    assert file_spec.prompt_keys == (
+        ToolPromptKey("athlete_chat", "search_conversation_files"),
+    )
 
 
-def test_registry_builds_athlete_kb_tool_and_source_registry(test_settings) -> None:
+def test_registry_builds_athlete_tools_and_shared_source_registry(
+    test_settings,
+) -> None:
     context = ToolBuildContext(
         settings=test_settings,
         knowledgebase_provider=FakeKnowledgebaseProvider(),
@@ -56,9 +63,12 @@ def test_registry_builds_athlete_kb_tool_and_source_registry(test_settings) -> N
 
     tools = resolve_active_tools(context)
 
-    assert [tool.name for tool in tools] == ["search_playbook_knowledgebase"]
-    assert "search_playbook_knowledgebase" in context.source_registries
-    assert context.source_registries["search_playbook_knowledgebase"] == {}
+    assert [tool.name for tool in tools] == [
+        "search_playbook_knowledgebase",
+        "search_conversation_files",
+    ]
+    assert ATHLETE_CHAT_SOURCE_REGISTRY_KEY in context.source_registries
+    assert context.source_registries[ATHLETE_CHAT_SOURCE_REGISTRY_KEY] == {}
 
 
 def test_assignment_maps_athlete_kb_tool_to_athlete_chat(test_settings) -> None:
@@ -74,10 +84,15 @@ def test_assignment_maps_athlete_kb_tool_to_athlete_chat(test_settings) -> None:
 
 
 def test_prompt_bindings_include_athlete_kb_snippet_only_when_active() -> None:
-    active = build_prompt_bindings(["search_playbook_knowledgebase"])
+    active = build_prompt_bindings(
+        ["search_playbook_knowledgebase", "search_conversation_files"]
+    )
     inactive = build_prompt_bindings([])
 
-    key = ToolPromptKey("athlete_chat", "search_playbook_knowledgebase")
-    assert key in active
-    assert "cited_source_keys" in active[key]
+    kb_key = ToolPromptKey("athlete_chat", "search_playbook_knowledgebase")
+    file_key = ToolPromptKey("athlete_chat", "search_conversation_files")
+    assert kb_key in active
+    assert file_key in active
+    assert "cited_source_keys" in active[kb_key]
+    assert "uploaded" in active[file_key]
     assert inactive == {}

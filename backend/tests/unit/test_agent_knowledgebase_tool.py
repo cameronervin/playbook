@@ -3,8 +3,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.agents.tools.knowledgebase import (
+    ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
     ATHLETE_KB_TOOL_PROFILE,
     KnowledgebaseToolProfile,
+    conversation_file_search_context,
+    create_conversation_file_search_tool,
     create_knowledgebase_search_tool,
     format_conversation_file_context,
     register_knowledgebase_sources,
@@ -13,6 +16,8 @@ from app.infrastructure.knowledgebase.providers.local_kb import LocalKBProvider
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
 
 ORG_ID = UUID("00000000-0000-0000-0000-000000000099")
+CONVERSATION_ID = UUID("00000000-0000-0000-0000-000000000098")
+FILE_ID = UUID("00000000-0000-0000-0000-000000000097")
 
 
 class FakeKnowledgebaseProvider:
@@ -22,6 +27,7 @@ class FakeKnowledgebaseProvider:
         self.result = result
         self.requests: list[dict[str, object]] = []
         self.admin_upload_requests: list[dict[str, object]] = []
+        self.conversation_file_requests: list[dict[str, object]] = []
 
     async def search(
         self,
@@ -70,6 +76,35 @@ class FakeKnowledgebaseProvider:
         self.admin_upload_requests.append(self.requests[-1])
         return result
 
+    async def search_conversation_files(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        conversation_id: UUID | str,
+        file_ids: list[UUID | str] | None = None,
+        max_docs: int = 10,
+        score_threshold: float = 0.7,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        self.conversation_file_requests.append(
+            {
+                "query": query,
+                "organization_id": str(organization_id),
+                "conversation_id": str(conversation_id),
+                "file_ids": [str(file_id) for file_id in file_ids or []],
+                "max_docs": max_docs,
+                "score_threshold": score_threshold,
+                "configuration_id": configuration_id,
+            }
+        )
+        return self.result or KnowledgebaseResult(
+            query=query,
+            context="",
+            sources=[],
+            zero_hit=True,
+            latency_ms=1,
+        )
+
     async def health_check(self) -> bool:
         return True
 
@@ -107,6 +142,15 @@ async def _invoke_tool(tool, query: str):
         {"query": query},
         config={"configurable": {"organization_id": str(ORG_ID)}},
     )
+
+
+async def _invoke_conversation_file_tool(tool, query: str):
+    with conversation_file_search_context(
+        organization_id=str(ORG_ID),
+        conversation_id=str(CONVERSATION_ID),
+        file_ids=[str(FILE_ID)],
+    ):
+        return await tool.ainvoke({"query": query})
 
 
 def _profile(**overrides: object) -> KnowledgebaseToolProfile:
@@ -206,7 +250,9 @@ async def test_knowledgebase_tool_formats_citation_ready_metadata() -> None:
     assert "Chunk index: 4" in result
 
 
-async def test_local_kb_provider_accepts_canonical_results_payload(test_settings) -> None:
+async def test_local_kb_provider_accepts_canonical_results_payload(
+    test_settings,
+) -> None:
     provider = _FakeLocalKBProvider(
         test_settings,
         {
@@ -385,7 +431,114 @@ async def test_knowledgebase_tool_uses_admin_upload_provider_method() -> None:
     }
 
 
-def test_conversation_file_context_registers_sources_and_redacts_sensitive_metadata() -> None:
+async def test_conversation_file_tool_hides_private_scope_and_searches_ready_files() -> (
+    None
+):
+    provider = FakeKnowledgebaseProvider(
+        KnowledgebaseResult(
+            query="approval",
+            context="context",
+            sources=[
+                RetrievedChunk(
+                    text="The uploaded contract requires department approval.",
+                    similarity_score=0.94,
+                    metadata={
+                        "source_type": "conversation_file",
+                        "organization_id": str(ORG_ID),
+                        "conversation_id": str(CONVERSATION_ID),
+                        "conversation_file_id": str(FILE_ID),
+                        "document_id": str(FILE_ID),
+                        "kb_service_document_id": "00000000-0000-0000-0000-000000000096",
+                        "chunk_id": "00000000-0000-0000-0000-000000000095",
+                        "chunk_index": 2,
+                        "source_title": "contract.pdf",
+                        "source_summary": "A summary that orients the file.",
+                    },
+                )
+            ],
+            confidence=0.94,
+            zero_hit=False,
+            latency_ms=5,
+        )
+    )
+    registry = {}
+    tool = create_conversation_file_search_tool(
+        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
+        provider=provider,
+        source_registry=registry,
+    )
+
+    result = await _invoke_conversation_file_tool(tool, "contract approval")
+
+    assert tool.name == "search_conversation_files"
+    assert "organization_id" not in tool.args
+    assert "conversation_id" not in tool.args
+    assert "file_ids" not in tool.args
+    assert provider.conversation_file_requests == [
+        {
+            "query": "contract approval",
+            "organization_id": str(ORG_ID),
+            "conversation_id": str(CONVERSATION_ID),
+            "file_ids": [str(FILE_ID)],
+            "max_docs": 10,
+            "score_threshold": 0.7,
+            "configuration_id": None,
+        }
+    ]
+    assert "[S-" in result
+    assert "Source type: conversation_file" in result
+    assert "Source summary (orientation only)" not in result
+    assert list(registry.values())[0].metadata["conversation_file_id"] == str(FILE_ID)
+    assert list(registry.values())[0].metadata["source_summary"] == (
+        "A summary that orients the file."
+    )
+
+
+async def test_conversation_file_tool_returns_no_ready_files_message_without_provider_call() -> (
+    None
+):
+    provider = FakeKnowledgebaseProvider()
+    tool = create_conversation_file_search_tool(
+        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
+        provider=provider,
+    )
+
+    with conversation_file_search_context(
+        organization_id=str(ORG_ID),
+        conversation_id=str(CONVERSATION_ID),
+        file_ids=[],
+    ):
+        result = await tool.ainvoke({"query": "approval"})
+
+    assert result == "No ready uploaded conversation files are available."
+    assert provider.conversation_file_requests == []
+
+
+async def test_conversation_file_tool_handles_provider_errors_without_leaking_details() -> (
+    None
+):
+    class BrokenProvider(FakeKnowledgebaseProvider):
+        async def search_conversation_files(
+            self,
+            *args: object,
+            **kwargs: object,
+        ) -> KnowledgebaseResult:
+            raise RuntimeError("secret private retrieval details")
+
+    tool = create_conversation_file_search_tool(
+        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
+        provider=BrokenProvider(),
+    )
+
+    result = await _invoke_conversation_file_tool(tool, "approval")
+
+    assert result == "Conversation file search temporarily unavailable."
+    assert "secret" not in result
+
+
+def test_conversation_file_context_registers_sources_and_redacts_sensitive_metadata() -> (
+    None
+):
     registry = {}
     result = KnowledgebaseResult(
         query="approval",
@@ -422,7 +575,8 @@ def test_conversation_file_context_registers_sources_and_redacts_sensitive_metad
     assert sources[0].metadata["source_type"] == "conversation_file"
     assert "signature=secret" not in context
     assert "full private file text" not in context
-    assert "Source summary (orientation only)" in context
+    assert "Source summary (orientation only)" not in context
+    assert sources[0].metadata["source_summary"] == "A summary that orients the file."
     assert "Excerpt: The contract requires department approval" in context
 
 
@@ -458,7 +612,9 @@ async def test_knowledgebase_tool_returns_zero_hit_message() -> None:
     assert result == "No athlete-visible sources found."
 
 
-async def test_knowledgebase_tool_handles_provider_errors_without_leaking_details() -> None:
+async def test_knowledgebase_tool_handles_provider_errors_without_leaking_details() -> (
+    None
+):
     class BrokenProvider(FakeKnowledgebaseProvider):
         async def search(self, *args: object, **kwargs: object) -> KnowledgebaseResult:
             raise RuntimeError("secret transport details")
