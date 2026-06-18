@@ -51,10 +51,12 @@ POST /api/kb/search
   -> query embedding -> pgvector cosine search -> ranked chunks
 ```
 
-The implemented Phase 0 search path is semantic-only. It does not perform
-PostgreSQL full-text lexical search, reciprocal-rank fusion, or cross-encoded
-reranking. Later phases keep the same `/search` contract while adding lexical
-candidates and LiteLLM `/rerank` behind the service boundary.
+The implemented search path is still semantic-only. It does not perform
+PostgreSQL full-text lexical search, reciprocal-rank fusion, or call the
+cross-encoder reranker during `/search`. Phase 2 adds the reusable internal
+LiteLLM `/rerank` provider; later phases keep the same `/search` contract while
+adding lexical candidates and reranker orchestration behind the service
+boundary.
 
 Stack:
 - FastAPI on port 8001.
@@ -63,8 +65,8 @@ Stack:
 - S3-compatible staging.
 - LiteLLM embeddings and source summaries by default, with direct provider mode
   only for local or break-glass embedding use.
-- Reserved LiteLLM rerank alias `playbook-rerank` for future cross-encoder
-  reranking.
+- LiteLLM rerank alias `playbook-rerank` plus internal reranker provider for
+  later cross-encoder search orchestration.
 - PostgreSQL + pgvector.
 
 <!-- V2 CHANGE: Use the existing KB service as the retrieval layer for Playbook athlete chat and admin document ingestion. -->

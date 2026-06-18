@@ -76,8 +76,8 @@ class Settings(BaseSettings):
     KB_SUMMARY_INPUT_MAX_TOKENS: int = 3000
     KB_SUMMARY_MAX_OUTPUT_TOKENS: int = 160
 
-    # Reranking placeholders. Phase 0 only reserves the contract/config shape;
-    # search remains semantic-only until later hybrid/rerank phases wire this in.
+    # Reranking. Phase 2 provides the LiteLLM /rerank client; search remains
+    # semantic-only until later hybrid/rerank phases wire it into orchestration.
     KB_RERANK_ENABLED: bool = False
     KB_RERANK_CANDIDATE_LIMIT: int = 50
     KB_RERANK_TIMEOUT_SECONDS: float = 10.0

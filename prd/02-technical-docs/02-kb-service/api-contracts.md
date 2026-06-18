@@ -207,9 +207,11 @@ Response:
 ```
 
 `score` is always the final retrieval score exposed to service callers. Current
-Phase 0 responses use semantic cosine similarity for `score`; later
-hybrid/rerank phases may populate raw semantic, lexical, hybrid, and rerank
-diagnostics inside `metadata` only. Reserved metadata keys are
+runtime responses use semantic cosine similarity for `score`; the Phase 2
+reranker provider is internal infrastructure and does not add top-level search
+response fields. Later hybrid/rerank orchestration may populate raw semantic,
+lexical, hybrid, and rerank diagnostics inside `metadata` only. Reserved
+metadata keys are
 `semantic_score`, `semantic_rank`, `lexical_score`, `lexical_rank`,
 `hybrid_score`, `rerank_score`, and `ranking_strategy`.
 

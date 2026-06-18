@@ -244,13 +244,13 @@ keeps semantic relevance bands and prefers newer `source_date` within
 near-similar matches. Admin-uploaded shared KB documents are official by
 definition for MVP, and priority is not used as a ranking control.
 
-Phase 1 for hybrid search/reranking configures only model serving and routing:
-the self-hosted Infinity reranker is available through the LiteLLM
-`playbook-rerank` alias, but KB-service search does not call `/rerank` yet.
-The KB-service rerank placeholders remain
+Hybrid search/reranking now has model serving, routing, and a reusable
+KB-service LiteLLM `/rerank` provider. The self-hosted Infinity reranker is
+available through the LiteLLM `playbook-rerank` alias, but KB-service search
+does not call the provider yet. The KB-service rerank settings remain
 `LITELLM_RERANK_MODEL=playbook-rerank`, `KB_RERANK_ENABLED=false`,
 `KB_RERANK_CANDIDATE_LIMIT=50`, `KB_RERANK_TIMEOUT_SECONDS=10.0`, and
 `KB_RERANK_FAIL_OPEN=true`. Later phases add lexical candidates,
-reciprocal-rank fusion, and LiteLLM `/rerank`; until then `score` is semantic
-cosine similarity and any future raw ranking diagnostics belong in result
-`metadata`.
+reciprocal-rank fusion, and SearchService orchestration; until then `score` is
+semantic cosine similarity and any future raw ranking diagnostics belong in
+result `metadata`.

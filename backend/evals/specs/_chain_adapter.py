@@ -9,15 +9,18 @@ a ``HumanMessage`` and passes any other ``input`` keys straight into the chain
 state. A real product replaces ``_extra_state`` with its own input hydration (the
 source harness hydrated stored workflow artifacts into Pydantic models here).
 
-KB capture: KB tools call ``get_kb_provider()`` lazily at invoke time, so for the
-RAG specs we temporarily wrap that provider with a recorder and collect the
+KB capture: KB tools call ``get_kb_provider()`` lazily at invoke time, so this
+legacy scaffold temporarily wraps that provider with a recorder and collects the
 retrieved chunk texts. They are shaped as ``events=[{"retriever": {"documents":
-[...]}}]`` so ``RagasJudge`` can read ``retrieved_contexts`` unchanged. Runs are
-sequential within a run, so the scoped patch is safe.
+[...]}}]`` so ``RagasJudge`` can read ``retrieved_contexts`` unchanged. Because
+that wrapper uses a process-wide patch, capture is serialized per event loop when
+Langfuse runs dataset items concurrently. Real Playbook KB eval specs should move
+to per-item injected providers/source registries for fully parallel RAG capture.
 """
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -29,6 +32,8 @@ from langchain_core.messages import HumanMessage
 from evals.core.types import GraphRun
 
 logger = structlog.get_logger(__name__)
+
+_KB_CAPTURE_LOCKS: dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
 
 
 def _item_input(item: Any) -> Any:
@@ -65,8 +70,8 @@ def _record_kb():
     patch is a no-op and the run proceeds with no captured contexts.
     """
     try:
-        import app.agents.tools.example_kb_tool as kb_tool
-        from app.infrastructure.knowledgebase import get_kb_provider
+        import app.agents.tools.example_kb_tool as kb_tool  # noqa: PLC0415
+        from app.infrastructure.knowledgebase import get_kb_provider  # noqa: PLC0415
     except Exception:  # noqa: BLE001 — KB layer optional; capture nothing
         yield None
         return
@@ -78,6 +83,16 @@ def _record_kb():
         yield recorder
     finally:
         kb_tool.get_kb_provider = original  # type: ignore[assignment]
+
+
+def _kb_capture_lock() -> asyncio.Lock:
+    """Return a loop-local lock for the legacy process-wide KB patch."""
+    loop = asyncio.get_running_loop()
+    lock = _KB_CAPTURE_LOCKS.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _KB_CAPTURE_LOCKS[loop] = lock
+    return lock
 
 
 def _question(item_input: Any) -> str:
@@ -96,9 +111,9 @@ def _extra_state(item_input: Any) -> dict[str, Any]:
     """
     if not isinstance(item_input, dict):
         return {}
-    from pathlib import Path
+    from pathlib import Path  # noqa: PLC0415
 
-    from evals.core.sync import resolve_blob_refs
+    from evals.core.sync import resolve_blob_refs  # noqa: PLC0415
 
     blob_base = Path(__file__).resolve().parents[1] / "datasets"
     resolved = resolve_blob_refs(item_input, base_dir=blob_base)
@@ -123,7 +138,7 @@ def _invoke_config() -> dict[str, Any]:
     """Minimal ainvoke config: a fresh thread + a Langfuse handler when available."""
     config: dict[str, Any] = {"configurable": {"thread_id": str(uuid.uuid4())}}
     try:
-        from app.observability.langfuse_init import create_langfuse_handler
+        from app.observability.langfuse_init import create_langfuse_handler  # noqa: I001, PLC0415
 
         handler = create_langfuse_handler()
     except Exception:  # noqa: BLE001 — tracing optional
@@ -150,8 +165,9 @@ def make_chain_adapter(
 
         events: list[dict] = []
         if capture_kb:
-            with _record_kb() as recorder:
-                result = await chain.ainvoke(state, config=config)
+            async with _kb_capture_lock():
+                with _record_kb() as recorder:
+                    result = await chain.ainvoke(state, config=config)
             if recorder is not None and recorder.captured:
                 events.append({"retriever": {"documents": recorder.captured}})
         else:

@@ -164,7 +164,35 @@ Changing the model or dimension requires re-ingesting existing documents.
 
 ---
 
-## 4. pgvector cosine search
+## 4. Rerankers
+
+`rerankers/` provides the Phase 2 reranker provider surface:
+
+- `base.py` — `BaseRerankProvider`, `RerankCandidate`, `RerankedCandidate`, and
+  the `RerankProviderError` / `RerankTransientError` hierarchy.
+- `litellm.py` — sync HTTPX-backed LiteLLM `/rerank` provider. It sends
+  `model`, `query`, ordered `documents`, and optional bounded `top_n`, then maps
+  returned `results[*].index` and `results[*].relevance_score` back to the
+  original chunk identities.
+- `factory.py` — cached process-wide provider construction using
+  `LITELLM_RERANK_MODEL`, `KB_RERANK_TIMEOUT_SECONDS`, and
+  `KB_RERANK_FAIL_OPEN`.
+
+The provider logs only request metadata such as model alias, counts, status,
+failure class, and elapsed time. It must not log raw query text, chunk text,
+returned document text, source URIs, or secrets.
+
+When `KB_RERANK_FAIL_OPEN=true`, retryable LiteLLM failures return candidates in
+input order with `rerank_score=None`. Fail-closed mode raises instead. Malformed
+or non-retryable responses always raise.
+
+`SearchService` does not call the reranker yet. Later hybrid search phases will
+use this provider after lexical candidates, dedupe, and reciprocal-rank fusion
+exist.
+
+---
+
+## 5. pgvector cosine search
 
 `vectorstore/pgvector.py` exposes:
 
@@ -185,7 +213,7 @@ those files land.
 
 ---
 
-## 5. IO / S3
+## 6. IO / S3
 
 - `io/s3_client.py` — `build_s3_client()` (process-wide cached boto3 client,
   honours `S3_ENDPOINT_URL` / region / keys / profile) and

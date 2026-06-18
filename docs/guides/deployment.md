@@ -96,7 +96,7 @@ Recommended deployment shape:
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, `playbook-embed`, optional `playbook-ocr`, and `playbook-rerank` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
 | Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200` |
-| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`, and `KB_RERANK_ENABLED=false` for Phase 0 |
+| KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`, and `KB_RERANK_ENABLED=false` until search orchestration enables reranking |
 | LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `LITELLM_DATABASE_URL`, `LITELLM_PLAYBOOK_RERANK_MODEL`, `INFINITY_API_BASE`, and `INFINITY_API_KEY` |
 
 Use a separate LiteLLM database or at least a separate database/user in the
@@ -124,9 +124,9 @@ model aliases:
 | `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries and fast agent paths |
 | `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
 | `playbook-ocr` | `LITELLM_PLAYBOOK_OCR_MODEL` | opt-in scanned PDF OCR when `OCR_PROVIDER=vlm` |
-| `playbook-rerank` | `LITELLM_PLAYBOOK_RERANK_MODEL` | Infinity reranker alias for future KB-service hybrid/rerank phases |
+| `playbook-rerank` | `LITELLM_PLAYBOOK_RERANK_MODEL` | Infinity reranker alias for KB-service hybrid/rerank phases |
 
-The Phase 1 reranker container is enabled with the `reranker` profile and uses
+The reranker container is enabled with the `reranker` profile and uses
 `michaelf34/infinity:latest-cpu` by default:
 
 ```bash
@@ -134,9 +134,9 @@ docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
   --profile reranker up -d --build reranker litellm
 ```
 
-This only configures model serving and LiteLLM routing. KB-service search still
-uses semantic pgvector retrieval until later phases set `KB_RERANK_ENABLED=true`
-and add the KB-service reranker client.
+This configures model serving and LiteLLM routing. KB-service now also has an
+internal LiteLLM `/rerank` provider, but search still uses semantic pgvector
+retrieval until later phases wire reranking into `SearchService`.
 
 For local Compose, `litellm-db-init` creates a separate `litellm` database in
 the local Postgres container. Production should provision the LiteLLM database

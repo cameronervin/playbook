@@ -16,6 +16,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+import httpx
+
 from app.core.config import settings
 
 if TYPE_CHECKING:
@@ -24,6 +26,8 @@ if TYPE_CHECKING:
 _ERR_DIRECT_KEY_REQUIRED = "OPENAI_API_KEY must be set when using direct provider mode"
 _ERR_LITELLM_URL_REQUIRED = "LITELLM_BASE_URL must be set when using LiteLLM mode"
 _ERR_LITELLM_KEY_REQUIRED = "LITELLM_API_KEY must be set when using LiteLLM mode"
+
+_litellm_rerank_client: httpx.Client | None = None
 
 
 @lru_cache
@@ -55,6 +59,33 @@ def get_litellm_embed_client() -> "OpenAI":
     )
 
 
+def get_litellm_rerank_client() -> httpx.Client:
+    """Return the cached sync HTTP client for LiteLLM /rerank."""
+    global _litellm_rerank_client
+    if _litellm_rerank_client is not None:
+        return _litellm_rerank_client
+    if not settings.LITELLM_BASE_URL:
+        raise ValueError(_ERR_LITELLM_URL_REQUIRED)
+    if not settings.LITELLM_API_KEY:
+        raise ValueError(_ERR_LITELLM_KEY_REQUIRED)
+    _litellm_rerank_client = httpx.Client(
+        base_url=settings.LITELLM_BASE_URL,
+        timeout=httpx.Timeout(settings.KB_RERANK_TIMEOUT_SECONDS),
+        headers={"Authorization": f"Bearer {settings.LITELLM_API_KEY}"},
+    )
+    return _litellm_rerank_client
+
+
+def close_litellm_rerank_client() -> None:
+    """Close and clear the cached LiteLLM /rerank HTTP client if it exists."""
+    global _litellm_rerank_client
+    if _litellm_rerank_client is None:
+        return
+    _litellm_rerank_client.close()
+    _litellm_rerank_client = None
+
+
 def clear_client_caches() -> None:
     get_direct_embed_client.cache_clear()
     get_litellm_embed_client.cache_clear()
+    close_litellm_rerank_client()

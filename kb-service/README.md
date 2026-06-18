@@ -38,12 +38,12 @@ database. Search resolves that default internally before vector lookup, so a
 new database returns zero results instead of requiring manual configuration
 seeding.
 
-Search is still intentionally semantic-only. Phase 1 configures the self-hosted
-Infinity reranker and LiteLLM `playbook-rerank` alias for later phases, but this
-service does not call `/rerank` yet. Hybrid lexical candidates,
-reciprocal-rank fusion, and KB-service reranker orchestration are reserved for
-later phases; the current `score` is pgvector cosine similarity
-(`1 - distance`).
+Search is still intentionally semantic-only. The self-hosted Infinity reranker,
+LiteLLM `playbook-rerank` alias, and reusable KB-service LiteLLM `/rerank`
+provider exist for later phases, but `SearchService` does not call the reranker
+yet. Hybrid lexical candidates, reciprocal-rank fusion, and search
+orchestration are reserved for later phases; the current `score` is pgvector
+cosine similarity (`1 - distance`).
 
 ## Stack
 
@@ -55,7 +55,7 @@ later phases; the current `score` is pgvector cosine similarity
 | OCR | Opt-in scanned PDF OCR via LiteLLM VLM alias (`OCR_PROVIDER=vlm`); default is `NullOCRProvider` |
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
 | Embeddings | OpenAI direct or LiteLLM mode (`EmbedProviderMode`), 1536-dim |
-| Reranking | LiteLLM alias `playbook-rerank` points to self-hosted Infinity for later phases; KB-service search keeps it disabled with `KB_RERANK_ENABLED=false` |
+| Reranking | LiteLLM alias `playbook-rerank` points to self-hosted Infinity; `infrastructure/rerankers/` has a reusable LiteLLM `/rerank` provider, while KB-service search keeps orchestration disabled with `KB_RERANK_ENABLED=false` |
 | Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
 | Storage | S3-compatible storage / MinIO locally (boto3), streamed to tempfiles |
 
@@ -77,8 +77,9 @@ app/
     parsers/               contracts + extractors + complexity routing + opt-in VLM OCR
     chunkers/              token-based recursive splitter
     embedders/             ABC + direct + litellm + factory
+    rerankers/             ABC + LiteLLM /rerank provider + factory
     vectorstore/           pgvector cosine search / bulk insert wrappers
-    llm/                   embed client builders (lru_cache)
+    llm/                   embed + rerank client builders
     io/                    S3 streaming tempfile helpers
 alembic/                   pgvector extension + kb schema migrations
 tests/                     pgvector / celery / splitter shims; repo + worker contract tests

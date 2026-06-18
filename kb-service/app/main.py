@@ -29,6 +29,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     app.state.embed_provider = get_embed_provider()
     yield
+    from app.infrastructure.rerankers.factory import (
+        clear_all_caches as clear_rerank_caches,
+    )
+
+    clear_rerank_caches()
     await cleanup_db_engine()
     logger.info("kb_service_shutdown")
 

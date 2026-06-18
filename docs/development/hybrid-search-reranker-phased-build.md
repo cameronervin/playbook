@@ -157,6 +157,14 @@ Do not do yet:
 
 ## Phase 2: KB-Service Reranker Provider
 
+Implementation status:
+
+- Implemented: KB-service now has `infrastructure/rerankers/` with a LiteLLM
+  `/rerank` provider, cached HTTPX client construction, fail-open/fail-closed
+  behavior, sanitized structured logs, and provider unit tests.
+- Still deferred: `SearchService` does not call this provider until later
+  hybrid candidate and orchestration phases.
+
 Scope:
 
 - Add a KB-service reranker abstraction parallel to the existing embedder

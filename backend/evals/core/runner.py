@@ -2,10 +2,10 @@
 
 For one spec:
   Phase 0  sync the on-disk YAML dataset into Langfuse (idempotent).
-  Phase 1  run the agent over every item inside ``item.run(run_name=...)`` so each
-           trace is linked to the dataset run; keep the returned GraphRun in memory.
-  Phase 2  judge each GraphRun across the spec's rubrics; push scores to its trace.
-  Phase 3  aggregate the scores in-memory and check thresholds.
+  Phase 1  let Langfuse run the dataset as an experiment with bounded
+           concurrency. Each task invokes the agent, judges the GraphRun, and
+           caches scores locally while Langfuse attaches traces/evaluations.
+  Phase 2  aggregate the cached scores in-memory and check thresholds.
 
 ``get_client()`` is accessed lazily. The runner never branches on judge or agent
 kind — that lives in ``specs/`` and ``core/judges/``.
@@ -13,7 +13,13 @@ kind — that lives in ``specs/`` and ``core/judges/``.
 
 from __future__ import annotations
 
-from datetime import datetime
+import asyncio
+import hashlib
+import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from threading import RLock
+from typing import Any
 
 import structlog
 
@@ -24,6 +30,56 @@ from evals.core.sync import sync_dataset_to_langfuse
 from evals.core.types import EvalSpec, GraphRun, PerItemResult, RunResult, Score
 
 logger = structlog.get_logger(__name__)
+
+
+DEFAULT_MAX_CONCURRENCY = 5
+
+
+@dataclass
+class _ExperimentState:
+    """Mutable per-run state shared by Langfuse task/evaluator callbacks."""
+
+    scores_by_input: dict[str, list[Score]] = field(default_factory=dict)
+    all_scores: list[Score] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    per_item: list[PerItemResult] = field(default_factory=list)
+    lock: Any = field(default_factory=RLock)
+
+
+def _item_id(item: Any) -> str:
+    return str(getattr(item, "id", "?"))
+
+
+def _item_input(item: Any) -> Any:
+    if isinstance(item, dict):
+        return item.get("input")
+    return getattr(item, "input", None)
+
+
+def _expected_output(item: Any) -> Any:
+    if isinstance(item, dict):
+        return item.get("expected_output")
+    return getattr(item, "expected_output", None)
+
+
+def _input_cache_key(input_obj: Any) -> str:
+    raw = json.dumps(input_obj, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _langfuse_evaluations(scores: list[Score]) -> list[Any]:
+    """Translate internal Scores into Langfuse Experiment Runner evaluations."""
+    from langfuse import Evaluation  # noqa: PLC0415
+
+    return [
+        Evaluation(
+            name=score.name,
+            value=score.value,
+            data_type=score.data_type,
+            comment=score.comment,
+        )
+        for score in scores
+    ]
 
 
 def _per_item_result(item_id: str, trace_id: str | None, scores: list[Score]) -> PerItemResult:
@@ -57,70 +113,89 @@ async def score_run(
                 expected_output=expected_output,
             )
         except Exception as exc:  # noqa: BLE001 — isolate one rubric's failure
-            logger.error(
+            logger.exception(
                 "eval_judge_failed", agent=spec.name, rubric=rubric.name, error=str(exc)
             )
             errors.append(f"rubric '{rubric.name}': {exc}")
     return scores, errors
 
 
-async def run_spec(spec: EvalSpec, run_name: str | None = None) -> RunResult:
-    from langfuse import get_client
+async def run_spec(
+    spec: EvalSpec,
+    run_name: str | None = None,
+    *,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+) -> RunResult:
+    from langfuse import get_client  # noqa: PLC0415
+
+    if max_concurrency < 1:
+        raise ValueError("max_concurrency must be >= 1")
 
     langfuse = get_client()
-    run_name = run_name or f"{spec.name}-{datetime.now().isoformat(timespec='seconds')}"
+    run_name = run_name or f"{spec.name}-{datetime.now(UTC).isoformat(timespec='seconds')}"
 
     # Phase 0: disk YAML is source of truth -> mirror into Langfuse (idempotent).
     sync_dataset_to_langfuse(spec.dataset_path, spec.name)
     dataset = langfuse.get_dataset(spec.name)
 
-    # Phase 1: run the agent over every item, linking each trace to the dataset run.
-    # A single item's agent crash is isolated so the rest of the run continues.
-    runs: list[tuple[str, str, object, GraphRun]] = []  # (item_id, trace_id, expected, GraphRun)
-    errors: list[str] = []
-    run_metadata = {"agent": spec.name, "judge": type(spec.judge).__name__}
-    for item in dataset.items:
-        item_id = str(getattr(item, "id", "?"))
+    state = _ExperimentState()
+
+    async def _task(*, item: Any, **kwargs: Any) -> Any:
+        """Run and score one item. Langfuse handles trace/evaluation attachment."""
+        item_id = _item_id(item)
         try:
-            with item.run(run_name=run_name, run_metadata=run_metadata):
-                graph_run = await spec.adapter(item=item)
-                # The dataset-run span is the active context here, so this resolves
-                # to its trace id (LangfuseSpan exposes no .trace_id attribute).
-                trace_id = langfuse.get_current_trace_id()
-            runs.append((item_id, trace_id, item.expected_output, graph_run))
+            graph_run = await spec.adapter(item=item)
         except Exception as exc:  # noqa: BLE001 — isolate one item's agent failure
-            logger.error("eval_agent_failed", agent=spec.name, item_id=item_id, error=str(exc))
-            errors.append(f"agent run on item {item_id}: {exc}")
-    langfuse.flush()
+            logger.exception("eval_agent_failed", agent=spec.name, item_id=item_id, error=str(exc))
+            with state.lock:
+                state.errors.append(f"agent run on item {item_id}: {exc}")
+            raise
 
-    # Phase 2: judge each GraphRun (held in memory), push scores back to its trace,
-    # and keep the per-item scores + reasoning that back the aggregate means.
-    all_scores: list[Score] = []
-    per_item: list[PerItemResult] = []
-    for item_id, trace_id, expected_output, graph_run in runs:
+        trace_id = langfuse.get_current_trace_id()
         graph_run.trace_id = trace_id
+        expected_output = _expected_output(item)
         scores, item_errors = await score_run(spec, graph_run, expected_output)
-        errors.extend(item_errors)
-        all_scores.extend(scores)
-        per_item.append(_per_item_result(item_id, trace_id, scores))
-        for s in scores:
-            langfuse.create_score(
-                trace_id=trace_id,
-                name=s.name,
-                value=s.value,
-                data_type=s.data_type,
-                comment=s.comment,
-            )
+
+        with state.lock:
+            state.errors.extend(item_errors)
+            state.all_scores.extend(scores)
+            state.per_item.append(_per_item_result(item_id, trace_id, scores))
+            state.scores_by_input[_input_cache_key(_item_input(item))] = scores
+
+        return graph_run.output
+
+    def _evaluator(*, input: Any, output: Any, expected_output: Any = None, **kwargs: Any) -> list[Any]:
+        """Return cached task scores in the shape Langfuse experiments ingest."""
+        with state.lock:
+            scores = list(state.scores_by_input.get(_input_cache_key(input), []))
+        return _langfuse_evaluations(scores)
+
+    def _run_experiment() -> Any:
+        return langfuse.run_experiment(
+            name=run_name,
+            dataset=dataset,
+            task=_task,
+            evaluators=[_evaluator],
+            max_concurrency=max_concurrency,
+            description=(
+                f"Playbook eval for {spec.name}; "
+                f"judge={type(spec.judge).__name__}; concurrency={max_concurrency}"
+            ),
+        )
+
+    # The SDK runner is synchronous while supporting async tasks. Run it in a
+    # worker thread so our async CLI entrypoint never nests event loops.
+    await asyncio.to_thread(_run_experiment)
     langfuse.flush()
 
-    # Phase 3: aggregate in-memory + threshold check, then persist for review.
+    # Phase 2: aggregate in-memory + threshold check, then persist for review.
     result = aggregate.summarize(
         agent=spec.name,
         run_name=run_name,
-        scores=all_scores,
+        scores=state.all_scores,
         thresholds=spec.thresholds,
-        errors=errors,
-        per_item=per_item,
+        errors=state.errors,
+        per_item=state.per_item,
     )
     json_path, _ = write_run_result(result)
     logger.info(

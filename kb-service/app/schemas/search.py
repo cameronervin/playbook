@@ -113,7 +113,7 @@ class SearchResult(BaseModel):
     text: str = Field(description="Retrieved chunk text.")
     score: float = Field(
         description=(
-            "Final caller-facing retrieval score. Current Phase 0 behavior is "
+            "Final caller-facing retrieval score. Current runtime behavior is "
             "semantic cosine similarity (1 - pgvector cosine distance); future "
             "semantic, lexical, hybrid, and rerank diagnostics belong in metadata."
         )

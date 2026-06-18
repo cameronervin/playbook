@@ -43,8 +43,9 @@ query embedding
   -> final ranked chunks
 ```
 
-Phase 0 only reserves the docs, schema descriptions, and config placeholders for
-that target. It does not change runtime search ordering.
+Phase 2 adds the internal LiteLLM `/rerank` provider for that target, but runtime
+search ordering remains semantic-only until later search orchestration phases
+call it.
 
 ## Required Filtering
 
@@ -75,7 +76,7 @@ only when the backend supplies the trusted private conversation scope.
 
 ## Ranking Signals
 
-Current Phase 0 runtime ranking is semantic-only:
+Current runtime ranking is semantic-only:
 - `score` is `1 - pgvector cosine_distance` after the request threshold is
   applied,
 - rows are ordered by ascending cosine distance in KB-service,

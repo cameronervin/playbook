@@ -43,7 +43,7 @@ def build_ingest_metadata(
 
 
 class FakePrivateRetrieval:
-    """In-memory retrieval fake that enforces Phase 0 source-type filters."""
+    """In-memory retrieval fake that enforces current source-type filters."""
 
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows

@@ -24,8 +24,9 @@ Configured aliases:
   defaults route to `openai/gpt-5.4-mini`.
 - `playbook-rerank` for KB-service hybrid/rerank phases through LiteLLM
   `/rerank`. Local defaults route to the self-hosted Infinity service using
-  `infinity/BAAI/bge-reranker-base`. Phase 1 configures the service and alias
-  only; KB-service search remains semantic-only while `KB_RERANK_ENABLED=false`.
+  `infinity/BAAI/bge-reranker-base`. KB-service has an internal LiteLLM
+  `/rerank` provider, but search remains semantic-only while
+  `KB_RERANK_ENABLED=false`.
 
 Provider API keys belong only in the LiteLLM env/secrets. For the local OpenAI
 defaults, set:
@@ -101,7 +102,7 @@ cp deploy/envs/.env.litellm.local.example deploy/envs/.env.litellm.local
 
 The reranker is behind its own Compose profile because the model download can
 slow ordinary development boot. Start LiteLLM plus Infinity when validating
-Phase 1 rerank routing:
+rerank routing:
 
 ```bash
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
