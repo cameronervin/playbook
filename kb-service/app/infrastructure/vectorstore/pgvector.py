@@ -18,9 +18,9 @@ import structlog
 from sqlalchemy import delete, insert
 
 from app.models.vector_embedding import VectorEmbedding
-from app.repositories.vector_mapping import _map_search_row
-from app.repositories.vector_queries import _build_search_statement
-from app.repositories.vector_records import _build_chunk_records
+from app.repositories.vector_repo.mapping import _map_search_row
+from app.repositories.vector_repo.queries import _build_search_statement
+from app.repositories.vector_repo.records import _build_chunk_records
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

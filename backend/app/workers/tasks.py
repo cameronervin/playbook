@@ -20,7 +20,7 @@ from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import get_storage_provider
 from app.infrastructure.streaming import get_agent_stream_provider
 from app.services.agent_stream_service import AgentStreamService
-from app.services.kb_ingest_outbox_service import KbIngestOutboxService
+from app.services.kb_ingest_outbox import KbIngestOutboxService
 from app.services.upload_reconciliation_service import (
     UploadRequestReconciliationService,
 )

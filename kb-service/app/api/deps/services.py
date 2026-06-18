@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.infrastructure.db.session import get_db
 from app.repositories.vector_repo import AsyncVectorRepository
 from app.services.configuration_service import ConfigurationService
-from app.services.ingestion_service import IngestionService
+from app.services.ingestion import IngestionService
 from app.services.search_service import SearchService
 
 if TYPE_CHECKING:

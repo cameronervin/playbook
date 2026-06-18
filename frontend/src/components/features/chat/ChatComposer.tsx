@@ -5,6 +5,7 @@ import { AlertTriangle, FileText, LoaderCircle, Paperclip, Send } from 'lucide-r
 import { Button } from '@/src/components/ui'
 import { SUPPORTED_UPLOAD_ACCEPT } from '@/src/lib/constants/uploads'
 import type { ConversationFileSummary } from '@/src/types/conversations'
+import type { ChatUploadRow } from '@/src/components/features/chat/chatTypes'
 
 export interface ChatComposerHandle {
   focus: () => void
@@ -17,16 +18,6 @@ interface ChatComposerProps {
   localUploads?: ChatUploadRow[]
   onAttachFile?: (file: File) => void
   onSend: (message: string) => void
-}
-
-export type ChatUploadPhase = 'pending' | 'requesting' | 'uploading' | 'queued' | 'failed'
-
-export interface ChatUploadRow {
-  errorMessage?: string
-  file: File
-  id: string
-  percent: number
-  phase: ChatUploadPhase
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function ChatComposer(

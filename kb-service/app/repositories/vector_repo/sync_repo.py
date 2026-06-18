@@ -10,18 +10,18 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models.configuration import Configuration
 from app.models.vector_collection import VectorCollection
 from app.models.vector_embedding import VectorEmbedding
-from app.repositories.vector_mapping import _map_search_row
-from app.repositories.vector_queries import (
+from app.repositories.vector_repo.mapping import _map_search_row
+from app.repositories.vector_repo.queries import (
     _build_lexical_search_statement,
     _build_search_statement,
     _document_metadata_match,
 )
-from app.repositories.vector_ranking import (
+from app.repositories.vector_repo.ranking import (
     _dedupe_fetch_limit,
     _merge_hybrid_candidates,
     dedupe_ranked_results,
 )
-from app.repositories.vector_records import _iter_chunk_records
+from app.repositories.vector_repo.records import _iter_chunk_records
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine

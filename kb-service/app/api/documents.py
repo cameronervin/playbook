@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.deps.services import get_ingestion_service
 from app.schemas.ingest import IngestDocumentResponse
-from app.services.ingestion_service import IngestionService
+from app.services.ingestion import IngestionService
 
 router = APIRouter()
 

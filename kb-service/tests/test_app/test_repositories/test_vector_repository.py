@@ -11,6 +11,7 @@ rows, then assert:
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import uuid
 from types import SimpleNamespace
 
@@ -32,15 +33,18 @@ ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
 
 def test_vector_repo_focused_modules_and_facade_exports_are_available() -> None:
     vector_repo = importlib.import_module("app.repositories.vector_repo")
-    vector_records = importlib.import_module("app.repositories.vector_records")
-    vector_mapping = importlib.import_module("app.repositories.vector_mapping")
-    vector_queries = importlib.import_module("app.repositories.vector_queries")
-    vector_ranking = importlib.import_module("app.repositories.vector_ranking")
-    vector_sync = importlib.import_module("app.repositories.vector_sync")
-    vector_async = importlib.import_module("app.repositories.vector_async")
+    vector_records = importlib.import_module("app.repositories.vector_repo.records")
+    vector_mapping = importlib.import_module("app.repositories.vector_repo.mapping")
+    vector_queries = importlib.import_module("app.repositories.vector_repo.queries")
+    vector_ranking = importlib.import_module("app.repositories.vector_repo.ranking")
+    vector_sync_repo = importlib.import_module("app.repositories.vector_repo.sync_repo")
+    vector_async_repo = importlib.import_module(
+        "app.repositories.vector_repo.async_repo"
+    )
 
-    assert vector_repo.VectorRepository is vector_sync.VectorRepository
-    assert vector_repo.AsyncVectorRepository is vector_async.AsyncVectorRepository
+    assert vector_repo.__path__
+    assert vector_repo.VectorRepository is vector_sync_repo.VectorRepository
+    assert vector_repo.AsyncVectorRepository is vector_async_repo.AsyncVectorRepository
     assert vector_repo.dedupe_ranked_results is vector_ranking.dedupe_ranked_results
     assert vector_repo._merge_hybrid_candidates is vector_ranking._merge_hybrid_candidates
     assert vector_repo._dedupe_fetch_limit is vector_ranking._dedupe_fetch_limit
@@ -54,7 +58,14 @@ def test_vector_repo_focused_modules_and_facade_exports_are_available() -> None:
         is vector_queries._build_lexical_search_statement
     )
     assert vector_repo._document_metadata_match is vector_queries._document_metadata_match
-    assert vector_repo._slice_iter is vector_sync._slice_iter
+    assert vector_repo._slice_iter is vector_sync_repo._slice_iter
+
+    assert importlib.util.find_spec("app.repositories.vector_records") is None
+    assert importlib.util.find_spec("app.repositories.vector_queries") is None
+    assert importlib.util.find_spec("app.repositories.vector_mapping") is None
+    assert importlib.util.find_spec("app.repositories.vector_ranking") is None
+    assert importlib.util.find_spec("app.repositories.vector_sync") is None
+    assert importlib.util.find_spec("app.repositories.vector_async") is None
 
 
 class _Result:

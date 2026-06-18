@@ -28,8 +28,8 @@ from app.models.identity import User
 from app.services.agent_stream_service import AgentStreamService
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
-from app.services.conversation_service import ConversationService
-from app.services.kb_document_service import (
+from app.services.conversations import ConversationService
+from app.services.kb_documents import (
     KBDocumentService,
     KBDocumentWebhookService,
 )

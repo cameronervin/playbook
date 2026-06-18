@@ -31,12 +31,12 @@ Original confirmed hotspots, with phase status where completed:
 
 | File | Current size / status | Main responsibilities mixed before refactor |
 |------|--------------|-----------------------------------|
-| `kb-service/app/repositories/vector_repo.py` | Phase 1 completed; was 991 lines before split | chunk record shaping, metadata normalization, SQL statement construction, row mapping, semantic search, lexical search, hybrid ranking, dedupe, sync worker repository, async API repository |
-| `backend/app/services/kb_document_service.py` | 865 lines | admin KB document CRUD, upload validation, direct-upload presign/complete, multipart upload, KB ingest handoff, audit/events, delete/retry, signed webhook processing |
-| `backend/app/services/conversation_service.py` | 835 lines | conversation CRUD, message submission, worker dispatch, stream authorization, conversation-file upload, direct-upload completion, ingest metadata, DTO mapping |
-| `kb-service/app/services/ingestion_service.py` | 578 lines | ingest metadata normalization, S3 size/hash inspection, dedupe/source identity rules, Celery pipeline dispatch, status response mapping, retry, delete |
+| `kb-service/app/repositories/vector_repo/` | Phase 1 completed; was a 991-line `vector_repo.py` before split | chunk record shaping, metadata normalization, SQL statement construction, row mapping, semantic search, lexical search, hybrid ranking, dedupe, sync worker repository, async API repository |
+| `backend/app/services/kb_documents/` | Phase 3 completed; legacy `kb_document_service.py` removed after split | admin KB document CRUD, upload validation, direct-upload presign/complete, multipart upload, KB ingest handoff, audit/events, delete/retry, signed webhook processing |
+| `backend/app/services/conversations/` | Phase 4 completed; legacy `conversation_service.py` removed after split | conversation CRUD, message submission, worker dispatch, stream authorization, conversation-file upload, direct-upload completion, ingest metadata, DTO mapping |
+| `kb-service/app/services/ingestion/` | Phase 5 completed; route facade is now `service.py` inside the package and legacy `ingestion_service.py` was removed | ingest metadata normalization, S3 size/hash inspection, dedupe/source identity rules, Celery pipeline dispatch, status response mapping, retry, delete |
 | `backend/app/repositories/conversations.py` | 542 lines | four small repositories in one file: conversations, messages, citations, conversation files |
-| `backend/app/services/kb_ingest_outbox_service.py` | 526 lines | durable row draining plus admin-upload and conversation-file source handling, retry/failure decisions, resource state updates |
+| `backend/app/services/kb_ingest_outbox/` | Phase 7 completed; legacy `kb_ingest_outbox_service.py` removed after split | durable row draining plus admin-upload and conversation-file source handling, retry/failure decisions, resource state updates |
 | `frontend/src/components/features/admin/AdminKnowledgeBasePanel.tsx` | 476 lines | collection grid, collection detail view, local upload state, upload row rendering, formatters, icon mapping |
 
 The Phase 2 athlete AI experience is active work. Refactors must preserve the
@@ -138,7 +138,9 @@ Do not do yet:
 
 ## Phase 1: Split KB-Service Vector Repository Internals
 
-Status: Completed on 2026-06-18.
+Status: Completed on 2026-06-18. Cleanup follow-up on 2026-06-18 moved the
+focused helper modules under the `app.repositories.vector_repo` package without
+behavior changes.
 
 Scope:
 
@@ -150,13 +152,13 @@ Scope:
 
 Suggested files:
 
-- `kb-service/app/repositories/vector_repo.py`
-- `kb-service/app/repositories/vector_records.py`
-- `kb-service/app/repositories/vector_queries.py`
-- `kb-service/app/repositories/vector_ranking.py`
-- `kb-service/app/repositories/vector_mapping.py`
-- `kb-service/app/repositories/vector_sync.py`
-- `kb-service/app/repositories/vector_async.py`
+- `kb-service/app/repositories/vector_repo/__init__.py`
+- `kb-service/app/repositories/vector_repo/records.py`
+- `kb-service/app/repositories/vector_repo/queries.py`
+- `kb-service/app/repositories/vector_repo/ranking.py`
+- `kb-service/app/repositories/vector_repo/mapping.py`
+- `kb-service/app/repositories/vector_repo/sync_repo.py`
+- `kb-service/app/repositories/vector_repo/async_repo.py`
 - `kb-service/tests/test_app/test_repositories/test_vector_repository.py`
 - `kb-service/tests/test_services/test_search_service.py`
 
@@ -170,7 +172,7 @@ Acceptance criteria:
 - Sync worker imports in `kb-service/app/workers/tasks/embedding.py` and
   `kb-service/app/workers/tasks/finalize.py` still work.
 - Async service imports in `kb-service/app/services/search_service.py` and
-  `kb-service/app/services/ingestion_service.py` still work.
+  `kb-service/app/services/ingestion/service.py` still work.
 
 Relevant tests:
 
@@ -185,12 +187,20 @@ Completed verification on 2026-06-18:
 - `cd kb-service && uv run ruff check app tests` -> passed
 - `cd kb-service && uv run python -m compileall app tests` -> passed
 
+Package cleanup follow-up verification on 2026-06-18:
+
+- `cd kb-service && uv run pytest tests/test_app/test_repositories/test_vector_repository.py -v` -> 23 passed
+- `cd kb-service && uv run pytest tests/test_services/test_search_service.py -v` -> 15 passed
+- `cd kb-service && uv run ruff check app tests` -> passed
+- `cd kb-service && uv run python -m compileall app tests` -> passed
+
 Do not do yet:
 
 - Do not change search strategy defaults.
 - Do not change reranker behavior.
 - Do not move KB-service API schemas.
-- Do not remove the compatibility exports from `vector_repo.py` in this phase.
+- Do not remove the compatibility exports from the `vector_repo` package facade
+  in this phase.
 
 ## Phase 2: Extract Backend Direct-Upload Workflow Helpers
 
@@ -255,15 +265,17 @@ Do not do yet:
 
 ## Phase 3: Split KB Document Services
 
+Status: Completed on 2026-06-18.
+
 Scope:
 
 - Separate admin document control-plane behavior from KB webhook processing.
+- Move backend imports to the new `app.services.kb_documents` package exports.
 - Preserve dependency aliases used by routes.
 - Keep event and audit semantics unchanged.
 
 Suggested files:
 
-- `backend/app/services/kb_document_service.py`
 - `backend/app/services/kb_documents/admin_document_service.py`
 - `backend/app/services/kb_documents/upload_service.py`
 - `backend/app/services/kb_documents/webhook_service.py`
@@ -276,8 +288,8 @@ Suggested files:
 
 Acceptance criteria:
 
-- Existing imports of `KBDocumentService`, `KBDocumentUpload`, and
-  `KBDocumentWebhookService` remain valid through a compatibility module.
+- Imports of `KBDocumentService`, `KBDocumentUpload`, and
+  `KBDocumentWebhookService` use `app.services.kb_documents`.
 - Admin list/get/upload/update/retry/delete route behavior is unchanged.
 - Webhook signature verification, timestamp verification, source-type routing,
   status mapping, failure-reason redaction, summary mirroring, and chunk-count
@@ -287,18 +299,28 @@ Acceptance criteria:
 
 Relevant tests:
 
+- `cd backend && uv run pytest tests/unit/test_kb_document_service_exports.py tests/unit/test_kb_webhook_status_mapping.py -v`
 - `cd backend && uv run pytest tests/integration/test_kb_document_routes.py tests/integration/test_kb_webhook_routes.py -v`
 - `cd backend && uv run pytest tests/unit/test_phase1_services.py -v`
 - `cd backend && uv run ruff check app tests`
+
+Completed verification on 2026-06-18:
+
+- `cd backend && uv run pytest tests/unit/test_kb_document_service_exports.py tests/unit/test_kb_webhook_status_mapping.py tests/integration/test_kb_document_routes.py tests/integration/test_kb_webhook_routes.py tests/unit/test_phase1_services.py -v` -> 23 passed, 1 warning
+- `cd backend && uv run ruff check app tests` -> passed
+- `cd backend && uv run python -m compileall app tests` -> passed
 
 Do not do yet:
 
 - Do not change KB webhook payload schemas.
 - Do not change webhook auth settings.
-- Do not remove compatibility imports until route dependencies and tests are
-  updated.
+- Do not restore the legacy `app.services.kb_document_service` module.
 
 ## Phase 4: Split Conversation Services
+
+Status: Completed on 2026-06-18. The legacy
+`app.services.conversation_service` module was intentionally removed; callers
+now import conversation service exports from `app.services.conversations`.
 
 Scope:
 
@@ -310,7 +332,8 @@ Scope:
 
 Suggested files:
 
-- `backend/app/services/conversation_service.py`
+- `backend/app/services/conversations/__init__.py`
+- `backend/app/services/conversations/service.py`
 - `backend/app/services/conversations/history_service.py`
 - `backend/app/services/conversations/message_service.py`
 - `backend/app/services/conversations/file_service.py`
@@ -318,6 +341,8 @@ Suggested files:
 - `backend/app/services/conversations/validation.py`
 - `backend/app/api/v1/dependencies.py`
 - `backend/app/api/v1/conversations.py`
+- `backend/tests/unit/test_conversation_service_exports.py`
+- `backend/tests/unit/test_conversation_mappers.py`
 - `backend/tests/integration/test_conversation_routes.py`
 - `backend/tests/integration/test_athlete_chat_executor.py`
 
@@ -335,10 +360,23 @@ Acceptance criteria:
 
 Relevant tests:
 
+- `cd backend && uv run pytest tests/unit/test_conversation_service_exports.py tests/unit/test_conversation_mappers.py -v`
 - `cd backend && uv run pytest tests/integration/test_conversation_routes.py -v`
 - `cd backend && uv run pytest tests/integration/test_athlete_chat_executor.py -v`
 - `cd backend && uv run pytest tests/integration/test_kb_ingest_outbox_worker.py -v`
+- `cd backend && uv run pytest tests/unit/test_direct_upload_workflows.py -v`
 - `cd backend && uv run ruff check app tests`
+- `cd backend && uv run python -m compileall app tests`
+
+Completed verification on 2026-06-18:
+
+- `cd backend && uv run pytest tests/unit/test_conversation_service_exports.py tests/unit/test_conversation_mappers.py -v` -> 5 passed
+- `cd backend && uv run pytest tests/integration/test_conversation_routes.py -v` -> 19 passed, 3 warnings
+- `cd backend && uv run pytest tests/integration/test_athlete_chat_executor.py -v` -> 8 passed
+- `cd backend && uv run pytest tests/integration/test_kb_ingest_outbox_worker.py -v` -> 6 passed
+- `cd backend && uv run pytest tests/unit/test_direct_upload_workflows.py -v` -> 8 passed
+- `cd backend && uv run ruff check app tests` -> passed
+- `cd backend && uv run python -m compileall app tests` -> passed
 
 Do not do yet:
 
@@ -348,16 +386,19 @@ Do not do yet:
 
 ## Phase 5: Split KB-Service Ingestion Service
 
+Status: Completed on 2026-06-18.
+
 Scope:
 
 - Extract ingest metadata, source identity, S3 object inspection, pipeline
   dispatch, and status response helpers while preserving `IngestionService` as
-  the route-facing facade.
+  the route-facing facade exported by `app.services.ingestion`.
 - Keep heavy imports lazy where they currently avoid import-time coupling.
 
 Suggested files:
 
-- `kb-service/app/services/ingestion_service.py`
+- `kb-service/app/services/ingestion/__init__.py`
+- `kb-service/app/services/ingestion/service.py`
 - `kb-service/app/services/ingestion/metadata.py`
 - `kb-service/app/services/ingestion/source_identity.py`
 - `kb-service/app/services/ingestion/s3_inspector.py`
@@ -382,9 +423,21 @@ Acceptance criteria:
 
 Relevant tests:
 
+- `cd kb-service && uv run pytest tests/test_services/test_ingestion_service.py -v`
 - `cd kb-service && uv run pytest tests/test_services -v`
 - `cd kb-service && uv run pytest tests/test_app -v`
+- `cd kb-service && uv run pytest tests/test_worker/test_no_text_failures.py -v`
 - `cd kb-service && uv run ruff check app tests`
+- `cd kb-service && uv run python -m compileall app tests`
+
+Completed verification on 2026-06-18:
+
+- `cd kb-service && uv run pytest tests/test_services/test_ingestion_service.py -v` -> 6 passed
+- `cd kb-service && uv run pytest tests/test_services -v` -> 46 passed
+- `cd kb-service && uv run pytest tests/test_app -v` -> 41 passed, 1 warning
+- `cd kb-service && uv run pytest tests/test_worker/test_no_text_failures.py -v` -> 6 passed
+- `cd kb-service && uv run ruff check app tests` -> passed
+- `cd kb-service && uv run python -m compileall app tests` -> passed
 
 Do not do yet:
 
@@ -393,6 +446,8 @@ Do not do yet:
 - Do not change MD5/dedupe behavior.
 
 ## Phase 6: Split Backend Repository Files Mechanically
+
+Status: Completed on 2026-06-18.
 
 Scope:
 
@@ -429,6 +484,14 @@ Relevant tests:
 - `cd backend && uv run pytest tests/integration/test_upload_request_repositories.py tests/integration/test_kb_ingest_outbox_repositories.py -v`
 - `cd backend && uv run ruff check app tests`
 
+Completed verification on 2026-06-18:
+
+- `cd backend && uv run pytest tests/unit/test_repository_package_exports.py -v` -> 2 passed
+- `cd backend && uv run pytest tests/integration/test_conversation_repositories.py tests/integration/test_upload_request_repositories.py tests/integration/test_kb_ingest_outbox_repositories.py -v` -> 11 passed
+- `cd backend && uv run pytest tests/integration/test_conversation_routes.py tests/integration/test_upload_request_reconciliation.py tests/integration/test_kb_ingest_outbox_worker.py tests/integration/test_kb_webhook_routes.py -v` -> 38 passed, 3 warnings
+- `cd backend && uv run ruff check app tests` -> passed
+- `cd backend && uv run python -m compileall app tests` -> passed
+
 Do not do yet:
 
 - Do not combine this with service refactors.
@@ -436,6 +499,10 @@ Do not do yet:
 - Do not remove compatibility exports until all imports are migrated.
 
 ## Phase 7: Extract Outbox Source Handlers
+
+Status: Completed on 2026-06-18. The canonical service import is now
+`app.services.kb_ingest_outbox`; the legacy `kb_ingest_outbox_service.py` file
+was removed rather than kept as a compatibility shim.
 
 Scope:
 
@@ -446,10 +513,13 @@ Scope:
 
 Suggested files:
 
-- `backend/app/services/kb_ingest_outbox_service.py`
+- `backend/app/services/kb_ingest_outbox/__init__.py`
+- `backend/app/services/kb_ingest_outbox/service.py`
 - `backend/app/services/kb_ingest_outbox/admin_upload_handler.py`
 - `backend/app/services/kb_ingest_outbox/conversation_file_handler.py`
 - `backend/app/services/kb_ingest_outbox/failure_policy.py`
+- `backend/tests/unit/test_kb_ingest_outbox_service_exports.py`
+- `backend/tests/unit/test_kb_ingest_outbox_failure_policy.py`
 - `backend/tests/integration/test_kb_ingest_outbox_worker.py`
 
 Acceptance criteria:
@@ -464,8 +534,17 @@ Acceptance criteria:
 
 Relevant tests:
 
+- `cd backend && uv run pytest tests/unit/test_kb_ingest_outbox_service_exports.py tests/unit/test_kb_ingest_outbox_failure_policy.py -v`
 - `cd backend && uv run pytest tests/integration/test_kb_ingest_outbox_worker.py -v`
 - `cd backend && uv run ruff check app tests`
+
+Completed verification on 2026-06-18:
+
+- `cd backend && uv run pytest tests/unit/test_kb_ingest_outbox_service_exports.py tests/unit/test_kb_ingest_outbox_failure_policy.py -v` -> 7 passed
+- `cd backend && uv run pytest tests/integration/test_kb_ingest_outbox_worker.py -v` -> 9 passed
+- `cd backend && uv run pytest tests/integration/test_kb_document_routes.py tests/integration/test_conversation_routes.py tests/integration/test_upload_request_reconciliation.py tests/integration/test_kb_webhook_routes.py -v` -> 38 passed, 4 warnings
+- `cd backend && uv run ruff check app tests` -> passed
+- `cd backend && uv run python -m compileall app tests` -> passed
 
 Do not do yet:
 
@@ -474,6 +553,8 @@ Do not do yet:
 - Do not change worker task scheduling.
 
 ## Phase 8: Optional Frontend Feature-Shell Cleanup
+
+Status: Completed on 2026-06-18.
 
 Scope:
 
@@ -490,6 +571,10 @@ Suggested files:
 - `frontend/src/components/features/chat/ChatShell.tsx`
 - `frontend/src/components/features/chat/useChatFileUploads.ts`
 - `frontend/src/components/features/chat/conversationGrouping.ts`
+- `frontend/src/components/features/chat/chatTypes.ts`
+- `frontend/src/components/features/chat/ChatComposer.tsx`
+- `frontend/src/components/features/chat/conversationGrouping.test.ts`
+- `frontend/src/components/features/admin/kbFormatting.test.ts`
 - `frontend/src/components/features/chat/ChatShell.test.tsx`
 
 Acceptance criteria:
@@ -506,8 +591,17 @@ Acceptance criteria:
 Relevant tests:
 
 - `cd frontend && npm test -- AdminKnowledgeBasePanel ChatShell`
+- `cd frontend && npm test -- AdminShell ChatShell conversationGrouping kbFormatting`
 - `cd frontend && npm run lint`
 - `cd frontend && npm run typecheck`
+
+Completed verification on 2026-06-18:
+
+- `cd frontend && npm test -- AdminKnowledgeBasePanel ChatShell conversationGrouping kbFormatting` -> 24 passed
+- `cd frontend && npm test -- AdminShell ChatShell conversationGrouping kbFormatting` -> 46 passed
+- `cd frontend && npm run lint` -> passed
+- `cd frontend && npm run typecheck` -> passed
+- Touched production component files are under 400 lines after splitting.
 
 Do not do yet:
 

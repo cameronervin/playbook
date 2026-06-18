@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.repositories.vector_records import (
+from app.repositories.vector_repo.records import (
     _deterministic_chunk_id,
     _int_or_none,
     _uuid_or_none,

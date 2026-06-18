@@ -24,7 +24,7 @@ logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # parse_task — first stage of the chain. Keyword-only signature matches
-# ingestion_service._dispatch_pipeline's parse_task.s(...) call.
+# IngestionService's pipeline dispatch parse_task.s(...) call.
 # ---------------------------------------------------------------------------
 @kb_worker.task(bind=True, name="app.workers.tasks.parse_task", max_retries=3)
 def parse_task(

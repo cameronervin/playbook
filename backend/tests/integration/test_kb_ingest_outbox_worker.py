@@ -25,7 +25,7 @@ from app.schemas.knowledgebase import (
     KBDocumentIngestResponse,
     KnowledgebaseResult,
 )
-from app.services.kb_ingest_outbox_service import KbIngestOutboxService
+from app.services.kb_ingest_outbox import KbIngestOutboxService
 
 
 class FakeWorkerStorageProvider:
@@ -408,6 +408,118 @@ async def test_outbox_worker_marks_resource_mismatch_failed(
     await db_session.refresh(row)
     await db_session.refresh(document)
     assert row.status == "failed"
+    assert row.attempt_count == 0
     assert row.failure_metadata["error_type"] == "OutboxResourceMismatchError"
     assert document.processing_status == "failed"
+    assert kb_provider.requests == []
+
+
+@pytest.mark.asyncio
+async def test_outbox_worker_schedules_retry_for_conversation_file_failure(
+    db_session,
+    test_settings,
+) -> None:
+    organization, _athlete, _conversation, file = await _conversation_file(db_session)
+    row = await KBIngestOutboxRepository(db_session).enqueue(
+        organization_id=organization.id,
+        source_type="conversation_file",
+        conversation_file_id=file.id,
+    )
+    kb_provider = FakeWorkerKBProvider(
+        failure=KBConnectionError(
+            "KB down for https://storage.example/private.pdf?signature=topsecret"
+        )
+    )
+
+    result = await KbIngestOutboxService(
+        db_session,
+        storage=FakeWorkerStorageProvider(),
+        kb_provider=kb_provider,
+        settings=test_settings,
+    ).drain_due(limit=25)
+
+    assert result.retried == 1
+    await db_session.refresh(row)
+    await db_session.refresh(file)
+    assert row.status == "retrying"
+    assert row.attempt_count == 1
+    assert row.next_attempt_at > datetime.now(UTC)
+    assert row.failure_metadata["error_type"] == "KBConnectionError"
+    assert row.failure_metadata["retryable"] is True
+    assert "topsecret" not in repr(row.failure_metadata)
+    assert "https://storage.example" not in repr(row.failure_metadata)
+    assert file.extraction_status == "uploaded"
+    assert len(kb_provider.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_outbox_worker_marks_conversation_file_terminal_failure(
+    db_session,
+    test_settings,
+) -> None:
+    organization, _athlete, _conversation, file = await _conversation_file(db_session)
+    row = await KBIngestOutboxRepository(db_session).enqueue(
+        organization_id=organization.id,
+        source_type="conversation_file",
+        conversation_file_id=file.id,
+    )
+    kb_provider = FakeWorkerKBProvider(
+        failure=KBValidationError(
+            "Rejected https://storage.example/private.pdf?signature=topsecret"
+        )
+    )
+
+    result = await KbIngestOutboxService(
+        db_session,
+        storage=FakeWorkerStorageProvider(),
+        kb_provider=kb_provider,
+        settings=test_settings,
+    ).drain_due(limit=25)
+
+    assert result.failed == 1
+    await db_session.refresh(row)
+    await db_session.refresh(file)
+    assert row.status == "failed"
+    assert row.attempt_count == 1
+    assert row.failure_metadata["error_type"] == "KBValidationError"
+    assert row.failure_metadata["retryable"] is False
+    assert "topsecret" not in repr(row.failure_metadata)
+    assert row.error_message == "KB ingestion dispatch failed"
+    assert file.extraction_status == "failed"
+    assert file.error_message == "KB ingestion dispatch failed"
+    assert file.extraction_metadata["source_type"] == "conversation_file"
+    assert file.extraction_metadata["dispatch_error_type"] == "KBValidationError"
+
+
+@pytest.mark.asyncio
+async def test_outbox_worker_marks_conversation_file_mismatch_failed_without_dispatch(
+    db_session,
+    test_settings,
+) -> None:
+    _organization, _athlete, _conversation, file = await _conversation_file(db_session)
+    other_organization = await OrganizationRepository(db_session).create(
+        name="Other Athletics",
+        slug=f"other-file-outbox-{uuid4()}",
+    )
+    row = await KBIngestOutboxRepository(db_session).enqueue(
+        organization_id=other_organization.id,
+        source_type="conversation_file",
+        conversation_file_id=file.id,
+    )
+    kb_provider = FakeWorkerKBProvider()
+
+    result = await KbIngestOutboxService(
+        db_session,
+        storage=FakeWorkerStorageProvider(),
+        kb_provider=kb_provider,
+        settings=test_settings,
+    ).drain_due(limit=25)
+
+    assert result.failed == 1
+    await db_session.refresh(row)
+    await db_session.refresh(file)
+    assert row.status == "failed"
+    assert row.attempt_count == 0
+    assert row.failure_metadata["error_type"] == "OutboxResourceMismatchError"
+    assert file.extraction_status == "failed"
     assert kb_provider.requests == []

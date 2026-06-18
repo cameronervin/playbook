@@ -14,7 +14,7 @@ from app.infrastructure.parsers.contracts.errors import (
     ParseWarning,
 )
 from app.infrastructure.parsers.contracts.models import ParseArtifacts, ParseOutcome
-from app.services.ingestion_service import IngestionService
+from app.services.ingestion import IngestionService
 from app.workers import tasks
 import app.workers.tasks.ingest as ingest_tasks
 from app.workers.state import worker_state

@@ -15,7 +15,7 @@ from app.core.exceptions import ForbiddenError
 from app.models.identity import User
 from app.schemas.kb_documents import KBWebhookPayload
 from app.schemas.users import UpdateProfileRequest, UpdateUserRoleRequest
-from app.services.kb_document_service import KBDocumentWebhookService
+from app.services.kb_documents import KBDocumentWebhookService
 from app.services.user_service import UserAdminService, UserProfileService
 
 
