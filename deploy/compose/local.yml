@@ -19,17 +19,23 @@ services:
       - ../envs/.env.local
 
   # Local PostgreSQL browser UI (see backstage/guides/postgresql_setup.md).
-  adminer:
-    image: adminer:4.8.1-standalone
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:26.1.0
     ports:
-      - "${ADMINER_PORT:-5050}:8080"
+      - "${DB_UI_PORT:-5050}:8978"
     environment:
-      - ADMINER_DEFAULT_SERVER=db
+      - CB_SERVER_NAME=Playbook Local DB UI
+      - CB_SERVER_URL=http://localhost:${DB_UI_PORT:-5050}/
+      - CB_ADMIN_NAME=playbook
+      - CB_ADMIN_PASSWORD=${DB_UI_ADMIN_PASSWORD:-playbook-local-db-ui}
+      - CLOUDBEAVER_APP_SUPPORTS_CUSTOM_CONNECTIONS=${DB_UI_CUSTOM_CONNECTIONS_ENABLED:-true}
+    volumes:
+      - cloudbeaver_workspace:/opt/cloudbeaver/workspace
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1:8080/\") === false ? 1 : 0);'"]
+      test: ["CMD", "curl", "-f", "http://localhost:8978/"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -222,3 +228,5 @@ services:
 volumes:
   minio_data:
     name: playbook_minio_data
+  cloudbeaver_workspace:
+    name: playbook_cloudbeaver_workspace

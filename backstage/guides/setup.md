@@ -263,6 +263,7 @@ KB infrastructure definitions:
 | Component | Compose service | Local host port | Config |
 |-----------|-----------------|-----------------|--------|
 | Postgres + pgvector | `db` | `5433` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
+| CloudBeaver DB UI | `cloudbeaver` | `5050` | `deploy/compose/local.yml`, `deploy/envs/.env.local` |
 | MinIO S3 API | `minio` | `9000` | `deploy/compose/local.yml` |
 | MinIO bucket bootstrap | `minio-bootstrap` | n/a | creates `S3_BUCKET_NAME` (`playbook-bucket`) |
 | KB broker/result backend | `kb-valkey` | `6380` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |

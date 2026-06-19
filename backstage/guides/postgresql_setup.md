@@ -46,25 +46,36 @@ DATABASE_URL=postgresql+asyncpg://app:localpass@db:5432/playbook
 
 ## Browser UI
 
-Local Compose includes Adminer for browsing schemas, tables, data, and ad hoc
-SQL queries:
+Local Compose includes CloudBeaver CE for browsing schemas, editing data, and
+running ad hoc SQL queries:
 
 ```bash
-docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d db adminer
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d db cloudbeaver
 ```
 
-Open `http://localhost:5050/?pgsql=db` and log in with:
+Open `http://localhost:5050` and log in with:
 
 ```
-System: PostgreSQL
-Server: db
+Username: playbook
+Password: playbook-local-db-ui
+```
+
+Then create a PostgreSQL connection:
+
+```
+Host: db
+Port: 5432
+Database: playbook
 Username: app
 Password: localpass
-Database: playbook
 ```
 
-If `5050` is already in use, set `ADMINER_PORT` in `deploy/envs/.env.local`
-before starting the service.
+Local Compose enables CloudBeaver custom connections so the new-connection
+control is visible in the top toolbar.
+
+If `5050` is already in use, set `DB_UI_PORT` in `deploy/envs/.env.local`
+before starting the service. To change the local CloudBeaver admin password,
+set `DB_UI_ADMIN_PASSWORD`.
 
 ## Apply Migrations
 
