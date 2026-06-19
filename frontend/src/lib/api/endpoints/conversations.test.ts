@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   completeConversationFileUpload,
+  createConversation,
   createConversationFileUploadIntent,
+  createConversationMessageStream,
+  submitConversationMessage,
   uploadConversationFile,
 } from '@/src/lib/api/endpoints/conversations'
 import { apiClient } from '@/src/lib/api/client'
@@ -44,9 +47,66 @@ const intent: ConversationFileUploadIntentResponse = {
 }
 
 describe('conversation file upload endpoints', () => {
+  const originalEventSource = global.EventSource
+
   beforeEach(() => {
     vi.mocked(apiClient).mockReset()
     vi.mocked(postDirectUpload).mockReset()
+    global.EventSource = originalEventSource
+  })
+
+  it('starts a conversation on the documented first-send route', async () => {
+    vi.mocked(apiClient).mockResolvedValueOnce({
+      assistant_message_id: 'assistant-1',
+      conversation: { id: 'conversation-1', messages: [] },
+      status: 'streaming',
+      stream_url: '/api/v1/conversations/conversation-1/messages/assistant-1/stream?task_id=task-1',
+      task_id: 'task-1',
+      user_message_id: 'user-message-1',
+    })
+
+    await createConversation({ content: 'Can I travel?' })
+
+    expect(apiClient).toHaveBeenCalledWith('/api/v1/conversations', {
+      method: 'POST',
+      json: { content: 'Can I travel?' },
+    })
+  })
+
+  it('submits follow-up messages on the documented route', async () => {
+    vi.mocked(apiClient).mockResolvedValueOnce({
+      assistant_message_id: 'assistant-1',
+      status: 'streaming',
+      stream_url: '/api/v1/conversations/conversation-1/messages/assistant-1/stream?task_id=task-1',
+      task_id: 'task-1',
+      user_message_id: 'user-message-1',
+    })
+
+    await submitConversationMessage({
+      conversationId: 'conversation-1',
+      content: 'What about tomorrow?',
+      file_ids: ['file-1'],
+    })
+
+    expect(apiClient).toHaveBeenCalledWith('/api/v1/conversations/conversation-1/messages', {
+      method: 'POST',
+      json: {
+        content: 'What about tomorrow?',
+        file_ids: ['file-1'],
+      },
+    })
+  })
+
+  it('opens conversation streams with backend cookies included', () => {
+    const eventSource = vi.fn()
+    vi.stubGlobal('EventSource', eventSource)
+
+    createConversationMessageStream('/api/v1/conversations/c1/messages/m1/stream?task_id=t1')
+
+    expect(eventSource).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/conversations/c1/messages/m1/stream?task_id=t1',
+      { withCredentials: true },
+    )
   })
 
   it('creates a conversation file upload intent on the documented route', async () => {

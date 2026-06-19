@@ -13,7 +13,11 @@ from sqlalchemy import select
 from app.api.v1.dependencies import get_agent_stream_service
 from app.infrastructure.knowledgebase import get_kb_provider_dependency
 from app.infrastructure.storage import get_storage_provider_dependency
-from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjectMetadata
+from app.infrastructure.storage.provider import (
+    ObjectVerificationResult,
+    PresignedPostUpload,
+    StoredObjectMetadata,
+)
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.models.uploads import KBIngestOutbox, UploadRequest
 from app.repositories.conversations import (
@@ -100,8 +104,6 @@ class FakeStorageProvider:
         expected_size_bytes: int,
         expected_content_type: str,
     ):
-        from app.infrastructure.storage.provider import ObjectVerificationResult
-
         metadata = await self.get_object_metadata(key)
         if metadata is None:
             return ObjectVerificationResult(status="missing")
@@ -167,6 +169,7 @@ def _override_file_upload_dependencies(
 async def test_athlete_conversation_routes_create_list_and_get_detail(
     route_client,
     db_session,
+    monkeypatch,
 ) -> None:
     organization = await OrganizationRepository(db_session).create(
         name="Playbook Athletics",
@@ -181,23 +184,55 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
         sport_team="Basketball",
     )
     route_client.authenticate_as(athlete)
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(*, kwargs: dict[str, object], task_id: str) -> SimpleNamespace:
+        dispatched["kwargs"] = kwargs
+        dispatched["task_id"] = task_id
+        return SimpleNamespace(id=task_id)
+
+    monkeypatch.setattr(
+        worker_tasks.run_athlete_chat_task,
+        "apply_async",
+        fake_apply_async,
+    )
 
     create_response = await route_client.client.post(
         "/api/v1/conversations",
-        json={"initial_message": " Can I accept this NIL deal? "},
+        json={"content": " Can I accept this NIL deal? "},
     )
 
-    assert create_response.status_code == 201
-    conversation_id = create_response.json()["id"]
+    assert create_response.status_code == 202
+    body = create_response.json()
+    conversation_id = body["conversation"]["id"]
     conversation_uuid = UUID(conversation_id)
-    assert create_response.json()["athlete_id"] == str(athlete.id)
-    assert create_response.json()["title"] is None
-    assert create_response.json()["last_message_at"] is not None
-    assert create_response.json()["messages"][0]["role"] == "user"
-    assert create_response.json()["messages"][0]["content"] == (
+    assert body["status"] == "streaming"
+    assert body["stream_url"] == (
+        f"/api/v1/conversations/{conversation_id}/messages/"
+        f"{body['assistant_message_id']}/stream?task_id={body['task_id']}"
+    )
+    assert body["conversation"]["athlete_id"] == str(athlete.id)
+    assert body["conversation"]["title"] is None
+    assert body["conversation"]["last_message_at"] is not None
+    assert body["conversation"]["messages"][0]["id"] == body["user_message_id"]
+    assert body["conversation"]["messages"][0]["role"] == "user"
+    assert body["conversation"]["messages"][0]["content"] == (
         "Can I accept this NIL deal?"
     )
-    assert create_response.json()["files"] == []
+    assert body["conversation"]["messages"][1]["id"] == body["assistant_message_id"]
+    assert body["conversation"]["messages"][1]["role"] == "assistant"
+    assert body["conversation"]["messages"][1]["status"] == "streaming"
+    assert body["conversation"]["messages"][1]["metadata"]["task_id"] == body["task_id"]
+    assert body["conversation"]["files"] == []
+    assert dispatched["task_id"] == body["task_id"]
+    assert dispatched["kwargs"] == {
+        "conversation_id": conversation_id,
+        "athlete_user_id": str(athlete.id),
+        "user_message_id": body["user_message_id"],
+        "assistant_message_id": body["assistant_message_id"],
+        "organization_id": str(organization.id),
+        "attached_file_ids": [],
+    }
 
     message = await ConversationMessageRepository(db_session).create(
         conversation_id=conversation_uuid,
@@ -230,8 +265,10 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
     assert list_response.json()[0]["last_message_at"] is not None
     assert detail_response.status_code == 200
     assert detail_response.json()["messages"][0]["role"] == "user"
-    assert detail_response.json()["messages"][1]["id"] == str(message.id)
-    assert detail_response.json()["messages"][1]["citations"][0]["id"] == str(
+    assert detail_response.json()["messages"][1]["role"] == "assistant"
+    assert detail_response.json()["messages"][1]["status"] == "streaming"
+    assert detail_response.json()["messages"][2]["id"] == str(message.id)
+    assert detail_response.json()["messages"][2]["citations"][0]["id"] == str(
         citation.id
     )
     assert detail_response.json()["files"] == [
@@ -677,7 +714,7 @@ async def test_upload_conversation_file_rejects_empty_or_oversize_file(
 
 
 @pytest.mark.asyncio
-async def test_create_conversation_validates_initial_message(
+async def test_create_conversation_validates_content(
     route_client,
     db_session,
 ) -> None:
@@ -697,7 +734,7 @@ async def test_create_conversation_validates_initial_message(
 
     response = await route_client.client.post(
         "/api/v1/conversations",
-        json={"initial_message": "   "},
+        json={"content": "   "},
         headers={"X-Request-ID": "req-initial-message"},
     )
 
@@ -1108,7 +1145,9 @@ async def test_stream_message_validates_athlete_message_and_task_binding(
 
 
 @pytest.mark.asyncio
-async def test_conversation_create_openapi_uses_initial_message(route_client) -> None:
+async def test_conversation_create_openapi_uses_streaming_start_contract(
+    route_client,
+) -> None:
     response = await route_client.client.get("/openapi.json")
 
     assert response.status_code == 200
@@ -1117,17 +1156,22 @@ async def test_conversation_create_openapi_uses_initial_message(route_client) ->
     submit_response_schema = response.json()["components"]["schemas"][
         "MessageSubmitResponse"
     ]
+    start_response_schema = response.json()["components"]["schemas"][
+        "ConversationStartResponse"
+    ]
     detail_schema = response.json()["components"]["schemas"][
         "ConversationDetailResponse"
     ]
-    assert "initial_message" in schema["properties"]
+    assert "content" in schema["properties"]
     assert "title" not in schema["properties"]
-    assert "initial_message" in schema["required"]
+    assert "content" in schema["required"]
     assert "content" in submit_schema["properties"]
     assert "file_ids" in submit_schema["properties"]
     assert "content" in submit_schema["required"]
     assert "task_id" in submit_response_schema["properties"]
     assert "stream_url" in submit_response_schema["properties"]
+    assert "conversation" in start_response_schema["properties"]
+    assert "task_id" in start_response_schema["properties"]
     assert "files" in detail_schema["properties"]
     assert (
         "/api/v1/conversations/{conversation_id}/messages/{message_id}/stream"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID, uuid4
 
@@ -10,18 +11,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.error_codes import ErrorCode
 from app.core.exceptions import AppError, NotFoundError
+from app.models.conversations import Conversation, ConversationMessage
 from app.models.identity import User
 from app.repositories.conversations import (
     ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
 )
-from app.schemas.conversations import MessageSubmitRequest, MessageSubmitResponse
+from app.schemas.conversations import (
+    ConversationCreateRequest,
+    ConversationStartResponse,
+    MessageSubmitRequest,
+    MessageSubmitResponse,
+)
+from app.services.conversations.mappers import (
+    conversation_detail_response,
+    conversation_message_response,
+)
 from app.services.conversations.validation import validate_attached_files
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import WorkerTaskName
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _PersistedTurn:
+    """Persisted user/assistant turn plus its stream metadata."""
+
+    user_message: ConversationMessage
+    assistant_message: ConversationMessage
+    stream: MessageSubmitResponse
 
 
 class ConversationMessageService:
@@ -41,6 +61,36 @@ class ConversationMessageService:
         self.message_repo = message_repo
         self.file_repo = file_repo
         self.athlete_chat_dispatcher = athlete_chat_dispatcher
+
+    async def start_conversation(
+        self,
+        *,
+        athlete: User,
+        request: ConversationCreateRequest,
+    ) -> ConversationStartResponse:
+        """Create a conversation, persist the first turn, and enqueue generation."""
+        conversation = await self.conversation_repo.create(
+            organization_id=athlete.organization_id,
+            athlete_id=athlete.id,
+            title=None,
+        )
+        turn = await self._persist_turn_and_dispatch(
+            athlete=athlete,
+            conversation=conversation,
+            content=request.content,
+            file_ids=[],
+        )
+        return ConversationStartResponse(
+            **turn.stream.model_dump(),
+            conversation=conversation_detail_response(
+                conversation,
+                messages=[
+                    conversation_message_response(turn.user_message, citations=[]),
+                    conversation_message_response(turn.assistant_message, citations=[]),
+                ],
+                files=[],
+            ),
+        )
 
     async def submit_message(
         self,
@@ -64,12 +114,29 @@ class ConversationMessageService:
             file_ids=request.file_ids,
         )
 
-        attached_file_ids = [str(file_id) for file_id in request.file_ids]
+        turn = await self._persist_turn_and_dispatch(
+            athlete=athlete,
+            conversation=conversation,
+            content=request.content,
+            file_ids=request.file_ids,
+        )
+        return turn.stream
+
+    async def _persist_turn_and_dispatch(
+        self,
+        *,
+        athlete: User,
+        conversation: Conversation,
+        content: str,
+        file_ids: list[UUID],
+    ) -> _PersistedTurn:
+        """Persist one user turn, enqueue assistant work, and return stream metadata."""
+        attached_file_ids = [str(file_id) for file_id in file_ids]
         task_id = str(uuid4())
         user_message = await self.message_repo.create(
             conversation_id=conversation.id,
             role="user",
-            content=request.content,
+            content=content,
             status="complete",
             metadata={"attached_file_ids": attached_file_ids},
         )
@@ -100,7 +167,7 @@ class ConversationMessageService:
                     user_message_id=user_message.id,
                     assistant_message_id=assistant_message.id,
                     organization_id=athlete.organization_id,
-                    attached_file_ids=request.file_ids,
+                    attached_file_ids=file_ids,
                 ),
             )
         except Exception as exc:
@@ -131,15 +198,19 @@ class ConversationMessageService:
                 },
             ) from exc
 
-        return MessageSubmitResponse(
-            user_message_id=user_message.id,
-            assistant_message_id=assistant_message.id,
-            task_id=task_id,
-            stream_url=(
-                f"/api/v1/conversations/{conversation.id}/messages/"
-                f"{assistant_message.id}/stream?task_id={task_id}"
+        return _PersistedTurn(
+            user_message=user_message,
+            assistant_message=assistant_message,
+            stream=MessageSubmitResponse(
+                user_message_id=user_message.id,
+                assistant_message_id=assistant_message.id,
+                task_id=task_id,
+                stream_url=(
+                    f"/api/v1/conversations/{conversation.id}/messages/"
+                    f"{assistant_message.id}/stream?task_id={task_id}"
+                ),
+                status=assistant_message.status,
             ),
-            status=assistant_message.status,
         )
 
     async def validate_message_stream(

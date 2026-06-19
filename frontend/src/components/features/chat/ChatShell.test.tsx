@@ -18,6 +18,10 @@ const chatMocks = vi.hoisted(() => ({
   logoutMutateAsync: vi.fn(),
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
+  startConversationStream: vi.fn(),
+  stopConversationStream: vi.fn(),
+  submitConversationMessageMutate: vi.fn(),
+  submitConversationMessagePending: false,
   uploadConversationFileMutate: vi.fn(),
 }))
 
@@ -50,6 +54,42 @@ vi.mock('@/src/hooks/useAuth', () => ({
 }))
 
 vi.mock('@/src/hooks/useConversations', () => ({
+  createSubmittedMessages: (conversationId: string, content: string, response: {
+    assistant_message_id: string
+    status: string
+    task_id: string
+    user_message_id: string
+  }) => {
+    const createdAt = new Date(0).toISOString()
+    return [
+      {
+        id: response.user_message_id,
+        conversation_id: conversationId,
+        role: 'user',
+        content,
+        status: 'complete',
+        safety_outcome: null,
+        topic_labels: [],
+        risk_labels: [],
+        metadata: {},
+        citations: [],
+        created_at: createdAt,
+      },
+      {
+        id: response.assistant_message_id,
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: '',
+        status: response.status,
+        safety_outcome: null,
+        topic_labels: [],
+        risk_labels: [],
+        metadata: { task_id: response.task_id, user_message_id: response.user_message_id },
+        citations: [],
+        created_at: createdAt,
+      },
+    ]
+  },
   useConversations: () => ({
     data: chatMocks.conversationsLoading ? undefined : chatMocks.conversations,
     isFetching: chatMocks.conversationsFetching,
@@ -58,6 +98,14 @@ vi.mock('@/src/hooks/useConversations', () => ({
   useCreateConversation: () => ({
     mutate: chatMocks.createConversationMutate,
     isPending: chatMocks.createConversationPending,
+  }),
+  useSubmitConversationMessage: () => ({
+    mutate: chatMocks.submitConversationMessageMutate,
+    isPending: chatMocks.submitConversationMessagePending,
+  }),
+  useConversationMessageStream: () => ({
+    start: chatMocks.startConversationStream,
+    stop: chatMocks.stopConversationStream,
   }),
   useConversationDetail: (conversationId: string | null) => ({
     data: conversationId && !chatMocks.detailLoading ? chatMocks.details.get(conversationId) : undefined,
@@ -98,6 +146,17 @@ function detail(summaryRecord: ConversationSummary): ConversationDetail {
   return { ...summaryRecord, messages: [], files: [] }
 }
 
+function startResponse(conversation: ConversationDetail) {
+  return {
+    assistant_message_id: 'assistant-start',
+    conversation,
+    status: 'streaming',
+    stream_url: `/api/v1/conversations/${conversation.id}/messages/assistant-start/stream?task_id=task-start`,
+    task_id: 'task-start',
+    user_message_id: 'user-start',
+  }
+}
+
 function renderChat() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -112,6 +171,7 @@ beforeEach(() => {
   chatMocks.conversationsFetching = false
   chatMocks.conversationsLoading = false
   chatMocks.createConversationPending = false
+  chatMocks.submitConversationMessagePending = false
   chatMocks.detailFetching = false
   chatMocks.detailLoading = false
   chatMocks.details = new Map()
@@ -121,6 +181,9 @@ beforeEach(() => {
   chatMocks.routerReplace.mockReset()
   chatMocks.logoutMutateAsync.mockReset()
   chatMocks.createConversationMutate.mockReset()
+  chatMocks.submitConversationMessageMutate.mockReset()
+  chatMocks.startConversationStream.mockReset()
+  chatMocks.stopConversationStream.mockReset()
   chatMocks.uploadConversationFileMutate.mockReset()
   useUIStore.setState({
     activeConversationId: null,
@@ -288,7 +351,7 @@ describe('ChatShell', () => {
     expect(screen.getByText('Can I travel?')).toBeInTheDocument()
     expect(screen.getByText(/thinking/i)).toBeInTheDocument()
     expect(chatMocks.createConversationMutate).toHaveBeenCalledWith(
-      { initial_message: 'Can I travel?' },
+      { content: 'Can I travel?' },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     )
 
@@ -310,7 +373,7 @@ describe('ChatShell', () => {
   it('queues a home-screen attachment and uploads it after the first message creates a conversation', async () => {
     const createdConversation = summary('c-new', 'Travel form review', today)
     chatMocks.createConversationMutate.mockImplementation((_request, options) => {
-      options?.onSuccess?.({ ...detail(createdConversation), messages: [] })
+      options?.onSuccess?.(startResponse({ ...detail(createdConversation), messages: [] }))
     })
     chatMocks.uploadConversationFileMutate.mockImplementation((request, options) => {
       request.onProgress?.({ loaded: 5, percent: 50, total: 10 })
@@ -351,6 +414,37 @@ describe('ChatShell', () => {
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     )
     expect(screen.getByText('Queued')).toBeInTheDocument()
+  })
+
+  it('submits follow-up messages to the active conversation and opens the returned stream', async () => {
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.details = new Map([['c1', detail(todayConversation)]])
+    chatMocks.submitConversationMessageMutate.mockImplementation((_request, options) => {
+      options?.onSuccess?.({
+        assistant_message_id: 'assistant-follow-up',
+        status: 'streaming',
+        stream_url: '/api/v1/conversations/c1/messages/assistant-follow-up/stream?task_id=task-follow-up',
+        task_id: 'task-follow-up',
+        user_message_id: 'user-follow-up',
+      })
+    })
+    useUIStore.setState({ activeConversationId: 'c1' })
+
+    renderChat()
+
+    await userEvent.type(screen.getByLabelText(/message playbook/i), 'Can I follow up?')
+    await userEvent.click(screen.getByRole('button', { name: /^ask$/i }))
+
+    expect(chatMocks.submitConversationMessageMutate).toHaveBeenCalledWith(
+      { conversationId: 'c1', content: 'Can I follow up?' },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+    expect(chatMocks.startConversationStream).toHaveBeenCalledWith({
+      assistantMessageId: 'assistant-follow-up',
+      conversationId: 'c1',
+      streamUrl: '/api/v1/conversations/c1/messages/assistant-follow-up/stream?task_id=task-follow-up',
+    })
   })
 
   it('uploads an active conversation file and shows queued status', async () => {

@@ -21,6 +21,7 @@ from app.schemas.conversations import (
     ConversationFileSummaryResponse,
     ConversationFileUploadRequest,
     ConversationFileUploadRequestResponse,
+    ConversationStartResponse,
     ConversationSummaryResponse,
     MessageSubmitRequest,
     MessageSubmitResponse,
@@ -48,15 +49,15 @@ async def list_conversations(
 
 @router.post(
     "",
-    response_model=ConversationDetailResponse,
-    status_code=status.HTTP_201_CREATED,
+    response_model=ConversationStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_conversation(
     request: ConversationCreateRequest,
     athlete: AthleteUserDep,
     service: ConversationServiceDep,
-) -> ConversationDetailResponse:
-    """Create a current-athlete conversation with an initial user message."""
+) -> ConversationStartResponse:
+    """Start a current-athlete conversation and enqueue assistant generation."""
     return await service.create(athlete=athlete, request=request)
 
 

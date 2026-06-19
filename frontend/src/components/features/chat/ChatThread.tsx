@@ -1,6 +1,6 @@
 'use client'
 
-import { FileText } from 'lucide-react'
+import { AlertTriangle, FileText } from 'lucide-react'
 import { ChatThreadSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { PlaybookMark } from '@/src/components/ui'
 import type { ChatMessage, Citation } from '@/src/types/conversations'
@@ -79,7 +79,8 @@ interface AssistantMessageProps {
 }
 
 function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) {
-  const isThinking = message.status === 'pending' || message.status === 'streaming' || !message.content
+  const isFailed = message.status === 'failed'
+  const isThinking = !isFailed && (message.status === 'pending' || message.status === 'streaming' || !message.content)
   const checkedSources = getNumberMetadata(message.metadata, 'checked_sources')
   const responseTime = getStringMetadata(message.metadata, 'response_time')
 
@@ -89,7 +90,12 @@ function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) 
         <p className="pb-ui-xs mb-2 text-fg-3">
           <span className="font-semibold text-fg-1">PlaybookAI</span>
         </p>
-        {isThinking ? (
+        {isFailed ? (
+          <div className="pb-ui-sm flex items-center gap-2 rounded-md border border-danger/40 bg-danger-bg px-3 py-2 text-danger">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{getStringMetadata(message.metadata, 'stream_error') ?? 'Playbook could not finish that response.'}</span>
+          </div>
+        ) : isThinking ? (
           <div className="pb-ui-sm flex items-center gap-3 py-1 text-fg-3">
             <span className="animate-pb-pulse text-brand">
               <PlaybookMark size={22} />

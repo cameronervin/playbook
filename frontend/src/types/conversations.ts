@@ -57,7 +57,25 @@ export interface ConversationDetail extends ConversationSummary {
 }
 
 export interface ConversationCreateRequest {
-  initial_message: string
+  content: string
+}
+
+export interface MessageSubmitRequest {
+  conversationId: string
+  content: string
+  file_ids?: string[]
+}
+
+export interface MessageSubmitResponse {
+  user_message_id: string
+  assistant_message_id: string
+  task_id: string
+  stream_url: string
+  status: string
+}
+
+export interface ConversationStartResponse extends MessageSubmitResponse {
+  conversation: ConversationDetail
 }
 
 export interface ConversationFileUploadIntentRequest {

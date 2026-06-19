@@ -125,16 +125,17 @@ expect_status "athlete profile update" "200" \
   -d '{"name":"Jordan Athlete","sport_team":"Basketball"}'
 expect_jq "athlete profile complete" '.profile_complete == true and .next_route == "/chat"'
 
-expect_status "create athlete conversation" "201" \
+expect_status "create athlete conversation" "202" \
   -X POST "$BASE/api/v1/conversations" \
   -H "Authorization: Bearer $ATHLETE_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"initial_message":"Can I accept this NIL deal?"}'
-CONV_ID="$(jq -r '.id // empty' "$BODY_FILE")"
+  -d '{"content":"Can I accept this NIL deal?"}'
+CONV_ID="$(jq -r '.conversation.id // empty' "$BODY_FILE")"
 if [ -z "$CONV_ID" ]; then
   fail "conversation create did not return id"
 fi
-expect_jq "conversation create includes initial message" '.title == null and (.messages | length) == 1 and .messages[0].role == "user"'
+expect_jq "conversation create starts stream" '.status == "streaming" and (.task_id | length > 0) and (.stream_url | length > 0)'
+expect_jq "conversation create includes user and assistant messages" '.conversation.title == null and (.conversation.messages | length) == 2 and .conversation.messages[0].role == "user" and .conversation.messages[1].role == "assistant"'
 
 expect_status "list athlete conversations" "200" \
   -H "Authorization: Bearer $ATHLETE_TOKEN" \

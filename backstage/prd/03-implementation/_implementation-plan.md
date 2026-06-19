@@ -52,7 +52,7 @@ with [backstage/api/endpoints.md](../../api/endpoints.md):
 |------|--------------------|
 | Auth/users | `GET /auth/providers`, `GET /auth/{provider}/login`, `GET /auth/{provider}/callback`, `POST /auth/logout`, `GET /users/me`, `PATCH /users/me/profile` |
 | Admin users/audit | `GET /admin/users`, `PATCH /admin/users/{user_id}/role`, `GET /admin/audit-logs` |
-| Conversations | `GET /conversations`, `POST /conversations`, `GET /conversations/{conversation_id}` |
+| Conversations | `GET /conversations`, `POST /conversations`, `GET /conversations/{conversation_id}`, `POST /conversations/{conversation_id}/messages`, `GET /conversations/{conversation_id}/messages/{message_id}/stream`, conversation-file direct-upload routes |
 | KB documents | `GET /admin/kb/documents`, `POST /admin/kb/documents`, `GET /admin/kb/documents/{document_id}`, `PATCH /admin/kb/documents/{document_id}/metadata`, `POST /admin/kb/documents/{document_id}/retry`, `DELETE /admin/kb/documents/{document_id}`, `POST /kb/webhook` |
 | Health | `GET /health` |
 

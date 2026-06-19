@@ -76,7 +76,7 @@ class ConversationHistoryService:
         message = await self.message_repo.create(
             conversation_id=conversation.id,
             role="user",
-            content=request.initial_message,
+            content=request.content,
         )
         conversation = await self.conversation_repo.update_last_message_at(
             conversation,

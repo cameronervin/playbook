@@ -26,7 +26,7 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | Method | Endpoint | Purpose | Role |
 |--------|----------|---------|------|
 | GET | `/conversations` | List current athlete conversations | athlete |
-| POST | `/conversations` | Create a new conversation from the initial user message | athlete |
+| POST | `/conversations` | Start a new conversation from the first user message and start streamed generation | athlete |
 | GET | `/conversations/{conversation_id}` | Get conversation with messages, citations, files | athlete-owner |
 | POST | `/conversations/{conversation_id}/messages` | Submit follow-up user message and start streamed generation | athlete-owner |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream assistant response chunks for the submitted task | athlete-owner |
@@ -107,20 +107,70 @@ Response:
 ```
 
 ### Submit Chat Message
-Create a new conversation with the athlete's first message:
+Start a new conversation with the athlete's first message:
 
 ```json
 POST /api/v1/conversations
 {
-  "initial_message": "Can I accept this NIL deal?"
+  "content": "Can I accept this NIL deal?"
 }
 ```
 
-Response includes the created conversation and the initial user message. The
-conversation title is `null` until agent-generated title logic updates it, and
-`files` is a safe top-level list of conversation-scoped uploads. It is usually
-empty when a conversation is first created, and later includes file status
-summaries after direct-upload intents are created.
+Response includes the created conversation, the persisted first user message, a
+streaming assistant placeholder, and stream metadata. The conversation title is
+`null` until agent-generated title logic updates it, and `files` is a safe
+top-level list of conversation-scoped uploads. It is usually empty when a
+conversation is first created, and later includes file status summaries after
+direct-upload intents are created.
+
+```json
+{
+  "conversation": {
+    "id": "uuid",
+    "organization_id": "uuid",
+    "athlete_id": "uuid",
+    "title": null,
+    "status": "active",
+    "last_message_at": "2026-06-03T12:00:00Z",
+    "created_at": "2026-06-03T12:00:00Z",
+    "updated_at": "2026-06-03T12:00:00Z",
+    "messages": [
+      {
+        "id": "uuid",
+        "conversation_id": "uuid",
+        "role": "user",
+        "content": "Can I accept this NIL deal?",
+        "status": "complete",
+        "safety_outcome": null,
+        "topic_labels": [],
+        "risk_labels": [],
+        "metadata": {"attached_file_ids": []},
+        "citations": [],
+        "created_at": "2026-06-03T12:00:00Z"
+      },
+      {
+        "id": "uuid",
+        "conversation_id": "uuid",
+        "role": "assistant",
+        "content": "",
+        "status": "streaming",
+        "safety_outcome": null,
+        "topic_labels": [],
+        "risk_labels": [],
+        "metadata": {"task_id": "celery-task-uuid", "user_message_id": "uuid"},
+        "citations": [],
+        "created_at": "2026-06-03T12:00:00Z"
+      }
+    ],
+    "files": []
+  },
+  "user_message_id": "uuid",
+  "assistant_message_id": "uuid",
+  "task_id": "celery-task-uuid",
+  "stream_url": "/api/v1/conversations/uuid/messages/uuid/stream?task_id=celery-task-uuid",
+  "status": "streaming"
+}
+```
 
 Submit a follow-up message to an existing conversation:
 
@@ -143,12 +193,13 @@ Response:
 }
 ```
 
-The message submit route must enqueue a Celery task to execute the athlete chat
-agent. The Celery worker publishes ordered lifecycle and token events to Valkey
-Streams, with pub/sub notification for active HTTP subscribers. The stream URL
-must be scoped to the athlete-owned conversation and assistant message, and the
-backend must verify that the supplied `task_id` belongs to that
-conversation/message before subscribing to the task's Valkey stream/channel.
+The first-send and follow-up message routes must enqueue a Celery task to
+execute the athlete chat agent. The Celery worker publishes ordered lifecycle
+and token events to Valkey Streams, with pub/sub notification for active HTTP
+subscribers. The stream URL must be scoped to the athlete-owned conversation and
+assistant message, and the backend must verify that the supplied `task_id`
+belongs to that conversation/message before subscribing to the task's Valkey
+stream/channel.
 
 ### Upload Conversation File
 ```json

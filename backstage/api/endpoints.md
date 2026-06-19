@@ -46,7 +46,7 @@ Example error response:
 | GET | `/admin/users` | List organization users for super-admin role management |
 | PATCH | `/admin/users/{user_id}/role` | Update a user's Playbook role |
 | GET | `/conversations` | List current athlete conversations |
-| POST | `/conversations` | Create a current-athlete conversation from the initial message |
+| POST | `/conversations` | Start a current-athlete conversation from the first message, enqueue the Celery agent task, and return `202` with `task_id` stream metadata plus conversation detail |
 | GET | `/conversations/{conversation_id}` | Get conversation details with messages/citations/files |
 | POST | `/conversations/{conversation_id}/files` | Create a conversation-scoped direct-upload request and return a presigned POST contract |
 | POST | `/conversations/{conversation_id}/files/{file_id}/upload-complete` | Verify direct-uploaded object metadata and queue private ingest handoff |

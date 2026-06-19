@@ -9,6 +9,11 @@ import { uploadKBDocument } from '@/src/lib/api/endpoints/kbDocuments'
 import { QUERY_KEYS } from '@/src/lib/constants/config'
 
 vi.mock('@/src/lib/api/endpoints/conversations', () => ({
+  createConversation: vi.fn(),
+  createConversationMessageStream: vi.fn(),
+  getConversation: vi.fn(),
+  listConversations: vi.fn(),
+  submitConversationMessage: vi.fn(),
   uploadConversationFile: vi.fn(),
 }))
 

@@ -20,17 +20,17 @@ ConversationFileExtractionStatus = Literal[
 
 
 class ConversationCreateRequest(BaseModel):
-    """Create a conversation from the athlete's first message."""
+    """Start a conversation from the athlete's first message."""
 
-    initial_message: str = Field(min_length=1)
+    content: str = Field(min_length=1)
 
-    @field_validator("initial_message")
+    @field_validator("content")
     @classmethod
-    def trim_initial_message(cls, value: str) -> str:
+    def trim_content(cls, value: str) -> str:
         """Normalize accidental edge whitespace and reject empty content."""
         trimmed = value.strip()
         if not trimmed:
-            raise ValueError("initial_message must contain message content")
+            raise ValueError("content must contain message content")
         return trimmed
 
 
@@ -164,3 +164,9 @@ class ConversationDetailResponse(ConversationSummaryResponse):
 
     messages: list[ConversationMessageResponse] = Field(default_factory=list)
     files: list[ConversationFileSummaryResponse] = Field(default_factory=list)
+
+
+class ConversationStartResponse(MessageSubmitResponse):
+    """New conversation detail plus stream metadata for the first user turn."""
+
+    conversation: ConversationDetailResponse

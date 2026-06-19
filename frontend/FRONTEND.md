@@ -58,6 +58,10 @@ The visual source of truth is `backstage/design/`, especially `backstage/design/
 - Server state belongs in TanStack Query hooks in `src/hooks/`.
 - API calls live in `src/lib/api/endpoints/` and use `apiClient`.
 - `apiClient` sends cookie credentials, preserves multipart `FormData`, parses structured API errors, and handles `204`.
+- Athlete chat first-send uses `POST /api/v1/conversations`; follow-ups use
+  `POST /api/v1/conversations/{conversation_id}/messages`. Both return
+  `task_id` stream metadata, and the browser opens the returned SSE
+  `stream_url` with cookies included.
 - Zustand stores only client UI state, such as selected conversation, sources panel, admin tab, and settings modal state.
 - Missing Phase 2+ APIs are represented by typed fixtures, not hidden server-state mocks.
 

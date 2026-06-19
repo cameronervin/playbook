@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { ChatComposer, type ChatComposerHandle } from '@/src/components/features/chat/ChatComposer'
 import { ChatNavRail } from '@/src/components/features/chat/ChatNavRail'
 import { ChatSourcesPanel } from '@/src/components/features/chat/ChatSourcesPanel'
@@ -17,16 +18,31 @@ import { HorizonBackground } from '@/src/components/features/common/HorizonBackg
 import { ChatWorkspaceSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
-import { useConversationDetail, useConversations, useCreateConversation, useUploadConversationFile } from '@/src/hooks/useConversations'
-import { ROUTES } from '@/src/lib/constants/config'
+import {
+  createSubmittedMessages,
+  useConversationDetail,
+  useConversationMessageStream,
+  useConversations,
+  useCreateConversation,
+  useSubmitConversationMessage,
+  useUploadConversationFile,
+} from '@/src/hooks/useConversations'
+import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
-import type { ChatMessage, ConversationSummary, Citation } from '@/src/types/conversations'
+import type {
+  ChatMessage,
+  ConversationDetail,
+  ConversationSummary,
+  Citation,
+  MessageSubmitResponse,
+} from '@/src/types/conversations'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_CONVERSATIONS: ConversationSummary[] = []
 
 export function ChatShell() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const composerRef = useRef<ChatComposerHandle | null>(null)
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
   const { data: user, isLoading: userLoading } = useCurrentUser()
@@ -44,6 +60,8 @@ export function ChatShell() {
   const conversationDetailQuery = useConversationDetail(activeConversationId)
   const activeConversation = conversationDetailQuery.data
   const createConversation = useCreateConversation()
+  const submitConversationMessage = useSubmitConversationMessage()
+  const { start: startConversationStream, stop: stopConversationStream } = useConversationMessageStream()
   const uploadConversationFile = useUploadConversationFile()
   const uploadConversationFileMutation = useCallback<UploadConversationFileMutation>(
     (request, options) => uploadConversationFile.mutate(request, options),
@@ -76,12 +94,13 @@ export function ChatShell() {
   }, [])
 
   const handleNewChat = useCallback(() => {
+    stopConversationStream()
     setActiveConversationId(null)
     clearLocalUploads()
     setSelectedCitationTitle(null)
     setSourcesOpen(false)
     focusComposer()
-  }, [clearLocalUploads, focusComposer, setActiveConversationId, setSelectedCitationTitle, setSourcesOpen])
+  }, [clearLocalUploads, focusComposer, setActiveConversationId, setSelectedCitationTitle, setSourcesOpen, stopConversationStream])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -105,23 +124,70 @@ export function ChatShell() {
 
   const handleSelectConversation = (conversationId: string) => {
     setPendingMessage(null)
+    stopConversationStream()
     clearLocalUploads()
     setActiveConversationId(conversationId)
     setSelectedCitationTitle(null)
     setSourcesOpen(true)
   }
 
+  const appendSubmittedTurn = useCallback(
+    (conversationId: string, message: string, response: MessageSubmitResponse) => {
+      queryClient.setQueryData<ConversationDetail>(
+        [QUERY_KEYS.conversationDetail, conversationId],
+        (conversation) => {
+          if (!conversation) return conversation
+          return {
+            ...conversation,
+            messages: [
+              ...conversation.messages,
+              ...createSubmittedMessages(conversationId, message, response),
+            ],
+          }
+        },
+      )
+    },
+    [queryClient],
+  )
+
   const handleSend = (message: string) => {
     setPendingMessage(message)
+    if (activeConversationId) {
+      submitConversationMessage.mutate(
+        { conversationId: activeConversationId, content: message },
+        {
+          onSuccess: (response) => {
+            setPendingMessage(null)
+            appendSubmittedTurn(activeConversationId, message, response)
+            setSelectedCitationTitle(null)
+            setSourcesOpen(false)
+            startConversationStream({
+              assistantMessageId: response.assistant_message_id,
+              conversationId: activeConversationId,
+              streamUrl: response.stream_url,
+            })
+          },
+          onError: () => setPendingMessage(null),
+        },
+      )
+      return
+    }
+
     createConversation.mutate(
-      { initial_message: message },
+      { content: message },
       {
-        onSuccess: (conversation) => {
+        onSuccess: (response) => {
+          const conversation = response.conversation
           setPendingMessage(null)
           setActiveConversationId(conversation.id)
           setSelectedCitationTitle(null)
-          setSourcesOpen(conversation.messages.some((chatMessage) => chatMessage.citations.length > 0))
+          setSourcesOpen(false)
           uploadPendingFiles(conversation.id)
+          startConversationStream({
+            assistantMessageId: response.assistant_message_id,
+            conversationId: conversation.id,
+            streamUrl: response.stream_url,
+          })
         },
         onError: () => setPendingMessage(null),
       },
@@ -176,7 +242,7 @@ export function ChatShell() {
         <ChatComposer
           canAttach
           conversationFiles={conversationFiles}
-          disabled={createConversation.isPending}
+          disabled={createConversation.isPending || submitConversationMessage.isPending}
           localUploads={localUploads}
           onAttachFile={handleAttachFile}
           onSend={handleSend}

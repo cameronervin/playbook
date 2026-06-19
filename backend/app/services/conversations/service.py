@@ -23,6 +23,7 @@ from app.schemas.conversations import (
     ConversationFileSummaryResponse,
     ConversationFileUploadRequest,
     ConversationFileUploadRequestResponse,
+    ConversationStartResponse,
     ConversationSummaryResponse,
     MessageSubmitRequest,
     MessageSubmitResponse,
@@ -132,9 +133,12 @@ class ConversationService:
         *,
         athlete: User,
         request: ConversationCreateRequest,
-    ) -> ConversationDetailResponse:
-        """Create an athlete conversation seeded with the first user message."""
-        return await self.history_service.create(athlete=athlete, request=request)
+    ) -> ConversationStartResponse:
+        """Start an athlete conversation and enqueue assistant generation."""
+        return await self.message_service.start_conversation(
+            athlete=athlete,
+            request=request,
+        )
 
     async def get_detail(
         self,
