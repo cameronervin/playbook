@@ -132,6 +132,13 @@ KB-service and scheduled passes reconcile expired direct-upload intents:
 uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
 ```
 
+Backend workers use `CELERY_WORKER_LOG_LEVEL` independently from API
+`LOG_LEVEL`, so local API logs can stay at `DEBUG` while worker logs default to
+`INFO`. Restart any already-running worker after changing this value. If old
+delayed maintenance tasks are already queued in local Valkey, they may still run
+once; purging a queue is destructive and should only be done when you are sure no
+needed local tasks are pending.
+
 The backend worker and future interactive agent stream endpoints use the app
 Valkey service. For Docker Compose this is:
 

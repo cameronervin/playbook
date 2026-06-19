@@ -26,6 +26,10 @@ from app.services.upload_reconciliation_service import (
 )
 from app.workers.app import backend_worker, run_async
 from app.workers.queues import WorkerTaskName
+from app.workers.scheduling import (
+    MAINTENANCE_STARTUP_EXPIRES_SECONDS,
+    expires_for_countdown,
+)
 from app.workers.session import worker_db_session
 
 logger = structlog.get_logger(__name__)
@@ -183,7 +187,7 @@ def drain_kb_ingest_outbox_task(
 ) -> dict[str, Any]:
     """Drain verified direct-upload ingest handoff rows."""
     task_id = str(self.request.id)
-    logger.info(
+    logger.debug(
         "backend_worker_kb_ingest_outbox_invoked",
         task_id=task_id,
         limit=limit,
@@ -216,11 +220,19 @@ def _schedule_next_outbox_drain(
 ) -> None:
     if countdown is None or backend_worker.conf.task_always_eager:
         return
+    expires = expires_for_countdown(countdown)
     try:
         drain_kb_ingest_outbox_task.apply_async(
             kwargs={"limit": limit},
             countdown=countdown,
+            expires=expires,
             retry=False,
+        )
+        logger.info(
+            "kb_ingest_outbox_rescheduled",
+            limit=limit,
+            countdown=countdown,
+            expires=expires,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -241,7 +253,7 @@ def reconcile_upload_requests_task(
 ) -> dict[str, Any]:
     """Expire stale direct-upload requests and clean known orphan objects."""
     task_id = str(self.request.id)
-    logger.info(
+    logger.debug(
         "backend_worker_upload_reconciliation_invoked",
         task_id=task_id,
         limit=limit,
@@ -272,11 +284,19 @@ def _schedule_next_upload_reconciliation(
 ) -> None:
     if countdown is None or backend_worker.conf.task_always_eager:
         return
+    expires = expires_for_countdown(countdown)
     try:
         reconcile_upload_requests_task.apply_async(
             kwargs={"limit": limit},
             countdown=countdown,
+            expires=expires,
             retry=False,
+        )
+        logger.info(
+            "upload_reconciliation_rescheduled",
+            limit=limit,
+            countdown=countdown,
+            expires=expires,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -369,6 +389,7 @@ def schedule_kb_ingest_outbox_startup_drain(**_: Any) -> None:
     try:
         drain_kb_ingest_outbox_task.apply_async(
             kwargs={"limit": DEFAULT_OUTBOX_DRAIN_LIMIT},
+            expires=MAINTENANCE_STARTUP_EXPIRES_SECONDS,
             retry=False,
         )
     except Exception as exc:  # noqa: BLE001
@@ -386,6 +407,7 @@ def schedule_upload_reconciliation_startup(**_: Any) -> None:
     try:
         reconcile_upload_requests_task.apply_async(
             kwargs={"limit": DEFAULT_UPLOAD_RECONCILE_LIMIT},
+            expires=MAINTENANCE_STARTUP_EXPIRES_SECONDS,
             retry=False,
         )
     except Exception as exc:  # noqa: BLE001

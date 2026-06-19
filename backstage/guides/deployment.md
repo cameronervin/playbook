@@ -62,6 +62,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 |---------|-------|-----|------|
 | DEBUG | true | true | false |
 | LOG_LEVEL | DEBUG | DEBUG | WARNING |
+| CELERY_WORKER_LOG_LEVEL | INFO | INFO | INFO |
 | Replicas | 1 | 1 | 3+ |
 | Volumes | bind mounts (hot reload) | none | none |
 | DB ports | exposed | exposed | internal only |

@@ -92,6 +92,21 @@ class _ProcessOutcome:
     skipped: bool = False
 
 
+def _has_reconciliation_activity(result: UploadRequestReconciliationResult) -> bool:
+    """Return whether a reconciliation pass changed or inspected expired rows."""
+    return any(
+        (
+            result.processed,
+            result.expired,
+            result.resources_failed,
+            result.objects_deleted,
+            result.objects_missing,
+            result.cleanup_failed,
+            result.skipped,
+        )
+    )
+
+
 class UploadRequestReconciliationService:
     """Expire stale direct-upload intents and clean known orphan objects."""
 
@@ -170,7 +185,8 @@ class UploadRequestReconciliationService:
             outbox_due_backlog=await self.outbox_repo.count_due(now=now),
             next_expiration_at=next_expiration_at,
         )
-        logger.info(
+        log_method = logger.info if _has_reconciliation_activity(result) else logger.debug
+        log_method(
             "upload_request_reconciliation_completed",
             **result.to_task_payload(),
         )

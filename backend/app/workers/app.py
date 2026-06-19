@@ -9,6 +9,7 @@ import time; Celery connects lazily during dispatch or worker boot.
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import threading
 from collections.abc import Coroutine
@@ -29,11 +30,65 @@ from app.workers.queues import (
     TASK_ROUTES,
 )
 
+NOISY_WORKER_LOGGER_NAMES = (
+    "httpx",
+    "httpcore",
+    "openai",
+    "langchain",
+    "langchain_core",
+    "langchain_openai",
+)
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 settings = get_settings()
-configure_logging(settings.LOG_LEVEL)
+
+
+def configure_worker_logging(
+    app_settings: Settings,
+    *,
+    logger: logging.Logger | None = None,
+    loglevel: int | str | None = None,
+) -> int:
+    """Configure worker process logging without inheriting API debug verbosity."""
+    effective_level = _resolve_worker_log_level(app_settings, loglevel)
+    configure_logging(_level_name(effective_level))
+    if logger is not None:
+        install_secret_redaction_filter(logger)
+    _quiet_noisy_worker_loggers(effective_level)
+    return effective_level
+
+
+def _resolve_worker_log_level(
+    app_settings: Settings,
+    loglevel: int | str | None,
+) -> int:
+    if loglevel is not None:
+        return _coerce_log_level(loglevel)
+    return _coerce_log_level(app_settings.CELERY_WORKER_LOG_LEVEL)
+
+
+def _coerce_log_level(log_level: int | str) -> int:
+    if isinstance(log_level, int):
+        return log_level
+    resolved = getattr(logging, log_level.upper(), logging.INFO)
+    return int(resolved if isinstance(resolved, int) else logging.INFO)
+
+
+def _level_name(log_level: int) -> str:
+    name = logging.getLevelName(log_level)
+    return name if isinstance(name, str) else "INFO"
+
+
+def _quiet_noisy_worker_loggers(effective_level: int) -> None:
+    if effective_level <= logging.DEBUG:
+        return
+    for logger_name in NOISY_WORKER_LOGGER_NAMES:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
+configure_worker_logging(settings)
 logger = structlog.get_logger(__name__)
 
 _ASYNC_RESULT = TypeVar("_ASYNC_RESULT")
@@ -61,6 +116,8 @@ def create_worker_app(settings: Settings) -> Celery:
         task_soft_time_limit=settings.CELERY_TASK_SOFT_TIME_LIMIT,
         task_time_limit=settings.CELERY_TASK_HARD_TIME_LIMIT,
         task_default_retry_delay=settings.CELERY_TASK_RETRY_COUNTDOWN,
+        worker_redirect_stdouts_level="INFO",
+        playbook_worker_log_level=settings.CELERY_WORKER_LOG_LEVEL,
         playbook_task_max_retries=settings.CELERY_TASK_MAX_RETRIES,
         task_publish_retry=True,
         broker_transport_options={
@@ -78,11 +135,13 @@ def create_worker_app(settings: Settings) -> Celery:
 backend_worker = create_worker_app(settings)
 
 
-def configure_celery_logging(logger=None, **_: Any) -> None:
+def configure_celery_logging(
+    logger: logging.Logger | None = None,
+    loglevel: int | str | None = None,
+    **_: Any,
+) -> None:
     """Ensure Celery-managed loggers use the shared redaction filter."""
-    configure_logging(settings.LOG_LEVEL)
-    if logger is not None:
-        install_secret_redaction_filter(logger)
+    configure_worker_logging(settings, logger=logger, loglevel=loglevel)
 
 
 for _signal_name in ("after_setup_logger", "after_setup_task_logger"):

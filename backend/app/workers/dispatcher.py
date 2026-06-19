@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from app.workers.scheduling import expires_for_countdown
 from app.workers.tasks import (
     drain_kb_ingest_outbox_task,
     reconcile_upload_requests_task,
@@ -60,6 +61,7 @@ class KbIngestOutboxTaskDispatcher:
         }
         if countdown is not None:
             options["countdown"] = countdown
+            options["expires"] = expires_for_countdown(countdown)
         result = drain_kb_ingest_outbox_task.apply_async(**options)
         return str(result.id)
 
@@ -75,5 +77,6 @@ class UploadRequestReconciliationTaskDispatcher:
         }
         if countdown is not None:
             options["countdown"] = countdown
+            options["expires"] = expires_for_countdown(countdown)
         result = reconcile_upload_requests_task.apply_async(**options)
         return str(result.id)

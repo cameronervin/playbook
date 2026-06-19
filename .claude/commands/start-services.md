@@ -51,7 +51,9 @@ celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,b
 
 > Only needed if the project uses background tasks. The backend worker scaffold
 > routes interactive agents, conversation files, dashboard insights, and
-> maintenance tasks to named queues.
+> maintenance tasks to named queues. Worker verbosity is controlled by
+> `CELERY_WORKER_LOG_LEVEL` separately from API `LOG_LEVEL`; restart existing
+> worker processes after changing it.
 
 ### 6. Verify All Services Running
 - Backend: "Uvicorn running on http://127.0.0.1:8000"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -12,10 +13,12 @@ from app.infrastructure.streaming import (
     InMemoryAgentStreamProvider,
 )
 from app.workers import tasks as worker_tasks
+from app.workers import app as worker_app
 from app.workers.app import backend_worker, create_worker_app
 from app.workers.dispatcher import (
     AthleteChatTaskDispatcher,
     AthleteChatTaskPayload,
+    KbIngestOutboxTaskDispatcher,
     UploadRequestReconciliationTaskDispatcher,
 )
 from app.workers.queues import (
@@ -86,6 +89,64 @@ def test_create_worker_app_uses_supplied_settings() -> None:
     assert app.conf.task_soft_time_limit == 12
     assert app.conf.task_time_limit == 34
     assert app.conf.task_default_retry_delay == 5
+
+
+def test_create_worker_app_separates_worker_log_level_from_app_log_level() -> None:
+    app = create_worker_app(
+        _settings(
+            LOG_LEVEL="DEBUG",
+            CELERY_WORKER_LOG_LEVEL="INFO",
+        )
+    )
+
+    assert app.conf.playbook_worker_log_level == "INFO"
+    assert app.conf.worker_redirect_stdouts_level == "INFO"
+
+
+def test_worker_logging_prefers_celery_signal_log_level(monkeypatch) -> None:
+    configured: dict[str, object] = {}
+
+    def fake_configure_logging(log_level: str) -> None:
+        configured["log_level"] = log_level
+
+    monkeypatch.setattr(worker_app, "configure_logging", fake_configure_logging)
+
+    effective_level = worker_app.configure_worker_logging(
+        _settings(
+            LOG_LEVEL="DEBUG",
+            CELERY_WORKER_LOG_LEVEL="WARNING",
+        ),
+        loglevel=logging.INFO,
+    )
+
+    assert effective_level == logging.INFO
+    assert configured["log_level"] == "INFO"
+
+
+def test_worker_logging_quiets_noisy_third_party_loggers(monkeypatch) -> None:
+    configured: dict[str, object] = {}
+
+    def fake_configure_logging(log_level: str) -> None:
+        configured["log_level"] = log_level
+
+    monkeypatch.setattr(worker_app, "configure_logging", fake_configure_logging)
+    original_levels = {
+        name: logging.getLogger(name).level
+        for name in worker_app.NOISY_WORKER_LOGGER_NAMES
+    }
+    try:
+        worker_app.configure_worker_logging(
+            _settings(CELERY_WORKER_LOG_LEVEL="INFO")
+        )
+
+        assert configured["log_level"] == "INFO"
+        assert all(
+            logging.getLogger(name).level == logging.WARNING
+            for name in worker_app.NOISY_WORKER_LOGGER_NAMES
+        )
+    finally:
+        for name, level in original_levels.items():
+            logging.getLogger(name).setLevel(level)
 
 
 def test_backend_worker_registers_and_routes_named_tasks() -> None:
@@ -272,6 +333,118 @@ def test_upload_reconciliation_dispatcher_uses_countdown(monkeypatch) -> None:
         "kwargs": {"limit": 7},
         "retry": False,
         "countdown": 30,
+        "expires": 90,
+    }
+
+
+def test_kb_ingest_outbox_dispatcher_uses_countdown_expiry(monkeypatch) -> None:
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(**options: object) -> SimpleNamespace:
+        dispatched.update(options)
+        return SimpleNamespace(id="outbox-task-id")
+
+    monkeypatch.setattr(
+        drain_kb_ingest_outbox_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    task_id = KbIngestOutboxTaskDispatcher().dispatch(
+        limit=5,
+        countdown=45,
+    )
+
+    assert task_id == "outbox-task-id"
+    assert dispatched == {
+        "kwargs": {"limit": 5},
+        "retry": False,
+        "countdown": 45,
+        "expires": 105,
+    }
+
+
+def test_outbox_reschedule_adds_expiry(monkeypatch) -> None:
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(**options: object) -> SimpleNamespace:
+        dispatched.update(options)
+        return SimpleNamespace(id="outbox-task-id")
+
+    monkeypatch.setattr(
+        drain_kb_ingest_outbox_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    worker_tasks._schedule_next_outbox_drain(limit=25, countdown=30)
+
+    assert dispatched == {
+        "kwargs": {"limit": 25},
+        "countdown": 30,
+        "expires": 90,
+        "retry": False,
+    }
+
+
+def test_upload_reconciliation_reschedule_adds_expiry(monkeypatch) -> None:
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(**options: object) -> SimpleNamespace:
+        dispatched.update(options)
+        return SimpleNamespace(id="reconcile-task-id")
+
+    monkeypatch.setattr(
+        reconcile_upload_requests_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    worker_tasks._schedule_next_upload_reconciliation(limit=100, countdown=30)
+
+    assert dispatched == {
+        "kwargs": {"limit": 100},
+        "countdown": 30,
+        "expires": 90,
+        "retry": False,
+    }
+
+
+def test_startup_maintenance_dispatches_use_short_expiry(monkeypatch) -> None:
+    outbox_dispatch: dict[str, object] = {}
+    reconcile_dispatch: dict[str, object] = {}
+
+    def fake_outbox_apply_async(**options: object) -> SimpleNamespace:
+        outbox_dispatch.update(options)
+        return SimpleNamespace(id="outbox-task-id")
+
+    def fake_reconcile_apply_async(**options: object) -> SimpleNamespace:
+        reconcile_dispatch.update(options)
+        return SimpleNamespace(id="reconcile-task-id")
+
+    monkeypatch.setattr(
+        drain_kb_ingest_outbox_task,
+        "apply_async",
+        fake_outbox_apply_async,
+    )
+    monkeypatch.setattr(
+        reconcile_upload_requests_task,
+        "apply_async",
+        fake_reconcile_apply_async,
+    )
+
+    worker_tasks.schedule_kb_ingest_outbox_startup_drain()
+    worker_tasks.schedule_upload_reconciliation_startup()
+
+    assert outbox_dispatch == {
+        "kwargs": {"limit": worker_tasks.DEFAULT_OUTBOX_DRAIN_LIMIT},
+        "expires": 60,
+        "retry": False,
+    }
+    assert reconcile_dispatch == {
+        "kwargs": {"limit": worker_tasks.DEFAULT_UPLOAD_RECONCILE_LIMIT},
+        "expires": 60,
+        "retry": False,
     }
 
 
