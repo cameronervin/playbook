@@ -42,8 +42,9 @@ services:
         max-file: "10"
 
   reranker:
+    restart: unless-stopped
     env_file:
-      - ../envs/.env.prod
+      - ../envs/.env.reranker.prod
     deploy:
       resources:
         limits:

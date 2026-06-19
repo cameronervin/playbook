@@ -98,6 +98,7 @@ Recommended deployment shape:
 | Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200` |
 | KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`; keep `KB_SEARCH_STRATEGY=semantic` and `KB_RERANK_ENABLED=false` by default, then enable `KB_SEARCH_STRATEGY=hybrid` plus `KB_RERANK_ENABLED=true` for reranked retrieval |
 | LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `LITELLM_DATABASE_URL`, `LITELLM_PLAYBOOK_RERANK_MODEL`, `INFINITY_API_BASE`, and `INFINITY_API_KEY` |
+| Reranker env | `INFINITY_API_KEY` and Infinity runtime settings only, copied from `deploy/envs/.env.reranker.example` to the environment-specific untracked file; do not include LiteLLM provider keys, master keys, or app service secrets |
 
 Use a separate LiteLLM database or at least a separate database/user in the
 Postgres cluster. Do not add LiteLLM tables to the Playbook application data
@@ -110,9 +111,10 @@ admin UI. That means the production deployment should include a LiteLLM DB
 connection and stable `LITELLM_MASTER_KEY`/`LITELLM_SALT_KEY` secrets.
 Provider API keys such as `OPENAI_API_KEY` should be available only to the
 LiteLLM proxy service. `INFINITY_API_KEY` is an internal token shared by LiteLLM
-and the `reranker` service, not by application runtimes. Add other provider keys
-only when aliases use those providers. The backend and KB-service should hold
-only LiteLLM virtual/service keys.
+and the `reranker` service, not by application runtimes. The reranker service
+gets that token from a dedicated reranker env file instead of the LiteLLM env
+file. Add other provider keys only when aliases use those providers. The
+backend and KB-service should hold only LiteLLM virtual/service keys.
 
 The project-owned LiteLLM image is defined in
 `deploy/docker/Dockerfile.litellm` and uses `deploy/litellm/config.yaml` for
@@ -126,13 +128,28 @@ model aliases:
 | `playbook-ocr` | `LITELLM_PLAYBOOK_OCR_MODEL` | opt-in scanned PDF OCR when `OCR_PROVIDER=vlm` |
 | `playbook-rerank` | `LITELLM_PLAYBOOK_RERANK_MODEL` | Infinity reranker alias for KB-service hybrid/rerank phases |
 
-The reranker container is enabled with the `reranker` profile and uses
-`michaelf34/infinity:latest-cpu` by default:
+The reranker container is enabled with the `reranker` profile. Local Compose
+overrides the image to `michaelf34/infinity:0.0.75` for Apple Silicon ARM64
+compatibility, serves `mixedbread-ai/mxbai-rerank-xsmall-v1` with the `torch`
+engine, and disables local restart loops. Dev/prod keep the base
+`BAAI/bge-reranker-base` plus `optimum` engine and explicit restart behavior
+for managed environments:
 
 ```bash
+cp deploy/envs/.env.reranker.example deploy/envs/.env.reranker.local
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
   --profile reranker up -d --build reranker litellm
 ```
+
+If an old local `compose-reranker-1` container is repeatedly restarting after an
+amd64/Rosetta startup failure, remove only that container after updating:
+
+```bash
+docker rm -f compose-reranker-1
+```
+
+Do not remove `compose_reranker_cache` unless switching local reranker models or
+the reranker smoke fails with a cache/model artifact error.
 
 This configures model serving and LiteLLM routing. KB-service uses semantic
 pgvector retrieval by default; reranked retrieval requires

@@ -51,15 +51,21 @@ The self-hosted Infinity reranker is optional during normal local boot. Start it
 when validating LiteLLM `/rerank` routing:
 
 ```bash
+cp deploy/envs/.env.reranker.example deploy/envs/.env.reranker.local
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
   --profile reranker up -d --build reranker litellm
 
 curl http://localhost:7997/health
 ```
 
-On Apple Silicon, the Infinity CPU image currently runs as `linux/amd64` under
-Docker Desktop emulation. Keep `RERANKER_PLATFORM=linux/amd64` in
-`deploy/envs/.env.litellm.local` unless Infinity publishes an ARM64 CPU image.
+On Apple Silicon, the local reranker override uses
+`michaelf34/infinity:0.0.75`, which has a `linux/arm64` manifest, and serves
+`mixedbread-ai/mxbai-rerank-xsmall-v1` with Infinity's `torch` engine. Dev and
+prod keep the base `BAAI/bge-reranker-base` target. Local reranker restart is
+disabled so a bad model startup does not keep relaunching. If an older reranker
+container is already looping, run `docker rm -f compose-reranker-1` after
+updating the config; remove `compose_reranker_cache` only when switching model
+artifacts or when the smoke test reports cache/model artifact problems.
 
 Then smoke the LiteLLM rerank alias:
 
@@ -261,7 +267,7 @@ KB infrastructure definitions:
 | MinIO bucket bootstrap | `minio-bootstrap` | n/a | creates `S3_BUCKET_NAME` (`playbook-bucket`) |
 | KB broker/result backend | `kb-valkey` | `6380` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
 | LiteLLM proxy | `litellm` | `4000` | `deploy/litellm/config.yaml`, `deploy/envs/.env.litellm.local` |
-| Infinity reranker | `reranker` | `7997` | enabled with `--profile reranker`, env in `deploy/envs/.env.litellm.local` |
+| Infinity reranker | `reranker` | `7997` | enabled with `--profile reranker`, env in `deploy/envs/.env.reranker.local` copied from `deploy/envs/.env.reranker.example` |
 | KB API container | `kb-api` | `8001` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
 | KB workers | `kb-worker-cpu`, `kb-worker-io` | n/a | enabled with `--profile worker` |
 

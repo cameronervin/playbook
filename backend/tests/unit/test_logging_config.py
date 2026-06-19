@@ -4,8 +4,17 @@ import io
 import logging
 
 import structlog
+from uvicorn.logging import AccessFormatter
 
+from app.core.log_redaction import redact_string
 from app.core.logging_config import SecretRedactionFilter, configure_logging
+
+
+class RaisingStreamHandler(logging.StreamHandler):
+    """Make formatter failures fail tests instead of only printing to stderr."""
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        raise AssertionError("logging formatter failed") from None
 
 
 def test_configure_logging_installs_structlog_redaction_once() -> None:
@@ -62,3 +71,81 @@ def test_stdlib_filter_redacts_message_args_extra_and_exception_text() -> None:
     assert "token-secret" not in rendered
     assert "sk-extra-secret" not in rendered
     assert "[REDACTED]" in rendered
+
+
+def test_uvicorn_access_formatter_survives_stdlib_redaction_factory() -> None:
+    stream = io.StringIO()
+    handler = RaisingStreamHandler(stream)
+    handler.setFormatter(
+        AccessFormatter(
+            '%(client_addr)s - "%(request_line)s" %(status_code)s',
+            use_colors=False,
+        )
+    )
+
+    logger = logging.getLogger("test.uvicorn.access.backend")
+    logger.handlers = [handler]
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+
+    configure_logging("INFO")
+    logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:12345",
+        "GET",
+        "/api/v1/health",
+        "1.1",
+        200,
+    )
+
+    assert '127.0.0.1:12345 - "GET /api/v1/health HTTP/1.1" 200 OK' in stream.getvalue()
+
+
+def test_access_log_query_params_are_redacted_without_breaking_formatter() -> None:
+    stream = io.StringIO()
+    handler = RaisingStreamHandler(stream)
+    handler.setFormatter(
+        AccessFormatter(
+            '%(client_addr)s - "%(request_line)s" %(status_code)s',
+            use_colors=False,
+        )
+    )
+
+    logger = logging.getLogger("test.uvicorn.access.query.backend")
+    logger.handlers = [handler]
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+
+    configure_logging("INFO")
+    logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:12345",
+        "GET",
+        "/api/v1/auth/dev/callback?code=dev-athlete&state=jwt-secret",
+        "1.1",
+        303,
+    )
+
+    rendered = stream.getvalue()
+    assert "dev-athlete" not in rendered
+    assert "jwt-secret" not in rendered
+    assert "code=[REDACTED]" in rendered
+    assert "state=[REDACTED]" in rendered
+
+
+def test_sensitive_query_values_are_redacted_from_strings() -> None:
+    value = (
+        "https://storage.test/object.pdf?"
+        "X-Amz-Credential=minio-access-key&X-Amz-Signature=sig-secret&"
+        "X-Amz-Security-Token=session-secret&safe=value"
+    )
+
+    redacted = redact_string(value)
+
+    assert "minio-access-key" not in redacted
+    assert "sig-secret" not in redacted
+    assert "session-secret" not in redacted
+    assert "safe=value" in redacted
+    assert "X-Amz-Credential=[REDACTED]" in redacted
+    assert "X-Amz-Signature=[REDACTED]" in redacted
+    assert "X-Amz-Security-Token=[REDACTED]" in redacted

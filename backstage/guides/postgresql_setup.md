@@ -44,6 +44,28 @@ DATABASE_URL=postgresql+asyncpg://app:localpass@db:5432/playbook
 > Host port `5433` maps to Postgres' default container port `5432`, avoiding
 > conflicts with any Postgres server installed directly on your machine.
 
+## Browser UI
+
+Local Compose includes Adminer for browsing schemas, tables, data, and ad hoc
+SQL queries:
+
+```bash
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d db adminer
+```
+
+Open `http://localhost:5050/?pgsql=db` and log in with:
+
+```
+System: PostgreSQL
+Server: db
+Username: app
+Password: localpass
+Database: playbook
+```
+
+If `5050` is already in use, set `ADMINER_PORT` in `deploy/envs/.env.local`
+before starting the service.
+
 ## Apply Migrations
 
 ```bash

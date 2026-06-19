@@ -24,7 +24,8 @@ Configured aliases:
   defaults route to `openai/gpt-5.4-mini`.
 - `playbook-rerank` for KB-service hybrid/rerank phases through LiteLLM
   `/rerank`. Local defaults route to the self-hosted Infinity service using
-  `infinity/BAAI/bge-reranker-base`. KB-service has an internal LiteLLM
+  LiteLLM's `infinity/rerank` provider route. The Infinity container serves
+  `BAAI/bge-reranker-base`. KB-service has an internal LiteLLM
   `/rerank` provider; semantic-only fallback is controlled by
   `KB_SEARCH_STRATEGY=semantic`, and reranked retrieval requires
   `KB_SEARCH_STRATEGY=hybrid` plus `KB_RERANK_ENABLED=true`.
@@ -48,17 +49,18 @@ configure aliases for those providers.
 The self-hosted Infinity reranker is configured in the LiteLLM env file too:
 
 ```env
-LITELLM_PLAYBOOK_RERANK_MODEL=infinity/BAAI/bge-reranker-base
-RERANKER_PLATFORM=linux/amd64
+LITELLM_PLAYBOOK_RERANK_MODEL=infinity/rerank
 INFINITY_API_BASE=http://reranker:7997
 INFINITY_API_KEY=...
 ```
 
 `INFINITY_API_KEY` is an internal service token shared only by LiteLLM and the
 reranker container. It is not a paid provider key and should not be placed in
-backend, frontend, or KB-service env files.
-`RERANKER_PLATFORM=linux/amd64` lets Apple Silicon Docker Desktop pull and run
-the current Infinity CPU image under emulation.
+backend, frontend, or KB-service env files. The reranker container reads the
+same token from its own dedicated env file, for example
+`deploy/envs/.env.reranker.local`, copied from
+`deploy/envs/.env.reranker.example`, so it does not inherit LiteLLM provider
+keys or admin secrets.
 
 Backend and KB-service should only receive scoped LiteLLM virtual keys.
 
@@ -106,9 +108,25 @@ slow ordinary development boot. Start LiteLLM plus Infinity when validating
 rerank routing:
 
 ```bash
+cp deploy/envs/.env.reranker.example deploy/envs/.env.reranker.local
 docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml \
   --profile reranker up -d --build reranker litellm
 ```
+
+For local Apple Silicon development, the local override pins the reranker to
+`michaelf34/infinity:0.0.75`, which has a `linux/arm64` manifest, and serves
+`mixedbread-ai/mxbai-rerank-xsmall-v1` with Infinity's `torch` engine. Dev and
+prod keep the base `BAAI/bge-reranker-base` target. The local reranker also uses
+`restart: "no"` so a failed model startup does not consume CPU in a restart
+loop. If an older `compose-reranker-1` container is already looping, clean up
+only the container after pulling this config:
+
+```bash
+docker rm -f compose-reranker-1
+```
+
+Keep the `compose_reranker_cache` volume unless switching local reranker models
+or the smoke test fails with a cache or model artifact error.
 
 Verify:
 

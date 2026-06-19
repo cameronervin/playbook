@@ -47,8 +47,9 @@ services:
         condition: service_completed_successfully
 
   reranker:
+    restart: unless-stopped
     env_file:
-      - ../envs/.env.dev
+      - ../envs/.env.reranker.dev
 
   backend:
     ports:

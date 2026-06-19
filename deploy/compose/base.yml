@@ -60,7 +60,6 @@ services:
   #   docker compose -f base.yml -f <env>.yml --profile reranker up reranker litellm
   reranker:
     image: michaelf34/infinity:latest-cpu
-    platform: ${RERANKER_PLATFORM:-linux/amd64}
     command:
       - v2
       - --model-id

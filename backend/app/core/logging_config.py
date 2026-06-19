@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import structlog
 
-from app.core.log_redaction import redact_event_dict, redact_secrets, redact_string
+from app.core.log_redaction import (
+    REDACTION,
+    redact_event_dict,
+    redact_secrets,
+    redact_string,
+)
 
 try:
     from rich.traceback import install as _install_rich_traceback
@@ -75,17 +81,60 @@ def _install_log_record_factory() -> None:
 
 def _redact_log_record(record: logging.LogRecord) -> None:
     _redact_exception_args(record)
-    try:
-        record.msg = redact_string(record.getMessage())
-        record.args = ()
-    except (TypeError, ValueError):
-        record.msg = redact_secrets(record.msg)
-        record.args = redact_secrets(record.args)
+    record.msg = redact_secrets(record.msg)
+    record.args = _redact_log_args(record.msg, record.args)
     record.exc_text = redact_string(record.exc_text) if record.exc_text else None
     record.stack_info = redact_string(record.stack_info) if record.stack_info else None
     for key, value in list(record.__dict__.items()):
         if key not in _BASE_LOG_RECORD_KEYS:
             setattr(record, key, redact_secrets(value))
+
+
+def _redact_log_args(message: Any, args: Any) -> Any:
+    redacted_args = redact_secrets(args)
+    if not _message_template_has_sensitive_placeholder(message):
+        return redacted_args
+    return _redact_string_args(redacted_args)
+
+
+def _message_template_has_sensitive_placeholder(message: Any) -> bool:
+    if not isinstance(message, str) or "%" not in message:
+        return False
+    normalized = message.lower().replace("-", "_")
+    sensitive_markers = (
+        "api_key",
+        "apikey",
+        "secret",
+        "token",
+        "password",
+        "passwd",
+        "authorization",
+        "bearer",
+        "signature",
+        "database_url",
+        "db_url",
+        "access_key",
+        "private_key",
+        "source_uri",
+        "presigned_url",
+        "signed_url",
+    )
+    return any(marker in normalized for marker in sensitive_markers)
+
+
+def _redact_string_args(value: Any) -> Any:
+    if isinstance(value, str):
+        return REDACTION
+    if isinstance(value, Mapping):
+        return {
+            key: REDACTION if isinstance(item, str) else _redact_string_args(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(_redact_string_args(item) for item in value)
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return [_redact_string_args(item) for item in value]
+    return value
 
 
 def _redact_exception_args(record: logging.LogRecord) -> None:
