@@ -57,7 +57,7 @@ export function AdminKBCollectionGrid({
             </p>
           )}
           {isError && (
-            <p className="mb-3 rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-sm text-danger">
+            <p className="pb-admin-table-text mb-3 rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-danger">
               Knowledge-base documents could not be refreshed.
             </p>
           )}

@@ -63,8 +63,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   }
 
   return (
-    <div className="flex shrink-0 justify-center bg-bg-base px-7 pb-[22px] pt-3.5">
-      <div className="w-full max-w-[760px]">
+    <div className="pb-chat-composer">
+      <div className="pb-chat-content w-full">
         {(localUploads.length > 0 || conversationFiles.length > 0) && (
           <div className="mb-2.5 flex flex-col gap-1.5">
             {localUploads.map((upload) => (
@@ -76,11 +76,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           </div>
         )}
         <div
-          className="pb-field-shell rounded-lg border border-border-solid bg-surface p-3 shadow-sm transition"
+          className="pb-chat-composer-shell pb-field-shell"
         >
           <textarea
             aria-label="Message Playbook"
-            className="min-h-[48px] w-full resize-none border-0 bg-transparent px-1 pb-2.5 pt-1 text-sm leading-6 text-fg-1 outline-none placeholder:text-fg-4"
+            className="pb-chat-composer-input px-1 pb-2.5 pt-1"
             disabled={disabled}
             onChange={(event) => {
               setDraft(event.target.value)
@@ -109,7 +109,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             />
             <button
               aria-label="Attach file"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-fg-2 transition hover:bg-surface-hover hover:text-fg-1 disabled:cursor-not-allowed disabled:text-fg-4"
+              className="pb-focus-control inline-flex h-9 w-9 items-center justify-center rounded-sm border border-transparent text-fg-2 transition hover:bg-surface-hover hover:text-fg-1 disabled:cursor-not-allowed disabled:text-fg-4"
               disabled={!canAttach || disabled}
               onClick={() => fileInputRef.current?.click()}
               title={attachTitle}
@@ -143,7 +143,7 @@ function ChatUploadStatus({ upload }: { upload: ChatUploadRow }) {
     <div className="rounded-md border border-border bg-surface px-3 py-2">
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 shrink-0 text-fg-3" />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg-1">{upload.file.name}</span>
+        <span className="pb-chat-meta min-w-0 flex-1 truncate font-medium text-fg-1">{upload.file.name}</span>
         <span className={failed ? 'pb-ui-xs flex items-center gap-1 text-danger' : 'pb-ui-xs flex items-center gap-1 text-info'} role="status">
           {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : <LoaderCircle className="pb-spin h-3.5 w-3.5" />}
           {formatChatUploadPhase(upload)}
@@ -167,7 +167,7 @@ function ConversationFileStatus({ file }: { file: ConversationFileSummary }) {
     <div className="rounded-md border border-border bg-surface px-3 py-2">
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 shrink-0 text-fg-3" />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg-1">{file.filename}</span>
+        <span className="pb-chat-meta min-w-0 flex-1 truncate font-medium text-fg-1">{file.filename}</span>
         <span className={failed ? 'pb-ui-xs flex items-center gap-1 text-danger' : 'pb-ui-xs flex items-center gap-1 text-info'} role="status">
           {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : <LoaderCircle className="pb-spin h-3.5 w-3.5" />}
           {formatConversationFileStatus(file)}

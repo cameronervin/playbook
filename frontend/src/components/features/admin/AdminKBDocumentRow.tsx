@@ -166,7 +166,7 @@ interface DropdownMenuItemProps {
 function DropdownMenuItem({ children, danger = false, icon, onSelect }: DropdownMenuItemProps) {
   return (
     <DropdownMenuPrimitive.Item
-      className={cn('pb-admin-menu-item outline-none', danger && 'text-danger focus:bg-danger-bg focus:text-danger')}
+      className={cn('pb-admin-menu-item pb-focus-item', danger && 'text-danger focus:bg-danger-bg focus:text-danger')}
       onSelect={onSelect}
     >
       <span className={cn('text-fg-3', danger && 'text-danger')}>{icon}</span>

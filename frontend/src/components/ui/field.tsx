@@ -7,7 +7,7 @@ export function Input({ className, ...props }: InputProps) {
   return (
     <input
       className={cn(
-        'w-full rounded-md border border-border-strong bg-surface px-4 py-3 text-sm text-fg-1 placeholder:text-fg-4 transition focus:border-border-brand',
+        'pb-focus-control w-full rounded-md border border-border-strong bg-surface px-4 py-3 pb-ui-sm text-fg-1 placeholder:text-fg-4 transition',
         className,
       )}
       {...props}
@@ -21,7 +21,7 @@ export function Textarea({ className, ...props }: TextareaProps) {
   return (
     <textarea
       className={cn(
-        'w-full resize-none rounded-md border border-border-strong bg-surface px-4 py-3 text-sm text-fg-1 placeholder:text-fg-4 transition focus:border-border-brand',
+        'pb-focus-control w-full resize-none rounded-md border border-border-strong bg-surface px-4 py-3 pb-ui-sm text-fg-1 placeholder:text-fg-4 transition',
         className,
       )}
       {...props}

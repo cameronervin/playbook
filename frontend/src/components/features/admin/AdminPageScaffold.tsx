@@ -15,7 +15,7 @@ export function AdminPageScaffold({
   actions,
   children,
   contentClassName,
-  contentMaxWidthClassName = 'max-w-[1000px]',
+  contentMaxWidthClassName = 'pb-admin-content-width',
   subtitle,
   title,
   toolbar,

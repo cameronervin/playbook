@@ -40,39 +40,39 @@ export function ProfileScreen() {
       <BrandLockup
         className="justify-center gap-[11px]"
         markSize={34}
-        wordmarkClassName="text-[26px] leading-none tracking-normal"
+        wordmarkClassName="pb-auth-wordmark"
       />
-      <h1 className="mt-6 font-display text-lg font-bold leading-[1.2] tracking-normal text-fg-1">
+      <h1 className="pb-auth-heading mt-6">
         Complete your profile
       </h1>
-      <p className="mt-3 max-w-[28ch] text-sm font-medium leading-5 text-fg-3">
+      <p className="pb-auth-copy mt-3 max-w-[28ch]">
         We just need a few more details before getting started.
       </p>
       <form className="mt-7 grid w-full gap-5 text-left" onSubmit={handleSubmit}>
-        <label className="grid gap-2 text-sm font-semibold text-fg-2">
+        <label className="pb-auth-label grid gap-2">
           Name
           <Input
-            className="min-h-[52px] text-base"
+            className="pb-auth-control pb-auth-input"
             onChange={(event) => setName(event.target.value)}
             required
             value={name}
           />
         </label>
-        <label className="grid gap-2 text-sm font-semibold text-fg-2">
+        <label className="pb-auth-label grid gap-2">
           Sport or team
           <Input
-            className="min-h-[52px] text-base"
+            className="pb-auth-control pb-auth-input"
             onChange={(event) => setSportTeam(event.target.value)}
             placeholder="Basketball"
             required
             value={sportTeam}
           />
         </label>
-        {updateProfile.error && <p className="text-sm text-danger">{updateProfile.error.message}</p>}
+        {updateProfile.error && <p className="pb-auth-copy text-danger">{updateProfile.error.message}</p>}
         <Button
-          className="min-h-[52px] w-full text-base"
+          className="pb-auth-control w-full"
           disabled={updateProfile.isPending}
-          size="sm"
+          size="lg"
           type="submit"
         >
           {"I'm ready"}

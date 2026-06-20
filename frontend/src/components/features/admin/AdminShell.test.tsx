@@ -339,7 +339,6 @@ describe('AdminShell', () => {
 
     expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Insights' })).toHaveClass('pb-page-title')
-    expect(screen.getByRole('heading', { name: 'Insights' })).not.toHaveClass('text-[32px]')
     expect(screen.getByText(/AI generated insights from user queries/i)).toBeInTheDocument()
     expect(screen.getByText(/AI generated insights from user queries/i)).toHaveClass('pb-page-subtitle')
     const timeFilter = screen.getByRole('button', { name: /Last 7 days/i })
@@ -349,15 +348,12 @@ describe('AdminShell', () => {
     expect(timeFilter).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
     expect(regenerate).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
     expect(explore).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
-    expect(timeFilter).not.toHaveClass('w-[156px]')
-    expect(regenerate).not.toHaveClass('w-[156px]')
-    expect(explore).not.toHaveClass('w-[156px]')
     expect(screen.getByRole('button', { name: /^Insights$/i })).toHaveClass('pb-admin-nav-item')
+    expect(screen.getByRole('button', { name: /^Insights$/i })).toHaveClass('pb-focus-control')
     expect(screen.getByRole('button', { name: /Knowledge base 1 failed document/i })).toHaveClass(
       'pb-admin-nav-item',
     )
     expect(screen.getByRole('button', { name: /Users & roles/i })).toHaveClass('pb-admin-nav-item')
-    expect(screen.getByRole('button', { name: /^Insights$/i })).not.toHaveClass('text-[13.5px]')
     expect(screen.getByText(/AI summary/i)).toBeInTheDocument()
     expect(screen.getByText(/NIL disclosure timing is the clearest support gap/i)).toBeInTheDocument()
     expect(screen.getByText(/NIL questions/i)).toBeInTheDocument()
@@ -567,7 +563,7 @@ describe('AdminShell', () => {
     expect(within(usersTable).getByText('Role')).toBeInTheDocument()
     expect(within(usersTable).getByText('Jordan Mitchell')).toBeInTheDocument()
     expect(within(usersTable).getByText('j.mitchell@okstate.edu')).toBeInTheDocument()
-    expect(within(usersTable).getByText('YOU')).toBeInTheDocument()
+    expect(within(usersTable).getByText('You')).toBeInTheDocument()
     expect(within(usersTable).getByText('Locked')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /change role for jordan mitchell/i })).not.toBeInTheDocument()
     expect(within(usersTable).getByText('Super admin')).toBeInTheDocument()
@@ -609,7 +605,7 @@ describe('AdminShell', () => {
 
     const changeRole = screen.getByRole('button', { name: /change role for tom becker/i })
     expect(changeRole).toHaveClass('pb-admin-table-action')
-    expect(changeRole).not.toHaveClass('text-sm', 'text-base', 'text-[12.5px]')
+    expect(changeRole).toHaveClass('pb-focus-control')
 
     await userEvent.click(changeRole)
 

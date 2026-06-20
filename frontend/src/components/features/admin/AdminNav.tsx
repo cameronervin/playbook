@@ -43,22 +43,22 @@ export function AdminNav({
   const visibleItems = navItems.filter((item) => item.id !== 'users' || isSuperAdmin)
 
   return (
-    <aside className="flex h-dvh w-[244px] shrink-0 flex-col border-r border-border bg-bg-void text-fg-1" aria-label="Admin sidebar">
+    <aside className="pb-workspace-admin-rail flex h-dvh shrink-0 flex-col border-r border-border bg-bg-void text-fg-1" aria-label="Admin sidebar">
       <div className="px-[18px] pb-4 pt-5">
         <BrandLockup
           className="gap-2.5"
           markSize={24}
-          wordmarkClassName="text-[19px] font-black uppercase leading-none tracking-normal"
+          wordmarkClassName="pb-admin-brand-wordmark"
         />
         <span className="sr-only">Admin</span>
-        <span className="float-right -mt-4 text-[10.5px] font-bold uppercase tracking-[0.08em] text-fg-3">Admin</span>
+        <span className="pb-admin-sidebar-label float-right -mt-4">Admin</span>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-0.5" aria-label="Admin navigation">
         {visibleItems.map((item) => (
           <button
             aria-label={getNavLabel(item.id, item.label, failedDocsCount)}
             className={cn(
-              'pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm px-[11px] py-2.5 text-left font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
+              'pb-focus-control pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm border border-transparent px-[11px] py-2.5 text-left font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
               activeTab === item.id && 'bg-brand-soft font-semibold text-brand hover:bg-brand-soft hover:text-brand',
             )}
             key={item.id}
@@ -69,7 +69,7 @@ export function AdminNav({
             {item.icon}
             <span className="min-w-0 flex-1 truncate">{item.label}</span>
             {item.id === 'kb' && failedDocsCount > 0 && (
-              <span className="rounded-pill bg-danger-bg px-2 py-0.5 text-[10.5px] font-bold text-danger">
+              <span className="pb-admin-small-badge bg-danger-bg text-danger">
                 {failedDocsCount}
               </span>
             )}
@@ -81,18 +81,18 @@ export function AdminNav({
           <DropdownMenuPrimitive.Trigger asChild>
             <button
               aria-label={`${user?.name ?? 'Admin user'} account menu`}
-              className="flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition hover:border-border-strong hover:bg-surface-hover data-[state=open]:border-border-strong data-[state=open]:bg-surface-hover"
+              className="pb-focus-control flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition hover:border-border-strong hover:bg-surface-hover data-[state=open]:border-border-strong data-[state=open]:bg-surface-hover"
               type="button"
             >
               <span className="relative shrink-0">
-                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand font-display text-[13px] font-extrabold text-fg-on-brand">
+                <span className="pb-admin-avatar pb-admin-avatar-sm bg-brand text-fg-on-brand">
                   {initials}
                 </span>
                 <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-void bg-success" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold text-fg-1">{user?.name ?? 'Playbook admin'}</span>
-                <span className="block truncate text-[11.5px] text-fg-3">{roleLabel}</span>
+                <span className="pb-admin-account-name block truncate">{user?.name ?? 'Playbook admin'}</span>
+                <span className="pb-admin-account-meta block truncate">{roleLabel}</span>
               </span>
               <ChevronsUpDown className="h-4 w-4 shrink-0 text-fg-4" />
             </button>
@@ -100,7 +100,7 @@ export function AdminNav({
           <DropdownMenuPrimitive.Portal>
             <DropdownMenuPrimitive.Content
               align="start"
-              className="z-50 w-[240px] rounded-lg border border-border-strong bg-surface-raised p-1.5 text-sm text-fg-2 shadow-lg"
+              className="pb-admin-menu-content"
               side="top"
               sideOffset={8}
             >
@@ -135,7 +135,7 @@ function DropdownItem({ children, danger = false, disabled = false, icon, onSele
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13.5px] font-medium outline-none transition focus:bg-surface-hover focus:text-fg-1 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'pb-focus-item mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 pb-ui-sm font-medium transition data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         danger ? 'text-danger focus:bg-danger-bg focus:text-danger' : 'text-fg-2',
       )}
       disabled={disabled}

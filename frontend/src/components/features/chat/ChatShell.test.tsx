@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -166,6 +168,8 @@ function renderChat() {
   )
 }
 
+const globalsCss = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8')
+
 beforeEach(() => {
   chatMocks.conversations = []
   chatMocks.conversationsFetching = false
@@ -257,7 +261,20 @@ describe('ChatShell', () => {
   it('renders the design empty state without a top bar or sources panel', () => {
     renderChat()
 
-    expect(screen.getByRole('heading', { name: /ask playbookai/i })).toBeInTheDocument()
+    const composer = screen.getByLabelText(/message playbook/i)
+    const heading = screen.getByRole('heading', { name: /ask playbookai/i })
+    const thread = heading.closest('.pb-chat-thread')
+    const composerShell = composer.closest('.pb-chat-composer')
+
+    expect(screen.getByTestId('horizon-background')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-empty-layout')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chat-empty-thread')).not.toBeInTheDocument()
+    expect(thread).toBeInTheDocument()
+    expect(composerShell).toBeInTheDocument()
+    expect(thread?.nextElementSibling).toBe(composerShell)
+    expect(thread).toContainElement(heading)
+    expect(globalsCss).toMatch(/\.pb-chat-content\s*{[^}]*padding-bottom:\s*0;/s)
+    expect(heading).toBeInTheDocument()
     expect(screen.getByText(/get answers to your athletics questions,/i)).toBeInTheDocument()
     expect(screen.getByText(/playbookai is your coach off the field\./i)).toBeInTheDocument()
     expect(screen.getByText(/responses are ai generated\. review to confirm accuracy\./i)).toBeInTheDocument()
@@ -266,6 +283,43 @@ describe('ChatShell', () => {
     expect(screen.getByRole('button', { name: /^ask$/i })).toBeDisabled()
     expect(screen.queryByRole('banner', { name: /chat actions/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: /sources/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps conversations with messages on the normal thread layout', () => {
+    const conversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [conversation]
+    chatMocks.details = new Map([
+      [
+        'c1',
+        {
+          ...conversation,
+          messages: [
+            {
+              id: 'm1',
+              conversation_id: 'c1',
+              role: 'assistant',
+              content: 'Athletes disclose NIL agreements within 72 hours.',
+              status: 'complete',
+              safety_outcome: null,
+              topic_labels: [],
+              risk_labels: [],
+              metadata: {},
+              citations: [],
+              created_at: today.toISOString(),
+            },
+          ],
+          files: [],
+        },
+      ],
+    ])
+    useUIStore.setState({ activeConversationId: 'c1', sourcesOpen: false })
+
+    renderChat()
+
+    expect(screen.queryByTestId('chat-empty-layout')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chat-empty-thread')).not.toBeInTheDocument()
+    expect(screen.getByRole('banner', { name: /chat actions/i })).toBeInTheDocument()
+    expect(screen.getByText(/athletes disclose nil agreements/i)).toBeInTheDocument()
   })
 
   it('groups conversation history and filters search results', async () => {
@@ -333,12 +387,11 @@ describe('ChatShell', () => {
     const composer = screen.getByLabelText(/message playbook/i)
 
     expect(newChatAction).toHaveClass('pb-ui-sm')
+    expect(newChatAction).toHaveClass('pb-focus-control')
     expect(historyRow).toHaveClass('pb-ui-sm')
+    expect(historyRow).toHaveClass('pb-focus-control')
     expect(groupLabel).toHaveClass('pb-ui-xs')
-    expect(composer).toHaveClass('text-sm')
-    expect(newChatAction).not.toHaveClass('text-sm')
-    expect(historyRow).not.toHaveClass('text-[13.5px]')
-    expect(composer).not.toHaveClass('text-[15px]')
+    expect(composer).toHaveClass('pb-chat-composer-input')
   })
 
   it('submits non-empty composer text while preserving multiline drafts', async () => {
