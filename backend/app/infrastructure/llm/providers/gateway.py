@@ -9,6 +9,7 @@ from app.core.config import Settings
 from app.infrastructure.llm.providers.base import BaseLLMProvider
 
 _ERR_LITELLM_KEY_REQUIRED = "LITELLM_API_KEY must be set when using LiteLLM mode"
+DEFAULT_LITELLM_TITLE_MODEL = "playbook-fast"
 
 
 class LiteLLMProvider(BaseLLMProvider):
@@ -25,6 +26,17 @@ class LiteLLMProvider(BaseLLMProvider):
             api_key=self.settings.LITELLM_API_KEY,
             temperature=self.settings.LLM_TEMPERATURE,
             max_tokens=self.settings.LLM_MAX_TOKENS,
+            timeout=self.settings.LLM_TIMEOUT,
+        )
+
+    def get_title_model(self) -> BaseChatModel:
+        """Get the LiteLLM-routed model for lightweight conversation titles."""
+        return _get_litellm_chat_model(
+            model=self.settings.LLM_TITLE_MODEL or DEFAULT_LITELLM_TITLE_MODEL,
+            base_url=self.settings.LITELLM_BASE_URL,
+            api_key=self.settings.LITELLM_API_KEY,
+            temperature=0,
+            max_tokens=256,
             timeout=self.settings.LLM_TIMEOUT,
         )
 

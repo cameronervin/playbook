@@ -8,6 +8,7 @@ import pytest
 from app.agents.builders import chains_builder
 from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
 from app.agents.states.athlete_chat_state import AthleteChatStructuredResponse
+from app.agents.states.conversation_title_state import ConversationTitleStructuredResponse
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.repositories.conversations import (
     ConversationFileRepository,
@@ -198,6 +199,18 @@ class NoToolChain:
         }
 
 
+class TitleChain:
+    async def ainvoke(
+        self,
+        input: dict,
+    ) -> dict[str, ConversationTitleStructuredResponse]:
+        return {
+            "structured_response": ConversationTitleStructuredResponse(
+                title="NIL Deal Disclosure",
+            )
+        }
+
+
 class FailIfInvokedChain:
     async def ainvoke(
         self,
@@ -293,6 +306,10 @@ def fake_chain_with_multi_source_tool(
 
 def fake_chain_without_tool(**_: object) -> NoToolChain:
     return NoToolChain()
+
+
+def fake_title_chain(**_: object) -> TitleChain:
+    return TitleChain()
 
 
 def fake_chain_that_fails(**_: object) -> FailIfInvokedChain:
@@ -395,6 +412,96 @@ async def test_athlete_chat_executor_persists_grounded_answer_and_citations(
     assert kb_provider.requests[0]["organization_id"] == str(organization.id)
     assert records[-1].event.event_type == "complete"
     assert records[-1].event.data["citation_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_executor_generates_first_turn_title_before_complete(
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        chains_builder,
+        "create_athlete_chat_chain",
+        fake_chain_with_tool,
+    )
+    monkeypatch.setattr(
+        chains_builder,
+        "create_conversation_title_chain",
+        fake_title_chain,
+    )
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-agent-title",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-agent-title@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-agent-title",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+        title="Can I accept this NIL deal",
+    )
+    user_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="Can I accept this NIL deal?",
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={
+            "task_id": "task-first-turn-title",
+            "user_message_id": str(user_message.id),
+            "is_first_turn": True,
+            "provisional_title": "Can I accept this NIL deal",
+        },
+    )
+    provider = InMemoryAgentStreamProvider()
+    kb_provider = FakeKnowledgebaseProvider()
+
+    result = await AthleteChatExecutor(
+        session=db_session,
+        chat_model=object(),
+        title_model=object(),
+        knowledgebase_provider=kb_provider,
+        stream_service=AgentStreamService(provider),
+        settings=test_settings,
+    ).execute(
+        task_id="task-first-turn-title",
+        conversation_id=conversation.id,
+        athlete_user_id=athlete.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant_message.id,
+        organization_id=organization.id,
+        attached_file_ids=[],
+    )
+
+    records = [
+        record
+        async for record in provider.iter_events(
+            "task-first-turn-title",
+            after_id="0-0",
+        )
+    ]
+    updated_conversation = await ConversationRepository(db_session).get_for_athlete(
+        conversation_id=conversation.id,
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+
+    assert result["conversation_title"] == "NIL Deal Disclosure"
+    assert updated_conversation is not None
+    assert updated_conversation.title == "NIL Deal Disclosure"
+    assert records[-2].event.event_type == "chunk"
+    assert records[-1].event.event_type == "complete"
+    assert records[-1].event.data["conversation_title"] == "NIL Deal Disclosure"
 
 
 @pytest.mark.asyncio

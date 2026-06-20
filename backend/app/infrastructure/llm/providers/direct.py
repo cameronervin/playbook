@@ -30,6 +30,19 @@ class DirectLLMProvider(BaseLLMProvider):
             gemini_api_key=self.settings.GEMINI_API_KEY,
         )
 
+    def get_title_model(self) -> BaseChatModel:
+        """Get the direct-provider model for lightweight conversation titles."""
+        return _get_chat_model_cached(
+            provider=self.settings.LLM_DIRECT_PROVIDER,
+            model=self.settings.LLM_TITLE_MODEL or self.settings.LLM_CHAT_MODEL,
+            temperature=self.settings.LLM_TEMPERATURE,
+            max_tokens=256,
+            timeout=self.settings.LLM_TIMEOUT,
+            anthropic_api_key=self.settings.ANTHROPIC_API_KEY,
+            openai_api_key=self.settings.OPENAI_API_KEY,
+            gemini_api_key=self.settings.GEMINI_API_KEY,
+        )
+
     @property
     def provider_name(self) -> str:
         return "direct"

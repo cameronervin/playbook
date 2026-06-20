@@ -124,7 +124,7 @@ model aliases:
 | Alias | Provider model | Used by |
 |-------|----------------|---------|
 | `playbook-chat` | `LITELLM_PLAYBOOK_CHAT_MODEL` | athlete chat, admin chat, eval judge default |
-| `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | lightweight summaries and fast agent paths |
+| `playbook-fast` | `LITELLM_PLAYBOOK_FAST_MODEL` | conversation titles, lightweight summaries, and fast agent paths |
 | `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
 | `playbook-ocr` | `LITELLM_PLAYBOOK_OCR_MODEL` | opt-in scanned PDF OCR when `OCR_PROVIDER=vlm` |
 | `playbook-rerank` | `LITELLM_PLAYBOOK_RERANK_MODEL` | Infinity reranker alias for KB-service hybrid/rerank phases |

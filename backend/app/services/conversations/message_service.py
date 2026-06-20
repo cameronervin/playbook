@@ -28,6 +28,7 @@ from app.services.conversations.mappers import (
     conversation_detail_response,
     conversation_message_response,
 )
+from app.services.conversations.titles import create_provisional_conversation_title
 from app.services.conversations.validation import validate_attached_files
 from app.workers.dispatcher import AthleteChatTaskDispatcher, AthleteChatTaskPayload
 from app.workers.queues import WorkerTaskName
@@ -69,16 +70,19 @@ class ConversationMessageService:
         request: ConversationCreateRequest,
     ) -> ConversationStartResponse:
         """Create a conversation, persist the first turn, and enqueue generation."""
+        provisional_title = create_provisional_conversation_title(request.content)
         conversation = await self.conversation_repo.create(
             organization_id=athlete.organization_id,
             athlete_id=athlete.id,
-            title=None,
+            title=provisional_title,
         )
         turn = await self._persist_turn_and_dispatch(
             athlete=athlete,
             conversation=conversation,
             content=request.content,
             file_ids=[],
+            is_first_turn=True,
+            provisional_title=provisional_title,
         )
         return ConversationStartResponse(
             **turn.stream.model_dump(),
@@ -119,6 +123,8 @@ class ConversationMessageService:
             conversation=conversation,
             content=request.content,
             file_ids=request.file_ids,
+            is_first_turn=False,
+            provisional_title=None,
         )
         return turn.stream
 
@@ -129,6 +135,8 @@ class ConversationMessageService:
         conversation: Conversation,
         content: str,
         file_ids: list[UUID],
+        is_first_turn: bool,
+        provisional_title: str | None,
     ) -> _PersistedTurn:
         """Persist one user turn, enqueue assistant work, and return stream metadata."""
         attached_file_ids = [str(file_id) for file_id in file_ids]
@@ -150,6 +158,14 @@ class ConversationMessageService:
                 "task_id": task_id,
                 "task_name": WorkerTaskName.RUN_ATHLETE_CHAT.value,
                 "user_message_id": str(user_message.id),
+                **(
+                    {
+                        "is_first_turn": True,
+                        "provisional_title": provisional_title,
+                    }
+                    if is_first_turn and provisional_title
+                    else {}
+                ),
             },
         )
         await self.conversation_repo.update_last_message_at(

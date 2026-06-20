@@ -10,9 +10,16 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.builders.chains_builder import create_athlete_chat_chain_set
-from app.agents.builders.nodes_builder import create_athlete_chat_node_set
+from app.agents.builders.chains_builder import (
+    create_athlete_chat_chain_set,
+    create_conversation_title_chain_set,
+)
+from app.agents.builders.nodes_builder import (
+    create_athlete_chat_node_set,
+    create_conversation_title_node_set,
+)
 from app.agents.graphs.athlete_chat_graph import create_athlete_chat_graph
+from app.agents.graphs.conversation_title_graph import create_conversation_title_graph
 from app.agents.tools.knowledgebase import (
     SourceRegistry,
 )
@@ -82,6 +89,31 @@ def compose_athlete_chat_dependencies(
     )
 
 
+def compose_conversation_title_dependencies(
+    *,
+    title_model: BaseChatModel,
+    session: AsyncSession,
+    app_settings: Settings,
+) -> GraphDependencies:
+    """Create the conversation title workflow's chains and nodes."""
+    chains = create_conversation_title_chain_set(
+        title_model=title_model,
+        settings=app_settings,
+    )
+    logger.info("agent_chains_created", count=len(chains), scope="conversation_title")
+    nodes = create_conversation_title_node_set(
+        chains=chains,
+        session=session,
+        settings=app_settings,
+    )
+    logger.info("agent_nodes_created", count=len(nodes), scope="conversation_title")
+    return GraphDependencies(
+        chains=chains,
+        nodes=nodes,
+        source_registry={},
+    )
+
+
 def compile_athlete_chat_graph(
     *,
     chat_model: BaseChatModel,
@@ -105,6 +137,25 @@ def compile_athlete_chat_graph(
     return graph_builder.compile(checkpointer=checkpointer)
 
 
+def compile_conversation_title_graph(
+    *,
+    title_model: BaseChatModel,
+    session: AsyncSession,
+    checkpointer: BaseCheckpointSaver | None,
+    app_settings: Settings,
+):
+    """Build and compile the conversation title graph."""
+    dependencies = compose_conversation_title_dependencies(
+        title_model=title_model,
+        session=session,
+        app_settings=app_settings,
+    )
+    graph_builder = create_conversation_title_graph(
+        nodes=dependencies.nodes["conversation_title"],
+    )
+    return graph_builder.compile(checkpointer=checkpointer)
+
+
 def build_athlete_chat_graph(
     chat_model: BaseChatModel,
     session: AsyncSession,
@@ -119,6 +170,21 @@ def build_athlete_chat_graph(
         session=session,
         knowledgebase_provider=knowledgebase_provider,
         stream_service=stream_service,
+        checkpointer=checkpointer,
+        app_settings=app_settings,
+    )
+
+
+def build_conversation_title_graph(
+    title_model: BaseChatModel,
+    session: AsyncSession,
+    checkpointer: BaseCheckpointSaver | None,
+    app_settings: Settings,
+):
+    """Positional-arg convenience wrapper around title graph compilation."""
+    return compile_conversation_title_graph(
+        title_model=title_model,
+        session=session,
         checkpointer=checkpointer,
         app_settings=app_settings,
     )

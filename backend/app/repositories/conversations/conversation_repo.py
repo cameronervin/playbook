@@ -107,3 +107,18 @@ class ConversationRepository:
         await self.session.flush()
         await self.session.refresh(conversation)
         return conversation
+
+    async def update_title_if_current(
+        self,
+        conversation: Conversation,
+        *,
+        title: str,
+        expected_title: str | None,
+    ) -> Conversation:
+        """Update title only when the current value has not moved on."""
+        if conversation.title not in {None, expected_title}:
+            return conversation
+        conversation.title = title
+        await self.session.flush()
+        await self.session.refresh(conversation)
+        return conversation

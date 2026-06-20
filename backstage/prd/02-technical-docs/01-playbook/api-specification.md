@@ -118,10 +118,11 @@ POST /api/v1/conversations
 
 Response includes the created conversation, the persisted first user message, a
 streaming assistant placeholder, and stream metadata. The conversation title is
-`null` until agent-generated title logic updates it, and `files` is a safe
-top-level list of conversation-scoped uploads. It is usually empty when a
-conversation is first created, and later includes file status summaries after
-direct-upload intents are created.
+an immediate provisional title from the first user message. The athlete chat
+worker may replace it with an AI-generated title before publishing the terminal
+stream `complete` event. `files` is a safe top-level list of conversation-scoped
+uploads. It is usually empty when a conversation is first created, and later
+includes file status summaries after direct-upload intents are created.
 
 ```json
 {
@@ -129,7 +130,7 @@ direct-upload intents are created.
     "id": "uuid",
     "organization_id": "uuid",
     "athlete_id": "uuid",
-    "title": null,
+    "title": "Can I accept this NIL deal",
     "status": "active",
     "last_message_at": "2026-06-03T12:00:00Z",
     "created_at": "2026-06-03T12:00:00Z",
@@ -157,7 +158,12 @@ direct-upload intents are created.
         "safety_outcome": null,
         "topic_labels": [],
         "risk_labels": [],
-        "metadata": {"task_id": "celery-task-uuid", "user_message_id": "uuid"},
+        "metadata": {
+          "task_id": "celery-task-uuid",
+          "user_message_id": "uuid",
+          "is_first_turn": true,
+          "provisional_title": "Can I accept this NIL deal"
+        },
         "citations": [],
         "created_at": "2026-06-03T12:00:00Z"
       }
@@ -200,6 +206,21 @@ subscribers. The stream URL must be scoped to the athlete-owned conversation and
 assistant message, and the backend must verify that the supplied `task_id`
 belongs to that conversation/message before subscribing to the task's Valkey
 stream/channel.
+
+For first-turn streams, the terminal `complete` event may include
+`conversation_title` when the separate conversation title graph successfully
+replaces the provisional title:
+
+```json
+{
+  "status": "complete",
+  "task_id": "celery-task-uuid",
+  "assistant_message_id": "uuid",
+  "answer_type": "grounded_answer",
+  "citation_count": 1,
+  "conversation_title": "NIL Deal Disclosure"
+}
+```
 
 ### Upload Conversation File
 ```json

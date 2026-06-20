@@ -23,6 +23,10 @@ class BaseLLMProvider(ABC):
         """
         ...
 
+    def get_title_model(self) -> BaseChatModel:
+        """Get the model used for lightweight conversation titles."""
+        return self.get_chat_model()
+
     @property
     @abstractmethod
     def provider_name(self) -> str:

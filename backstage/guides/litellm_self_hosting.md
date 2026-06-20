@@ -16,8 +16,8 @@ Configured aliases:
 
 - `playbook-chat` for backend chat and eval judge calls. Local defaults route
   to `openai/gpt-5.4`.
-- `playbook-fast` for KB-service source summaries and cheaper/faster agent
-  paths. Local defaults route to `openai/gpt-5.4-mini`.
+- `playbook-fast` for backend conversation titles, KB-service source summaries,
+  and cheaper/faster agent paths. Local defaults route to `openai/gpt-5.4-mini`.
 - `playbook-embed` for KB-service embeddings. Local defaults route to
   `openai/text-embedding-3-small`.
 - `playbook-ocr` for opt-in scanned PDF OCR when `OCR_PROVIDER=vlm`. Local

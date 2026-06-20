@@ -212,7 +212,7 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
         f"{body['assistant_message_id']}/stream?task_id={body['task_id']}"
     )
     assert body["conversation"]["athlete_id"] == str(athlete.id)
-    assert body["conversation"]["title"] is None
+    assert body["conversation"]["title"] == "Can I accept this NIL deal"
     assert body["conversation"]["last_message_at"] is not None
     assert body["conversation"]["messages"][0]["id"] == body["user_message_id"]
     assert body["conversation"]["messages"][0]["role"] == "user"
@@ -223,6 +223,10 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
     assert body["conversation"]["messages"][1]["role"] == "assistant"
     assert body["conversation"]["messages"][1]["status"] == "streaming"
     assert body["conversation"]["messages"][1]["metadata"]["task_id"] == body["task_id"]
+    assert body["conversation"]["messages"][1]["metadata"]["is_first_turn"] is True
+    assert body["conversation"]["messages"][1]["metadata"]["provisional_title"] == (
+        "Can I accept this NIL deal"
+    )
     assert body["conversation"]["files"] == []
     assert dispatched["task_id"] == body["task_id"]
     assert dispatched["kwargs"] == {
@@ -261,7 +265,7 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
 
     assert list_response.status_code == 200
     assert [row["id"] for row in list_response.json()] == [conversation_id]
-    assert list_response.json()[0]["title"] is None
+    assert list_response.json()[0]["title"] == "Can I accept this NIL deal"
     assert list_response.json()[0]["last_message_at"] is not None
     assert detail_response.status_code == 200
     assert detail_response.json()["messages"][0]["role"] == "user"
@@ -827,6 +831,8 @@ async def test_submit_message_persists_placeholder_and_dispatches_task(
     assert messages[1].status == "streaming"
     assert messages[1].message_metadata["task_id"] == body["task_id"]
     assert messages[1].message_metadata["user_message_id"] == body["user_message_id"]
+    assert "is_first_turn" not in messages[1].message_metadata
+    assert conversation.title == "NIL question"
     assert conversation.last_message_at == messages[0].created_at
 
 

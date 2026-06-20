@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     # "direct" = call the selected model provider SDK directly
     LLM_PROVIDER_MODE: Literal["direct", "litellm"] = "direct"
     LLM_CHAT_MODEL: str = "claude-sonnet-4-6"
+    LLM_TITLE_MODEL: str = ""
     LLM_DIRECT_PROVIDER: Literal["anthropic", "openai", "google"] = "anthropic"
 
     # --- LiteLLM mode ---

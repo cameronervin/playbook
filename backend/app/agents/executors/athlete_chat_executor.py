@@ -11,6 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.builders.graphs_builder import compile_athlete_chat_graph
+from app.agents.executors.conversation_title_executor import ConversationTitleExecutor
 from app.agents.tools.knowledgebase import knowledgebase_organization_context
 from app.core.config import Settings
 from app.core.error_codes import ErrorCode
@@ -26,6 +27,7 @@ ATHLETE_CHAT_MODE = "athlete_chat"
 ATHLETE_CHAT_PHASE = "respond"
 
 GraphFactory = Callable[..., Any]
+TitleExecutorFactory = Callable[..., ConversationTitleExecutor]
 
 
 class AthleteChatExecutor:
@@ -39,16 +41,20 @@ class AthleteChatExecutor:
         knowledgebase_provider: BaseKnowledgebaseProvider,
         stream_service: AgentStreamService,
         settings: Settings,
+        title_model: BaseChatModel | None = None,
         checkpointer: Any | None = None,
         graph_factory: GraphFactory = compile_athlete_chat_graph,
+        title_executor_factory: TitleExecutorFactory = ConversationTitleExecutor,
     ) -> None:
         self.session = session
         self.chat_model = chat_model
+        self.title_model = title_model or chat_model
         self.knowledgebase_provider = knowledgebase_provider
         self.stream_service = stream_service
         self.settings = settings
         self.checkpointer = checkpointer
         self.graph_factory = graph_factory
+        self.title_executor_factory = title_executor_factory
         self.message_repo = ConversationMessageRepository(session)
 
     async def execute(
@@ -120,7 +126,59 @@ class AthleteChatExecutor:
                 ErrorCode.AGENT_FAILED,
                 retryable=True,
             )
-        return completion_result
+
+        answer = str(completion_result.get("answer", ""))
+        if answer:
+            await self.stream_service.publish_chunk(task_id, content=answer)
+        conversation_title = await self._generate_conversation_title(
+            task_id=task_id,
+            conversation_id=conversation_id,
+            athlete_user_id=athlete_user_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            organization_id=organization_id,
+        )
+        complete_payload = _completion_stream_payload(completion_result)
+        if conversation_title:
+            complete_payload["conversation_title"] = conversation_title
+        await self.stream_service.publish_complete(task_id, data=complete_payload)
+        return complete_payload
+
+    async def _generate_conversation_title(
+        self,
+        *,
+        task_id: str,
+        conversation_id: UUID,
+        athlete_user_id: UUID,
+        user_message_id: UUID,
+        assistant_message_id: UUID,
+        organization_id: UUID,
+    ) -> str | None:
+        try:
+            executor = self.title_executor_factory(
+                session=self.session,
+                title_model=self.title_model,
+                settings=self.settings,
+                checkpointer=self.checkpointer,
+            )
+            return await executor.execute(
+                task_id=task_id,
+                conversation_id=conversation_id,
+                athlete_user_id=athlete_user_id,
+                user_message_id=user_message_id,
+                assistant_message_id=assistant_message_id,
+                organization_id=organization_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "conversation_title_generation_failed",
+                task_id=task_id,
+                conversation_id=str(conversation_id),
+                assistant_message_id=str(assistant_message_id),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+            return None
 
     async def mark_failed(
         self,
@@ -172,3 +230,12 @@ def _completion_from_part(part: dict[str, Any]) -> dict[str, Any] | None:
         ):
             return node_update["completion_result"]
     return None
+
+
+def _completion_stream_payload(completion_result: dict[str, Any]) -> dict[str, Any]:
+    """Return public terminal stream data without duplicating the answer text."""
+    return {
+        key: value
+        for key, value in completion_result.items()
+        if key != "answer"
+    }

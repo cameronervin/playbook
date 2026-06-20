@@ -9,7 +9,12 @@ import {
   uploadConversationFile,
 } from '@/src/lib/api/endpoints/conversations'
 import { QUERY_KEYS } from '@/src/lib/constants/config'
-import type { ChatMessage, ConversationDetail, MessageSubmitResponse } from '@/src/types/conversations'
+import type {
+  ChatMessage,
+  ConversationDetail,
+  ConversationSummary,
+  MessageSubmitResponse,
+} from '@/src/types/conversations'
 
 const CONVERSATION_FILE_STATUS_REFETCH_INTERVAL_MS = 3_000
 
@@ -152,6 +157,10 @@ export const useConversationMessageStream = () => {
 
       stream.addEventListener('complete', (event) => {
         const payload = parseStreamPayload(event)
+        const conversationTitle = getStringData(payload, 'conversation_title')
+        if (conversationTitle) {
+          updateConversationTitle(queryClient, conversationId, conversationTitle)
+        }
         updateAssistantMessage(queryClient, conversationId, assistantMessageId, (message) => ({
           ...message,
           metadata: {
@@ -236,6 +245,24 @@ export function createSubmittedMessages(
       created_at: now,
     },
   ]
+}
+
+function updateConversationTitle(
+  queryClient: QueryClient,
+  conversationId: string,
+  title: string,
+): void {
+  queryClient.setQueryData<ConversationDetail>(
+    [QUERY_KEYS.conversationDetail, conversationId],
+    (conversation) => (conversation ? { ...conversation, title } : conversation),
+  )
+  queryClient.setQueryData<ConversationSummary[]>(
+    [QUERY_KEYS.conversations],
+    (conversations) =>
+      conversations?.map((conversation) =>
+        conversation.id === conversationId ? { ...conversation, title } : conversation,
+      ),
+  )
 }
 
 function updateAssistantMessage(

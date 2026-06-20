@@ -309,15 +309,14 @@ def create_athlete_chat_nodes(
             )
         await session.commit()
 
-        await stream_service.publish_chunk(task_id, content=answer)
         completion_result = {
             "status": "complete",
             "task_id": task_id,
             "assistant_message_id": str(assistant_message.id),
             "answer_type": answer_type,
             "citation_count": len(limited_sources),
+            "answer": answer,
         }
-        await stream_service.publish_complete(task_id, data=completion_result)
         return {"completion_result": completion_result}
 
     return {

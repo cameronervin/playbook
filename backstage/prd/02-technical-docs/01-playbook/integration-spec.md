@@ -111,6 +111,7 @@ application services.
 | Caller | Gateway Model Alias | Purpose |
 |--------|---------------------|---------|
 | Athlete chat agent | `playbook-chat` | Cited support answers |
+| Conversation title agent | `playbook-fast` | First-turn chat history titles |
 | Dashboard insights agent | `playbook-chat` or `playbook-fast` | Nightly/manual insight generation |
 | Admin chat side panel | `playbook-chat` | Analytics-grounded admin answers |
 | KB-service ingestion | `playbook-embed` | Document chunk embeddings |

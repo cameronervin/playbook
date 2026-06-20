@@ -103,9 +103,11 @@ async def _run_athlete_chat_agent(
         checkpointer_pool = await create_checkpointer_pool(settings)
         checkpointer = await create_checkpointer(checkpointer_pool)
         async with worker_db_session(settings) as session:
+            llm_provider = get_llm_provider(app_settings=settings)
             executor = AthleteChatExecutor(
                 session=session,
-                chat_model=get_llm_provider(app_settings=settings).get_chat_model(),
+                chat_model=llm_provider.get_chat_model(),
+                title_model=llm_provider.get_title_model(),
                 knowledgebase_provider=get_kb_provider(app_settings=settings),
                 stream_service=stream_service,
                 settings=settings,
