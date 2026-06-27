@@ -11,18 +11,21 @@ simple and focused on retrieval.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 import structlog
 
-from app.core.config import settings
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
     KBDocumentStatusResponse,
+    KBIngestRequest,
     KnowledgebaseResult,
 )
 
 logger = structlog.get_logger(__name__)
+DEFAULT_KB_MAX_DOCS = 10
+DEFAULT_KB_SCORE_THRESHOLD = 0.7
 
 
 class BaseKnowledgebaseProvider(ABC):
@@ -43,8 +46,9 @@ class BaseKnowledgebaseProvider(ABC):
     async def search(
         self,
         query: str,
-        max_docs: int = settings.KB_MAX_DOCS,
-        score_threshold: float = settings.KB_SCORE_THRESHOLD,
+        organization_id: UUID | str,
+        max_docs: int = DEFAULT_KB_MAX_DOCS,
+        score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
         metadata_filter: dict | None = None,
         configuration_id: str | None = None,
     ) -> KnowledgebaseResult:
@@ -52,6 +56,7 @@ class BaseKnowledgebaseProvider(ABC):
 
         Args:
             query: Natural language query string.
+            organization_id: Tenant scope for retrieval isolation.
             max_docs: Maximum number of chunks to return.
             score_threshold: Minimum similarity score; results below are excluded.
             metadata_filter: Optional metadata filter dict.
@@ -61,6 +66,38 @@ class BaseKnowledgebaseProvider(ABC):
             KnowledgebaseResult with assembled context, sources, and latency.
         """
         ...
+
+    async def search_admin_uploads(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        max_docs: int = DEFAULT_KB_MAX_DOCS,
+        score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
+        metadata_filter: dict | None = None,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        """Search shared, athlete-visible admin uploads."""
+        return await self.search(
+            query=query,
+            organization_id=organization_id,
+            max_docs=max_docs,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+            configuration_id=configuration_id,
+        )
+
+    async def search_conversation_files(
+        self,
+        query: str,
+        organization_id: UUID | str,
+        conversation_id: UUID | str,
+        file_ids: list[UUID | str] | None = None,
+        max_docs: int = DEFAULT_KB_MAX_DOCS,
+        score_threshold: float = DEFAULT_KB_SCORE_THRESHOLD,
+        configuration_id: str | None = None,
+    ) -> KnowledgebaseResult:
+        """Search private conversation-scoped file chunks."""
+        raise NotImplementedError
 
     @abstractmethod
     async def health_check(self) -> bool:
@@ -97,10 +134,24 @@ class BaseKnowledgebaseProvider(ABC):
         request: KBDocumentIngestRequest,
     ) -> KBDocumentIngestResponse:
         """Start ingestion for an admin-uploaded document."""
+        return await self.ingest_source(request)
+
+    async def ingest_source(
+        self,
+        request: KBIngestRequest,
+    ) -> KBDocumentIngestResponse:
+        """Start ingestion for a trusted backend-derived source."""
         raise NotImplementedError
 
-    async def get_document_status(self, task_id: str) -> KBDocumentStatusResponse:
-        """Return KB-service ingestion status for a task/document."""
+    async def get_document_status(self, document_id: str) -> KBDocumentStatusResponse:
+        """Return KB-service ingestion status for a document."""
+        raise NotImplementedError
+
+    async def retry_document(
+        self,
+        kb_service_document_id: str,
+    ) -> KBDocumentIngestResponse:
+        """Retry ingestion for an existing KB-service document."""
         raise NotImplementedError
 
     async def delete_document(self, kb_service_document_id: str) -> None:

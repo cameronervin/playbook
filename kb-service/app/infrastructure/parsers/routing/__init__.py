@@ -1,1 +1,1 @@
-"""Parser routing: complexity assessment + MIME/complexity dispatch."""
+"""Parser routing: explicit extractor catalog + unified parser orchestration."""

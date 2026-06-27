@@ -2,7 +2,48 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from typing import BinaryIO
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import BinaryIO, Literal
+
+ObjectVerificationStatus = Literal[
+    "valid",
+    "missing",
+    "size_mismatch",
+    "content_type_mismatch",
+]
+
+
+@dataclass(frozen=True)
+class PresignedPostUpload:
+    """Browser form POST contract for direct-to-storage uploads."""
+
+    url: str
+    fields: dict[str, str]
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class StoredObjectMetadata:
+    """Safe object metadata returned by storage HEAD operations."""
+
+    key: str
+    content_length: int
+    content_type: str | None = None
+    etag: str | None = None
+    checksum_crc32: str | None = None
+    checksum_crc32c: str | None = None
+    checksum_sha1: str | None = None
+    checksum_sha256: str | None = None
+    user_metadata: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ObjectVerificationResult:
+    """Result of comparing trusted expected upload metadata to storage HEAD."""
+
+    status: ObjectVerificationStatus
+    metadata: StoredObjectMetadata | None = None
 
 
 class StorageProvider(ABC):
@@ -40,6 +81,44 @@ class StorageProvider(ABC):
             download_filename: If set, forces a browser download with this
                 filename via the Content-Disposition header.
         """
+
+    @abstractmethod
+    async def create_presigned_post(
+        self,
+        *,
+        key: str,
+        content_type: str,
+        max_size_bytes: int,
+        expires_in: int | None = None,
+    ) -> PresignedPostUpload:
+        """Create a browser POST upload contract for one fixed object key."""
+
+    @abstractmethod
+    async def get_object_metadata(self, key: str) -> StoredObjectMetadata | None:
+        """Return safe object metadata from storage HEAD, or None if missing."""
+
+    async def verify_object(
+        self,
+        *,
+        key: str,
+        expected_size_bytes: int,
+        expected_content_type: str,
+    ) -> ObjectVerificationResult:
+        """Verify an uploaded object against trusted backend metadata."""
+        metadata = await self.get_object_metadata(key)
+        if metadata is None:
+            return ObjectVerificationResult(status="missing")
+        if metadata.content_length != expected_size_bytes:
+            return ObjectVerificationResult(
+                status="size_mismatch",
+                metadata=metadata,
+            )
+        if metadata.content_type != expected_content_type:
+            return ObjectVerificationResult(
+                status="content_type_mismatch",
+                metadata=metadata,
+            )
+        return ObjectVerificationResult(status="valid", metadata=metadata)
 
     @abstractmethod
     async def file_exists(self, key: str) -> bool:

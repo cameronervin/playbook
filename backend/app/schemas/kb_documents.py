@@ -6,9 +6,18 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-KBDocumentStatus = Literal["uploaded", "processing", "ready", "failed"]
+from app.schemas.uploads import DirectUploadContract
+
+KBDocumentStatus = Literal[
+    "upload_pending",
+    "uploaded",
+    "processing",
+    "ready",
+    "failed",
+]
+KBSourceType = Literal["admin_upload", "conversation_file"]
 
 
 class KBDocumentResponse(BaseModel):
@@ -26,8 +35,6 @@ class KBDocumentResponse(BaseModel):
     visibility_policy: dict[str, Any]
     metadata_tags: dict[str, Any]
     source_date: date | None = None
-    is_official: bool
-    priority: int
     kb_service_document_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
@@ -40,8 +47,42 @@ class KBDocumentMetadataUpdateRequest(BaseModel):
 
     metadata_tags: dict[str, Any] | None = None
     source_date: date | None = None
-    is_official: bool | None = None
-    priority: int | None = Field(default=None, ge=0)
+
+
+class KBDocumentUploadRequest(BaseModel):
+    """Create a direct-upload request for an admin KB document."""
+
+    filename: str = Field(min_length=1, max_length=500)
+    content_type: str = Field(min_length=1, max_length=120)
+    size_bytes: int = Field(gt=0)
+    title: str | None = Field(default=None, max_length=500)
+    metadata_tags: dict[str, Any] = Field(default_factory=dict)
+    source_date: date | None = None
+
+    @field_validator("filename")
+    @classmethod
+    def trim_filename(cls, value: str) -> str:
+        """Normalize path-bearing browser filenames to the leaf filename."""
+        trimmed = value.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        if not trimmed:
+            raise ValueError("filename must not be empty")
+        return trimmed
+
+    @field_validator("content_type")
+    @classmethod
+    def trim_content_type(cls, value: str) -> str:
+        """Normalize accidental whitespace around content type values."""
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("content_type must not be empty")
+        return trimmed
+
+
+class KBDocumentUploadRequestResponse(BaseModel):
+    """Admin KB document plus direct browser upload contract."""
+
+    document: KBDocumentResponse
+    upload: DirectUploadContract
 
 
 class KBDocumentEventResponse(BaseModel):
@@ -62,11 +103,25 @@ class KBWebhookPayload(BaseModel):
     """Current KB-service HMAC-signed status webhook payload."""
 
     document_id: UUID
+    kb_service_document_id: UUID | None = None
+    source_type: KBSourceType | None = None
+    playbook_document_id: UUID | None = None
+    conversation_id: UUID | None = None
+    conversation_file_id: UUID | None = None
     stage: str | None = None
     status: str
     error_message: str | None = None
+    summary: str | None = None
     timestamp: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def strip_sensitive_metadata(cls, value: Any) -> dict[str, Any]:
+        """Drop secret-bearing file fields from webhook metadata before persistence."""
+        if not isinstance(value, dict):
+            return {}
+        return _strip_sensitive_metadata(value)
 
 
 class KBWebhookResponse(BaseModel):
@@ -74,3 +129,25 @@ class KBWebhookResponse(BaseModel):
 
     status: Literal["ok"] = "ok"
     document_status: KBDocumentStatus
+
+
+def _strip_sensitive_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    sensitive_keys = {
+        "source_uri",
+        "presigned_url",
+        "signed_url",
+        "raw_text",
+        "extracted_text",
+        "file_contents",
+        "model_input",
+        "model_inputs",
+    }
+    sanitized: dict[str, Any] = {}
+    for key, item in value.items():
+        if key in sensitive_keys:
+            continue
+        if isinstance(item, dict):
+            sanitized[key] = _strip_sensitive_metadata(item)
+        else:
+            sanitized[key] = item
+    return sanitized

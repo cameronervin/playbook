@@ -188,7 +188,7 @@ vi.mock('@/src/hooks/useKBDocuments', () => ({
     isFetching: adminQueryState.kbFetching,
     isLoading: adminQueryState.kbLoading,
   }),
-  useUploadKBDocument: () => ({ mutate: uploadDocumentMutate, isPending: false }),
+  useUploadKBDocument: () => ({ mutateAsync: uploadDocumentMutate, isPending: false }),
   useRetryKBDocument: () => ({ mutate: retryDocumentMutate, isPending: false }),
   useDeleteKBDocument: () => ({ mutate: deleteDocumentMutate, isPending: false }),
   useUpdateKBDocumentMetadata: () => ({ mutate: updateDocumentMutate, isPending: false }),
@@ -222,6 +222,7 @@ describe('AdminShell', () => {
     deleteDocumentMutate.mockClear()
     updateDocumentMutate.mockClear()
     uploadDocumentMutate.mockClear()
+    uploadDocumentMutate.mockResolvedValue(kbDocuments[0])
     kbDocuments.splice(0, kbDocuments.length, ...[
       {
         id: 'doc-nil-policy',
@@ -338,7 +339,6 @@ describe('AdminShell', () => {
 
     expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Insights' })).toHaveClass('pb-page-title')
-    expect(screen.getByRole('heading', { name: 'Insights' })).not.toHaveClass('text-[32px]')
     expect(screen.getByText(/AI generated insights from user queries/i)).toBeInTheDocument()
     expect(screen.getByText(/AI generated insights from user queries/i)).toHaveClass('pb-page-subtitle')
     const timeFilter = screen.getByRole('button', { name: /Last 7 days/i })
@@ -348,15 +348,12 @@ describe('AdminShell', () => {
     expect(timeFilter).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
     expect(regenerate).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
     expect(explore).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
-    expect(timeFilter).not.toHaveClass('w-[156px]')
-    expect(regenerate).not.toHaveClass('w-[156px]')
-    expect(explore).not.toHaveClass('w-[156px]')
     expect(screen.getByRole('button', { name: /^Insights$/i })).toHaveClass('pb-admin-nav-item')
+    expect(screen.getByRole('button', { name: /^Insights$/i })).toHaveClass('pb-focus-control')
     expect(screen.getByRole('button', { name: /Knowledge base 1 failed document/i })).toHaveClass(
       'pb-admin-nav-item',
     )
     expect(screen.getByRole('button', { name: /Users & roles/i })).toHaveClass('pb-admin-nav-item')
-    expect(screen.getByRole('button', { name: /^Insights$/i })).not.toHaveClass('text-[13.5px]')
     expect(screen.getByText(/AI summary/i)).toBeInTheDocument()
     expect(screen.getByText(/NIL disclosure timing is the clearest support gap/i)).toBeInTheDocument()
     expect(screen.getByText(/NIL questions/i)).toBeInTheDocument()
@@ -426,7 +423,7 @@ describe('AdminShell', () => {
     expect(screen.queryByTestId('admin-kb-skeleton')).not.toBeInTheDocument()
   })
 
-  it('uses info-tone processing indicators for uploaded and processing documents', async () => {
+  it('uses info-tone indicators for queued and processing documents', async () => {
     currentUser.role = 'super_admin'
     kbDocuments.push({
       id: 'doc-processing',
@@ -455,7 +452,53 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Team Travel collection/i }))
 
-    expect(screen.getByText('Processing').closest('span')).toHaveClass('text-info')
+    expect(screen.getByText('Queued').closest('span')).toHaveClass('text-info')
+  })
+
+  it('uploads a KB document with local progress and queued status', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    uploadDocumentMutate.mockImplementation(async (request) => {
+      request.onProgress?.({ loaded: 5, percent: 50, total: 10 })
+      return { ...kbDocuments[0], id: 'doc-uploaded', title: request.file.name }
+    })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.upload(
+      screen.getByLabelText(/upload document file/i),
+      new File(['hello'], 'athlete-handbook.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(uploadDocumentMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file: expect.objectContaining({ name: 'athlete-handbook.pdf' }),
+        metadata_tags: expect.objectContaining({ collection: 'compliance' }),
+        onProgress: expect.any(Function),
+      }),
+    )
+    expect(await screen.findByText('athlete-handbook.pdf')).toBeInTheDocument()
+    expect(await screen.findByText('Queued')).toBeInTheDocument()
+  })
+
+  it('shows a safe admin upload failure and retries with a fresh intent', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    uploadDocumentMutate.mockRejectedValueOnce(new Error('File upload failed before Playbook received it.'))
+    uploadDocumentMutate.mockResolvedValueOnce(kbDocuments[0])
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.upload(
+      screen.getByLabelText(/upload document file/i),
+      new File(['hello'], 'retry-me.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(await screen.findByText('File upload failed before Playbook received it.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    expect(uploadDocumentMutate).toHaveBeenCalledTimes(2)
   })
 
   it('keeps collections visible when there are no documents', () => {
@@ -520,7 +563,7 @@ describe('AdminShell', () => {
     expect(within(usersTable).getByText('Role')).toBeInTheDocument()
     expect(within(usersTable).getByText('Jordan Mitchell')).toBeInTheDocument()
     expect(within(usersTable).getByText('j.mitchell@okstate.edu')).toBeInTheDocument()
-    expect(within(usersTable).getByText('YOU')).toBeInTheDocument()
+    expect(within(usersTable).getByText('You')).toBeInTheDocument()
     expect(within(usersTable).getByText('Locked')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /change role for jordan mitchell/i })).not.toBeInTheDocument()
     expect(within(usersTable).getByText('Super admin')).toBeInTheDocument()
@@ -562,7 +605,7 @@ describe('AdminShell', () => {
 
     const changeRole = screen.getByRole('button', { name: /change role for tom becker/i })
     expect(changeRole).toHaveClass('pb-admin-table-action')
-    expect(changeRole).not.toHaveClass('text-sm', 'text-base', 'text-[12.5px]')
+    expect(changeRole).toHaveClass('pb-focus-control')
 
     await userEvent.click(changeRole)
 

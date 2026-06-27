@@ -20,11 +20,11 @@ import structlog
 from app.core.config import settings
 from app.infrastructure.embedders.base import BaseEmbedProvider, EmbedProviderMode
 from app.infrastructure.embedders.direct import DirectEmbedProvider
-from app.infrastructure.embedders.gateway import GatewayEmbedProvider
+from app.infrastructure.embedders.litellm import LiteLLMEmbedProvider
 from app.infrastructure.llm.builder import (
     clear_client_caches,
     get_direct_embed_client,
-    get_gateway_embed_client,
+    get_litellm_embed_client,
 )
 
 logger = structlog.get_logger(__name__)
@@ -38,12 +38,12 @@ def get_embed_provider(mode: EmbedProviderMode | None = None) -> BaseEmbedProvid
     creating thread's event loop. Use ``build_fresh_embed_provider()`` instead
     so each worker thread gets its own loop-bound client.
     """
-    mode = mode or EmbedProviderMode(settings.KB_LLM_PROVIDER_MODE)
+    mode = mode or EmbedProviderMode(settings.LLM_PROVIDER_MODE)
 
     logger.info("kb_embed_provider_init", mode=mode.value)
 
-    if mode == EmbedProviderMode.GATEWAY:
-        return GatewayEmbedProvider(client=get_gateway_embed_client())
+    if mode == EmbedProviderMode.LITELLM:
+        return LiteLLMEmbedProvider(client=get_litellm_embed_client())
 
     if mode == EmbedProviderMode.DIRECT:
         return DirectEmbedProvider(client=get_direct_embed_client())
@@ -63,17 +63,19 @@ def build_fresh_embed_provider(mode: EmbedProviderMode | None = None) -> BaseEmb
     """
     from openai import OpenAI
 
-    mode = mode or EmbedProviderMode(settings.KB_LLM_PROVIDER_MODE)
-    if mode == EmbedProviderMode.GATEWAY:
-        if not settings.LLM_GATEWAY_BASE_URL or not settings.LLM_GATEWAY_API_KEY:
-            raise ValueError("Gateway mode requires LLM_GATEWAY_BASE_URL and LLM_GATEWAY_API_KEY")
+    mode = mode or EmbedProviderMode(settings.LLM_PROVIDER_MODE)
+    if mode == EmbedProviderMode.LITELLM:
+        if not settings.LITELLM_BASE_URL or not settings.LITELLM_API_KEY:
+            raise ValueError(
+                "LiteLLM mode requires LITELLM_BASE_URL and LITELLM_API_KEY"
+            )
         client = OpenAI(
-            base_url=settings.LLM_GATEWAY_BASE_URL,
-            api_key=settings.LLM_GATEWAY_API_KEY,
+            base_url=settings.LITELLM_BASE_URL,
+            api_key=settings.LITELLM_API_KEY,
             timeout=settings.KB_EMBED_REQUEST_TIMEOUT_SECONDS,
             max_retries=0,
         )
-        return GatewayEmbedProvider(client=client)
+        return LiteLLMEmbedProvider(client=client)
     if mode == EmbedProviderMode.DIRECT:
         if not settings.OPENAI_API_KEY:
             raise ValueError("Direct mode requires OPENAI_API_KEY")

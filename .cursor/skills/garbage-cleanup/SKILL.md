@@ -213,7 +213,7 @@ rg "importlib|__import__" backend/
 
 ### Add to Tech Debt Tracker
 
-Items that can't be fixed immediately should be added to `docs/tech-debt-tracker.md`.
+Items that can't be fixed immediately should be added to `backstage/development/tech-debt-tracker.md`.
 ```
 
 ## Reference Documents

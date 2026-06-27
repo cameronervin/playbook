@@ -1,6 +1,6 @@
 # Playbook Design Tokens
 
-Source of truth: `docs/design/source/colors_and_type.css` and `frontend/src/app/globals.css`.
+Source of truth: `backstage/design/source/colors_and_type.css` and `frontend/src/app/globals.css`.
 
 ## Color
 

@@ -60,7 +60,7 @@ export function AdminUsersPanel({
   return (
     <AdminPageScaffold
       contentClassName="py-[18px]"
-      contentMaxWidthClassName="max-w-[880px]"
+      contentMaxWidthClassName="pb-admin-content-narrow"
       subtitle={isLoading ? undefined : `${users.length} ${users.length === 1 ? 'user' : 'users'} · ${adminCount} with admin access`}
       title="Users & roles"
     >
@@ -75,7 +75,7 @@ export function AdminUsersPanel({
             </p>
           )}
           {isError && (
-            <p className="mb-3 rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-sm text-danger">
+            <p className="pb-admin-table-text mb-3 rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-danger">
               Users could not be refreshed.
             </p>
           )}
@@ -99,7 +99,7 @@ export function AdminUsersPanel({
         <div className="hidden grid-cols-[2fr_1.2fr_150px] gap-3.5 border-b border-border bg-bg-base px-4 py-[11px] md:grid">
           {['User', 'Role', ''].map((header) => (
             <span
-              className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-fg-4"
+              className="pb-admin-table-heading"
               key={header || 'actions'}
             >
               {header}
@@ -126,7 +126,7 @@ export function AdminUsersPanel({
 }
 
 function EmptyUsersMessage({ children }: { children: string }) {
-  return <div className="p-5 text-sm text-fg-3">{children}</div>
+  return <div className="pb-admin-table-text p-5 text-fg-3">{children}</div>
 }
 
 interface UserRowProps {
@@ -149,7 +149,7 @@ function UserRow({ currentUserId, last, onRoleChange, user }: UserRowProps) {
       <div className="flex min-w-0 items-center gap-3">
         <span
           className={cn(
-            'flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md font-display text-[13px] font-extrabold',
+            'pb-admin-avatar',
             isCurrentUser ? 'bg-brand text-fg-on-brand' : 'bg-surface-hover text-fg-2',
           )}
           aria-hidden="true"
@@ -160,8 +160,8 @@ function UserRow({ currentUserId, last, onRoleChange, user }: UserRowProps) {
           <span className="flex min-w-0 items-center gap-[7px]">
             <span className="pb-admin-table-text truncate font-semibold text-fg-1">{user.name}</span>
             {isCurrentUser && (
-              <span className="rounded-pill bg-surface-raised px-[7px] py-px text-[10px] font-bold text-fg-3">
-                YOU
+              <span className="pb-admin-small-badge bg-surface-raised text-fg-3">
+                You
               </span>
             )}
           </span>
@@ -175,7 +175,7 @@ function UserRow({ currentUserId, last, onRoleChange, user }: UserRowProps) {
 
       <div className="justify-self-start md:justify-self-end">
         {isCurrentUser ? (
-          <span className="inline-flex items-center gap-1.5 text-xs text-fg-4">
+          <span className="pb-admin-table-meta inline-flex items-center gap-1.5 text-fg-4">
             <Lock className="h-[13px] w-[13px]" />
             Locked
           </span>
@@ -192,7 +192,7 @@ function RoleBadge({ role }: { role: UserRole }) {
   const RoleIcon = meta.icon
 
   return (
-    <Badge className="px-3 py-1 text-xs" tone={meta.tone}>
+    <Badge className="px-3 py-1 pb-admin-table-meta" tone={meta.tone}>
       <RoleIcon className="h-3 w-3" />
       {meta.label}
     </Badge>
@@ -211,7 +211,7 @@ function RoleMenu({ currentRole, onChange, userName }: RoleMenuProps) {
       <DropdownMenuPrimitive.Trigger asChild>
         <button
           aria-label={`Change role for ${userName}`}
-          className="pb-admin-table-action"
+          className="pb-admin-table-action pb-focus-control"
           type="button"
         >
           Change role

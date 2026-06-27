@@ -125,16 +125,17 @@ expect_status "athlete profile update" "200" \
   -d '{"name":"Jordan Athlete","sport_team":"Basketball"}'
 expect_jq "athlete profile complete" '.profile_complete == true and .next_route == "/chat"'
 
-expect_status "create athlete conversation" "201" \
+expect_status "create athlete conversation" "202" \
   -X POST "$BASE/api/v1/conversations" \
   -H "Authorization: Bearer $ATHLETE_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"initial_message":"Can I accept this NIL deal?"}'
-CONV_ID="$(jq -r '.id // empty' "$BODY_FILE")"
+  -d '{"content":"Can I accept this NIL deal?"}'
+CONV_ID="$(jq -r '.conversation.id // empty' "$BODY_FILE")"
 if [ -z "$CONV_ID" ]; then
   fail "conversation create did not return id"
 fi
-expect_jq "conversation create includes initial message" '.title == null and (.messages | length) == 1 and .messages[0].role == "user"'
+expect_jq "conversation create starts stream" '.status == "streaming" and (.task_id | length > 0) and (.stream_url | length > 0)'
+expect_jq "conversation create includes user and assistant messages" '.conversation.title == null and (.conversation.messages | length) == 2 and .conversation.messages[0].role == "user" and .conversation.messages[1].role == "assistant"'
 
 expect_status "list athlete conversations" "200" \
   -H "Authorization: Bearer $ATHLETE_TOKEN" \
@@ -204,14 +205,12 @@ else
     -F 'title=NIL Handbook' \
     -F 'metadata_tags={"topic":"nil","source_type":"policy"}' \
     -F 'source_date=2026-01-15' \
-    -F 'is_official=true' \
-    -F 'priority=10' \
     -F "file=@$TMP_DIR/playbook-nil-handbook.pdf;type=application/pdf"
   DOC_ID="$(jq -r '.id // empty' "$BODY_FILE")"
   if [ -z "$DOC_ID" ]; then
     fail "KB upload did not return id"
   fi
-  expect_jq "KB upload metadata" '.metadata_tags.topic == "nil" and .is_official == true and .priority == 10'
+  expect_jq "KB upload metadata" '(.metadata_tags.topic == "nil") and (has("is_official") | not) and (has("priority") | not)'
 
   expect_status "KB get document" "200" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -221,8 +220,8 @@ else
     -X PATCH "$BASE/api/v1/admin/kb/documents/$DOC_ID/metadata" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
-    -d '{"metadata_tags":{"topic":"compliance"},"priority":3}'
-  expect_jq "KB metadata updated" '.metadata_tags.topic == "compliance" and .priority == 3'
+    -d '{"metadata_tags":{"topic":"compliance"}}'
+  expect_jq "KB metadata updated" '(.metadata_tags.topic == "compliance") and (has("priority") | not)'
 
   expect_status "KB retry document" "200" \
     -X POST "$BASE/api/v1/admin/kb/documents/$DOC_ID/retry" \
@@ -231,8 +230,8 @@ else
 
   if [ -z "${KB_WEBHOOK_SECRET:-}" ]; then
     KB_WEBHOOK_SECRET="$(cd "$BACKEND_DIR" && "${PYTHON_CMD[@]}" - <<'PY'
-from app.core.config import settings
-print(settings.KB_WEBHOOK_SECRET)
+from app.core.config import get_settings
+print(get_settings().KB_WEBHOOK_SECRET)
 PY
 )"
   fi

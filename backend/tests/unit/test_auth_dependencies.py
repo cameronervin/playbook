@@ -13,17 +13,17 @@ from app.auth.dependencies import (
     require_athlete,
     require_super_admin,
 )
-from app.core.config import settings
+from app.core.config import Settings
 from app.models.identity import User
 from app.repositories.identity import OrganizationRepository, UserRepository
 
 
-def _token(user_id: str) -> str:
+def _token(user_id: str, settings: Settings) -> str:
     return jwt.encode({"sub": user_id}, settings.SECRET_KEY, algorithm="HS256")
 
 
 @pytest.mark.asyncio
-async def test_current_active_user_loads_db_user(db_session) -> None:
+async def test_current_active_user_loads_db_user(db_session, test_settings) -> None:
     repo = UserRepository(db_session)
     organization = await OrganizationRepository(db_session).create(
         name="Playbook Athletics",
@@ -37,7 +37,11 @@ async def test_current_active_user_loads_db_user(db_session) -> None:
         provider_subject="google-sub",
     )
 
-    loaded = await current_active_user(token=_token(str(user.id)), session=db_session)
+    loaded = await current_active_user(
+        token=_token(str(user.id), test_settings),
+        session=db_session,
+        settings=test_settings,
+    )
 
     assert loaded is user
 
@@ -45,6 +49,7 @@ async def test_current_active_user_loads_db_user(db_session) -> None:
 @pytest.mark.asyncio
 async def test_current_active_user_rejects_missing_invalid_and_inactive_user(
     db_session,
+    test_settings,
 ) -> None:
     repo = UserRepository(db_session)
     organization = await OrganizationRepository(db_session).create(
@@ -61,11 +66,19 @@ async def test_current_active_user_rejects_missing_invalid_and_inactive_user(
     )
 
     with pytest.raises(HTTPException) as missing:
-        await current_active_user(token=None, session=db_session)
+        await current_active_user(token=None, session=db_session, settings=test_settings)
     with pytest.raises(HTTPException) as invalid:
-        await current_active_user(token="not-a-token", session=db_session)
+        await current_active_user(
+            token="not-a-token",
+            session=db_session,
+            settings=test_settings,
+        )
     with pytest.raises(HTTPException) as inactive_error:
-        await current_active_user(token=_token(str(inactive.id)), session=db_session)
+        await current_active_user(
+            token=_token(str(inactive.id), test_settings),
+            session=db_session,
+            settings=test_settings,
+        )
 
     assert missing.value.status_code == 401
     assert invalid.value.status_code == 401

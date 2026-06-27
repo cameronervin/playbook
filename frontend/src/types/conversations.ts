@@ -1,3 +1,5 @@
+import type { DirectUploadContract, DirectUploadMutationOptions } from '@/src/types/uploads'
+
 export interface Citation {
   id: string
   message_id: string
@@ -34,10 +36,62 @@ export interface ConversationSummary {
   updated_at: string
 }
 
+export type ConversationFileExtractionStatus = 'upload_pending' | 'uploaded' | 'extracting' | 'ready' | 'failed'
+
+export interface ConversationFileSummary {
+  id: string
+  conversation_id: string
+  message_id: string | null
+  filename: string
+  content_type: string
+  size_bytes: number
+  extraction_status: ConversationFileExtractionStatus
+  chunk_count: number
+  created_at: string
+  updated_at: string
+}
+
 export interface ConversationDetail extends ConversationSummary {
   messages: ChatMessage[]
+  files: ConversationFileSummary[]
 }
 
 export interface ConversationCreateRequest {
-  initial_message: string
+  content: string
+}
+
+export interface MessageSubmitRequest {
+  conversationId: string
+  content: string
+  file_ids?: string[]
+}
+
+export interface MessageSubmitResponse {
+  user_message_id: string
+  assistant_message_id: string
+  task_id: string
+  stream_url: string
+  status: string
+}
+
+export interface ConversationStartResponse extends MessageSubmitResponse {
+  conversation: ConversationDetail
+}
+
+export interface ConversationFileUploadIntentRequest {
+  filename: string
+  content_type: string
+  size_bytes: number
+  message_id?: string | null
+}
+
+export interface ConversationFileUploadIntentResponse {
+  file: ConversationFileSummary
+  upload: DirectUploadContract
+}
+
+export interface UploadConversationFileRequest extends DirectUploadMutationOptions {
+  conversationId: string
+  file: File
+  message_id?: string | null
 }

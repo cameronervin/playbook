@@ -1,9 +1,10 @@
 # Agent Eval Harness
 
-Code-based evals for the agent layer. Tracks runs in Langfuse v3 and scores with
-an LLM-as-judge (every agent) plus Ragas retrieval/generation metrics (the
-KB-using chains). The scaffold ships a single `example` agent; add more by
-writing a `specs/<name>.py` and registering it in `specs/__init__.py`.
+Code-based evals for the agent layer. Tracks runs in Langfuse v3, executes
+dataset items through the Langfuse Experiment Runner SDK, and scores with an
+LLM-as-judge (every agent) plus Ragas retrieval/generation metrics (the KB-using
+chains). The scaffold ships a single `example` agent; add more by writing a
+`specs/<name>.py` and registering it in `specs/__init__.py`.
 
 ## Install
 
@@ -29,9 +30,14 @@ Author the dataset + rubric YAMLs first (see `datasets/README.md`, `rubrics/READ
 ```bash
 cd backend
 uv run --group evals python -m evals.cli sync-datasets  # mirror datasets into Langfuse
-uv run --group evals python -m evals.cli run --agent example
-uv run --group evals python -m evals.cli run-all         # every agent
+uv run --group evals python -m evals.cli run --agent example --max-concurrency 5
+uv run --group evals python -m evals.cli run-all --max-concurrency 5
 ```
+
+`--max-concurrency` controls concurrent dataset item execution per spec. It
+defaults to `5`, accepts values from `1` through `50`, and can also be set with
+`EVAL_MAX_CONCURRENCY=5`. `run-all` still runs specs one after another so total
+LLM/KB load stays bounded; each spec's items run concurrently.
 
 `--agent` choices: `example`.
 
@@ -53,3 +59,8 @@ the result's `errors` list rather than aborting the rest of the run or the rest
 of `run-all`. To keep the judge prompt within the judge model's context window,
 each prompt block (`input`/`output`/`trajectory`/`expected`) is truncated to a
 character budget (`LLMJudge.block_char_budget`, default 24k chars; output gets 2×).
+
+The legacy scaffold's KB-context capture uses a process-wide patch and is guarded
+by a lock when `capture_kb=True`; real Playbook KB eval specs should use
+per-item injected providers/source registries before relying on fully parallel
+RAG-context capture.

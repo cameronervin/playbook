@@ -35,7 +35,7 @@ export function BrandLockup({ className, markSize = 34, wordmarkClassName }: Bra
   return (
     <div className={cn('flex items-center gap-3 text-fg-1', className)}>
       <PlaybookMark size={markSize} />
-      <span className={cn('font-display text-2xl font-extrabold tracking-tight', wordmarkClassName)}>
+      <span className={cn('pb-brand-wordmark', wordmarkClassName)}>
         Playbook
       </span>
     </div>

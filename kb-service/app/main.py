@@ -13,8 +13,10 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.logging_config import configure_logging
 from app.infrastructure.db.session import cleanup_db_engine
 
+configure_logging(settings.LOG_LEVEL)
 logger = structlog.get_logger(__name__)
 
 
@@ -27,6 +29,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     app.state.embed_provider = get_embed_provider()
     yield
+    from app.infrastructure.rerankers.factory import (
+        clear_all_caches as clear_rerank_caches,
+    )
+
+    clear_rerank_caches()
     await cleanup_db_engine()
     logger.info("kb_service_shutdown")
 

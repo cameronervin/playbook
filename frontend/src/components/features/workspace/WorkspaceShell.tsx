@@ -23,7 +23,7 @@ export function WorkspaceSidePanel({ className, ...props }: WorkspaceSidePanelPr
   return (
     <aside
       className={cn(
-        'hidden h-dvh w-[320px] shrink-0 flex-col border-l border-border bg-bg-page text-fg-1 lg:flex',
+        'pb-workspace-side-panel hidden h-dvh shrink-0 flex-col border-l border-border bg-bg-page text-fg-1 lg:flex',
         className,
       )}
       role="complementary"

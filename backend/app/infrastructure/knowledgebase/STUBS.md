@@ -27,7 +27,7 @@ by `settings.KB_ENABLED`.
 
 Every provider implements:
 
-- `search(query, max_docs, score_threshold, metadata_filter, configuration_id) -> KnowledgebaseResult`
+- `search(query, organization_id, max_docs, score_threshold, metadata_filter, configuration_id) -> KnowledgebaseResult`
 - `health_check() -> bool`
 - `resolve_configuration() -> str` (cached after first success; raises
   `KBConfigError` when the config can't be found → fail-fast at startup)
@@ -42,25 +42,14 @@ The ingestion backend now exists as a standalone microservice at the repo root:
 **`kb-service/`** (FastAPI + Celery, docling → OpenAI embeddings → pgvector). The
 `LocalKBProvider` here is its HTTP client:
 
-- `search()` → `POST /api/kb/embed/search` (returns `{chunks, query, total}`).
-- `resolve_configuration()` → `GET /api/kb/configuration/?name=<KB_CONFIG_NAME>`.
-- Auth: `Authorization: Bearer <KB_API_SECRET>` on every call.
+- `resolve_configuration()` → `POST /api/kb/configuration/resolve`.
+- `search()` → `POST /api/kb/search` (returns `{results, query, total}`).
+- `ingest_document()` → `POST /api/kb/ingest/document`.
+- `get_document_status()` → `GET /api/kb/status/documents/{document_id}`.
+- `retry_document()` → `POST /api/kb/documents/{document_id}/retry`.
+- `delete_document()` → `DELETE /api/kb/documents/{document_id}`.
+- Auth: `Authorization: Bearer <KB_API_SECRET>` on every non-health call.
 - `KB_LOCAL_BASE_URL` (default `http://kb-api:8001`) points at the service.
-
-Ingestion itself (submit document URL, poll task status, delete) is driven by
-calling `kb-service` endpoints (`/api/kb/ingest/url`, `/api/kb/status/{task_id}`,
-`/api/kb/document/...`). When you add those calls here, introduce them as
-**provider-specific** methods (or a separate `IngestingKnowledgebaseProvider`
-mix-in), not abstract methods on `BaseKnowledgebaseProvider`:
-
-- `provision_pipeline(name, collection_name) -> str` — create a new collection/
-  pipeline configuration.
-- `submit_document_url(configuration_id, presigned_url, filename, metadata, ...) -> str | None`
-  — start an async ingestion task; returns a task id.
-- `check_task_status(task_id) -> str | None` — poll a single ingestion task.
-- `ingest_document_url(...)` — convenience: submit + poll + resolve doc id.
-- `delete_document(document_id)` / `delete_pipeline(configuration_id)`.
-- `find_document_ids_by_filename(configuration_id, filename) -> list[str]`.
 
 Document ingestion is typically driven from a Celery task (see `app/workers/`),
 calling the individual submit/poll methods with worker-managed retries.

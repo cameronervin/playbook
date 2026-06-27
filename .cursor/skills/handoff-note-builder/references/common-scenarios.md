@@ -76,7 +76,7 @@ Treat these as soft templates. The actual note should adapt to the author's brai
 **Useful blocks to include** (from `references/team-and-products.md`):
 - Repo URL for the product
 - Onboarding / access block (reference a secrets manager — never paste real secrets)
-- Short description of `prd/` structure
+- Short description of `backstage/prd/` structure
 
 ## Scenario: Blocked day (waiting on DevOps or external dep)
 

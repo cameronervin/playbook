@@ -35,16 +35,23 @@ The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callb
 
 ## Design System
 
-The visual source of truth is `docs/design/`, especially `docs/design/README.md`, `docs/design/frontend_wireframe_implementation_plan.md`, and `docs/design/source/colors_and_type.css`.
+The visual source of truth is `backstage/design/`, especially `backstage/design/README.md`, `backstage/design/frontend_wireframe_implementation_plan.md`, and `backstage/design/source/colors_and_type.css`.
 
 - Fonts are loaded locally in `src/app/layout.tsx`: Archivo, Sora, and Inter.
 - Tailwind v4 tokens live in `src/app/globals.css` using `@theme`.
 - Compact product typography utilities live in `src/app/globals.css`: `pb-page-title`, `pb-page-subtitle`, `pb-card-title`, `pb-ui-sm`, and `pb-ui-xs`.
+- Use the semantic UI contract in `src/app/globals.css` before adding one-off Tailwind values:
+  - Auth surfaces use `pb-auth-*` classes for headings, provider buttons, labels, controls, and footer copy.
+  - Workspace geometry uses `pb-workspace-*` and `pb-chat-content` classes for rails, panels, and chat width.
+  - Chat surfaces use `pb-chat-*` classes for empty-state titles, message body text, composer inputs, and user bubbles.
+  - Dashboard/admin surfaces use `pb-dashboard-*`, `pb-admin-table-*`, `pb-admin-menu*`, and `pb-admin-nav-*` classes for dense text and control rhythm.
+- Use `pb-focus-control` or `pb-focus-item` whenever an interactive element suppresses browser outlines. Do not add `outline-none` without an equivalent visible focus state.
+- Repeated exact dimensions belong in Tailwind v4 `@theme` spacing tokens or named `pb-*` classes. Single-use arbitrary values are allowed only when they directly reflect the design handoff.
 - Admin chrome uses shared globals such as `pb-admin-header-control`, `pb-admin-nav-item`, and `pb-admin-nav-icon` so Insights, Knowledge base, and Users & roles keep the same compact rhythm.
 - Dense admin tables use shared globals such as `pb-admin-table-text`, `pb-admin-table-meta`, `pb-admin-table-action`, `pb-admin-menu`, and `pb-admin-menu-item`; avoid generic `text-sm`/`text-base` row controls that overpower table content.
 - The palette is Playbook orange on warm charcoal. Avoid blue/purple AI gradients.
 - Use local Playbook primitives in `src/components/ui/`.
-- Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions.
+- `Button`, `IconButton`, `Input`, `Textarea`, and Radix wrappers own default focus and sizing behavior. Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions, and use `IconButton size="sm" variant="ghost"` for compact panel close/action buttons.
 - `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
 - `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`.
 - Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.
@@ -58,6 +65,10 @@ The visual source of truth is `docs/design/`, especially `docs/design/README.md`
 - Server state belongs in TanStack Query hooks in `src/hooks/`.
 - API calls live in `src/lib/api/endpoints/` and use `apiClient`.
 - `apiClient` sends cookie credentials, preserves multipart `FormData`, parses structured API errors, and handles `204`.
+- Athlete chat first-send uses `POST /api/v1/conversations`; follow-ups use
+  `POST /api/v1/conversations/{conversation_id}/messages`. Both return
+  `task_id` stream metadata, and the browser opens the returned SSE
+  `stream_url` with cookies included.
 - Zustand stores only client UI state, such as selected conversation, sources panel, admin tab, and settings modal state.
 - Missing Phase 2+ APIs are represented by typed fixtures, not hidden server-state mocks.
 

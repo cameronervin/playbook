@@ -24,7 +24,9 @@ export function AdminKBDocumentRow({
   onToggleOfficial,
 }: AdminKBDocumentRowProps) {
   const failed = document.processing_status === 'failed'
-  const processing = document.processing_status === 'processing' || document.processing_status === 'uploaded'
+  const pendingUpload = document.processing_status === 'upload_pending'
+  const queued = document.processing_status === 'uploaded'
+  const processing = document.processing_status === 'processing'
   const extension = getDocumentExtension(document)
   const tags = getDocumentTags(document).slice(0, 2)
 
@@ -50,6 +52,18 @@ export function AdminKBDocumentRow({
             ))}
           </div>
         )}
+        {pendingUpload && (
+          <span className="pb-admin-kb-status text-warning">
+            <LoaderCircle className="pb-spin" size={14} />
+            Pending upload
+          </span>
+        )}
+        {queued && (
+          <span className="pb-admin-kb-status text-info">
+            <LoaderCircle className="pb-spin" size={14} />
+            Queued
+          </span>
+        )}
         {processing && (
           <span className="pb-admin-kb-status text-info">
             <LoaderCircle className="pb-spin" size={14} />
@@ -62,7 +76,7 @@ export function AdminKBDocumentRow({
             Failed
           </span>
         )}
-        {!processing && !failed && <span className="pb-admin-kb-ext">{extension}</span>}
+        {!pendingUpload && !queued && !processing && !failed && <span className="pb-admin-kb-ext">{extension}</span>}
         <DocumentActions
           canManage={canManage}
           documentTitle={document.title}
@@ -152,7 +166,7 @@ interface DropdownMenuItemProps {
 function DropdownMenuItem({ children, danger = false, icon, onSelect }: DropdownMenuItemProps) {
   return (
     <DropdownMenuPrimitive.Item
-      className={cn('pb-admin-menu-item outline-none', danger && 'text-danger focus:bg-danger-bg focus:text-danger')}
+      className={cn('pb-admin-menu-item pb-focus-item', danger && 'text-danger focus:bg-danger-bg focus:text-danger')}
       onSelect={onSelect}
     >
       <span className={cn('text-fg-3', danger && 'text-danger')}>{icon}</span>

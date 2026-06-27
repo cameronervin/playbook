@@ -9,7 +9,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, TIMESTAMP, Text, text
+from sqlalchemy import (
+    TIMESTAMP,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +34,10 @@ class IngestionLog(Base):
         CheckConstraint(
             "chunk_status IS NULL OR chunk_status IN ('PENDING', 'STARTED', 'SUCCESS', 'FAILURE', 'REVOKED')",
             name="ck_kb_ingestion_logs_chunk_status_valid",
+        ),
+        CheckConstraint(
+            "summarize_status IS NULL OR summarize_status IN ('PENDING', 'STARTED', 'SUCCESS', 'FAILURE', 'REVOKED')",
+            name="ck_kb_ingestion_logs_summarize_status_valid",
         ),
         CheckConstraint(
             "embed_status IS NULL OR embed_status IN ('PENDING', 'STARTED', 'SUCCESS', 'FAILURE', 'REVOKED')",
@@ -50,10 +62,12 @@ class IngestionLog(Base):
     pipeline_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     parse_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     chunk_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    summarize_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     embed_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     load_vector_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     parse_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     chunk_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    summarize_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     embed_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     load_vector_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     parse_result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

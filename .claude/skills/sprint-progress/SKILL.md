@@ -8,7 +8,7 @@ Generate sprint progress reports by analyzing implementation status against user
 1. **Table**: Markdown table with story IDs, descriptions, and statuses
 2. **Infographic**: AI-generated image matching PPT slide format via Gemini API
 
-Reports saved to `docs/sprint-reports/YYYY-MM-DD/`.
+Reports saved to `backstage/development/sprint-reports/YYYY-MM-DD/`.
 
 ## Configuration
 
@@ -17,7 +17,7 @@ On first run, confirm or update these defaults:
 ```yaml
 # Default configuration (update paths for your project)
 implementation_path: implementation/
-user_stories_path: prd/05-user-stories.md
+user_stories_path: backstage/prd/05-user-stories.md
 phases: [1, 2, 3, 4, 5]
 ```
 
@@ -32,7 +32,7 @@ Ask user using AskQuestion tool:
 ```
 Question 1: "Confirm configuration paths"
 Options:
-- Use defaults (implementation/, prd/05-user-stories.md)
+- Use defaults (implementation/, backstage/prd/05-user-stories.md)
 - Provide custom paths
 ```
 
@@ -89,7 +89,7 @@ Options:
 
 **For Table Output:**
 
-Create `docs/sprint-reports/YYYY-MM-DD/sprint-progress.md` using template:
+Create `backstage/development/sprint-reports/YYYY-MM-DD/sprint-progress.md` using template:
 
 ```markdown
 # Sprint Progress Report - YYYY-MM-DD
@@ -118,7 +118,7 @@ Create `docs/sprint-reports/YYYY-MM-DD/sprint-progress.md` using template:
 ```bash
 python .claude/skills/sprint-progress/scripts/generate_infographic.py \
   --implementation-dir implementation/ \
-  --output "docs/sprint-reports/YYYY-MM-DD/sprint-progress.png" \
+  --output "backstage/development/sprint-reports/YYYY-MM-DD/sprint-progress.png" \
   --per-phase
 ```
 
@@ -140,8 +140,8 @@ Stories by Status:
 - Not Started: 8
 
 Output Files:
-- docs/sprint-reports/2026-02-18/sprint-progress.md
-- docs/sprint-reports/2026-02-18/sprint-progress.png
+- backstage/development/sprint-reports/2026-02-18/sprint-progress.md
+- backstage/development/sprint-reports/2026-02-18/sprint-progress.png
 ```
 
 ## Scripts
@@ -158,7 +158,7 @@ Generates sprint board images via Gemini API using `gemini-3-pro-image-preview` 
 ```bash
 python .claude/skills/sprint-progress/scripts/generate_infographic.py \
   --implementation-dir implementation/ \
-  --output "docs/sprint-reports/YYYY-MM-DD/sprint-progress.png" \
+  --output "backstage/development/sprint-reports/YYYY-MM-DD/sprint-progress.png" \
   --per-phase
 ```
 
@@ -198,7 +198,7 @@ User: Generate sprint progress report
 Agent: I'll generate a sprint progress report. Let me confirm your configuration:
 
 1. Implementation files: `implementation/`
-2. User stories: `prd/05-user-stories.md`
+2. User stories: `backstage/prd/05-user-stories.md`
 3. Phases: 1, 2, 3, 4, 5
 
 [Uses AskQuestion to confirm]
@@ -224,13 +224,13 @@ Generating outputs...
 [Creates directory, generates table, runs infographic script]
 
 Agent: Sprint progress report generated:
-- docs/sprint-reports/2026-02-18/sprint-progress.md
-- docs/sprint-reports/2026-02-18/sprint-progress.png (overview)
-- docs/sprint-reports/2026-02-18/phase-1-detail.png
-- docs/sprint-reports/2026-02-18/phase-2-detail.png
-- docs/sprint-reports/2026-02-18/phase-3-detail.png
-- docs/sprint-reports/2026-02-18/phase-4-detail.png
-- docs/sprint-reports/2026-02-18/phase-5-detail.png
+- backstage/development/sprint-reports/2026-02-18/sprint-progress.md
+- backstage/development/sprint-reports/2026-02-18/sprint-progress.png (overview)
+- backstage/development/sprint-reports/2026-02-18/phase-1-detail.png
+- backstage/development/sprint-reports/2026-02-18/phase-2-detail.png
+- backstage/development/sprint-reports/2026-02-18/phase-3-detail.png
+- backstage/development/sprint-reports/2026-02-18/phase-4-detail.png
+- backstage/development/sprint-reports/2026-02-18/phase-5-detail.png
 ```
 
 ## Troubleshooting

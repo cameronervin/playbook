@@ -15,21 +15,6 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from app.agents.states.example_state import ExampleResult
-
-
-def serialize_example_result_compact(result: ExampleResult) -> str:
-    """Compact view of an ExampleResult: title + truncated body."""
-    body = result.body or ""
-    if len(body) > 200:
-        body = body[:197] + "..."
-    return f"**{result.title}**\n\n{body}"
-
-
-def serialize_example_result_full(result: ExampleResult) -> str:
-    """Full view of an ExampleResult: title + complete body."""
-    return f"**{result.title}**\n\n{result.body}"
-
 
 def serialize_to_json(obj: Any, indent: int = 2) -> str:
     """Serialize a Pydantic model (or any JSON-able object) to a JSON string."""
@@ -47,8 +32,6 @@ def _serialize_loaded_context(obj: Any) -> str:
 
 # Registry mapping (field_name, tier) -> serializer function.
 SERIALIZER_REGISTRY: dict[tuple[str, str], Callable[[Any], str]] = {
-    ("result", "compact"): serialize_example_result_compact,
-    ("result", "full"): serialize_example_result_full,
     ("loaded_context", "json"): _serialize_loaded_context,
     ("loaded_context", "compact"): _serialize_loaded_context,
     ("loaded_context", "full"): _serialize_loaded_context,

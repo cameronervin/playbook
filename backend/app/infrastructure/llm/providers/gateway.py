@@ -5,18 +5,40 @@ from functools import lru_cache
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.infrastructure.llm.providers.base import BaseLLMProvider
 
 _ERR_LITELLM_KEY_REQUIRED = "LITELLM_API_KEY must be set when using LiteLLM mode"
+DEFAULT_LITELLM_TITLE_MODEL = "playbook-fast"
 
 
 class LiteLLMProvider(BaseLLMProvider):
     """LLM provider that routes requests through a LiteLLM proxy."""
 
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
     def get_chat_model(self) -> BaseChatModel:
         """Get the configured chat model via LiteLLM."""
-        return _get_litellm_chat_model()
+        return _get_litellm_chat_model(
+            model=self.settings.LLM_CHAT_MODEL,
+            base_url=self.settings.LITELLM_BASE_URL,
+            api_key=self.settings.LITELLM_API_KEY,
+            temperature=self.settings.LLM_TEMPERATURE,
+            max_tokens=self.settings.LLM_MAX_TOKENS,
+            timeout=self.settings.LLM_TIMEOUT,
+        )
+
+    def get_title_model(self) -> BaseChatModel:
+        """Get the LiteLLM-routed model for lightweight conversation titles."""
+        return _get_litellm_chat_model(
+            model=self.settings.LLM_TITLE_MODEL or DEFAULT_LITELLM_TITLE_MODEL,
+            base_url=self.settings.LITELLM_BASE_URL,
+            api_key=self.settings.LITELLM_API_KEY,
+            temperature=0,
+            max_tokens=256,
+            timeout=self.settings.LLM_TIMEOUT,
+        )
 
     @property
     def provider_name(self) -> str:
@@ -29,17 +51,25 @@ class LiteLLMProvider(BaseLLMProvider):
 
 
 @lru_cache
-def _get_litellm_chat_model() -> BaseChatModel:
-    if not settings.LITELLM_API_KEY:
+def _get_litellm_chat_model(
+    *,
+    model: str,
+    base_url: str,
+    api_key: str,
+    temperature: float,
+    max_tokens: int,
+    timeout: int,
+) -> BaseChatModel:
+    if not api_key:
         raise ValueError(_ERR_LITELLM_KEY_REQUIRED)
 
     return ChatOpenAI(
-        model=settings.LLM_CHAT_MODEL,
-        base_url=settings.LITELLM_BASE_URL,
-        api_key=settings.LITELLM_API_KEY,
-        temperature=settings.LLM_TEMPERATURE,
-        max_tokens=settings.LLM_MAX_TOKENS,
-        timeout=settings.LLM_TIMEOUT,
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
     )
 
 

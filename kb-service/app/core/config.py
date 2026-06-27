@@ -1,15 +1,14 @@
 """KB Service settings — loaded from environment variables.
 
 Grouped by concern. Mode-dependent required fields are enforced in
-``_validate_provider_config``. Genericized scaffold: OCR is a stub
-(``OCR_PROVIDER="none"``); plug Textract/VLM back in via the OCR provider
-(see ``app/infrastructure/STUBS.md``).
+``_validate_provider_config``. OCR is opt-in: ``OCR_PROVIDER="none"`` by
+default, while ``OCR_PROVIDER="vlm"`` routes scanned PDF OCR through LiteLLM.
 """
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -34,20 +33,20 @@ class Settings(BaseSettings):
     # dedicated ``kb`` schema so this can share a Postgres instance with the
     # main app while staying isolated.
     # -------------------------------------------------------------------------
-    DATABASE_URL: str  # must be provided
+    DATABASE_URL: str = Field(repr=False)  # must be provided
 
     # -------------------------------------------------------------------------
     # Celery / Valkey — dedicated broker + result backend for the ingest pipeline
     # -------------------------------------------------------------------------
-    CELERY_BROKER_URL: str = "redis://kb-valkey:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://kb-valkey:6379/1"
+    CELERY_BROKER_URL: str = Field(default="redis://kb-valkey:6379/0", repr=False)
+    CELERY_RESULT_BACKEND: str = Field(default="redis://kb-valkey:6379/1", repr=False)
 
     # -------------------------------------------------------------------------
-    # Embedding provider mode — gateway | direct
-    #   gateway: routes through a LiteLLM endpoint (production)
+    # Embedding provider mode — litellm | direct
+    #   litellm: routes through a LiteLLM endpoint (production)
     #   direct:  calls the OpenAI API directly with OPENAI_API_KEY (dev/test)
     # -------------------------------------------------------------------------
-    KB_LLM_PROVIDER_MODE: str = "direct"
+    LLM_PROVIDER_MODE: Literal["direct", "litellm"] = "litellm"
 
     # Shared embedding tuning (applies to both modes)
     KB_EMBED_DIMENSIONS: int = 1536
@@ -60,37 +59,52 @@ class Settings(BaseSettings):
     KB_EMBED_BACKOFF_MAX_SECONDS: int = 120
     KB_EMBED_RETRY_JITTER: bool = True
 
-    # direct mode — OPENAI_API_KEY required
-    OPENAI_API_KEY: str = ""
-    OPENAI_EMBED_MODEL: str = "text-embedding-3-small"
+    # direct mode — OPENAI_API_KEY required. The direct model is fixed because
+    # normal deployments should configure provider model IDs only in LiteLLM.
+    OPENAI_API_KEY: str = Field(default="", repr=False)
+    DIRECT_EMBED_MODEL: str = "text-embedding-3-small"
 
-    # gateway mode — LLM_GATEWAY_BASE_URL + LLM_GATEWAY_API_KEY required
-    LLM_GATEWAY_BASE_URL: str = ""
-    LLM_GATEWAY_API_KEY: str = ""
-    LLM_GATEWAY_EMBED_MODEL: str = "text-embedding-3-small"
+    # litellm mode — LITELLM_BASE_URL + LITELLM_API_KEY required
+    LITELLM_BASE_URL: str = ""
+    LITELLM_API_KEY: str = Field(default="", repr=False)
+    LITELLM_EMBED_MODEL: str = "playbook-embed"
+    LITELLM_VLM_MODEL: str = "playbook-ocr"
+    LITELLM_SUMMARY_MODEL: str = "playbook-fast"
+    LITELLM_RERANK_MODEL: str = "playbook-rerank"
+
+    # Source summary generation through the lightweight LiteLLM text alias.
+    KB_SUMMARY_INPUT_MAX_TOKENS: int = 3000
+    KB_SUMMARY_MAX_OUTPUT_TOKENS: int = 160
+
+    # Reranking. Search calls this provider only when KB_SEARCH_STRATEGY=hybrid
+    # and KB_RERANK_ENABLED=true; semantic mode remains the fallback path.
+    KB_RERANK_ENABLED: bool = False
+    KB_RERANK_CANDIDATE_LIMIT: int = 50
+    KB_RERANK_TIMEOUT_SECONDS: float = 10.0
+    KB_RERANK_FAIL_OPEN: bool = True
 
     # -------------------------------------------------------------------------
     # S3-compatible storage — where original uploads + staged NDJSON live
     # -------------------------------------------------------------------------
-    AWS_S3_BUCKET: str = "kb-documents"
-    AWS_S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
-    AWS_REGION: str = "us-east-1"
-    AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
+    S3_BUCKET_NAME: str = "playbook-bucket"
+    S3_ENDPOINT_URL: str = ""  # empty = real AWS; set to MinIO URL for local dev
+    S3_REGION: str = "us-east-1"
+    S3_ACCESS_KEY_ID: str = Field(default="", repr=False)
+    S3_SECRET_ACCESS_KEY: str = Field(default="", repr=False)
     AWS_PROFILE: str = ""  # named profile; used when explicit keys are not set
 
     # -------------------------------------------------------------------------
     # Webhook — status push from KB → the calling app (HMAC-SHA256 signed)
     # -------------------------------------------------------------------------
     APP_WEBHOOK_URL: str = "http://localhost:8000"  # base URL, no trailing slash
-    KB_WEBHOOK_SECRET: str  # HMAC-SHA256 shared secret; must be provided
+    KB_WEBHOOK_SECRET: str = Field(repr=False)  # HMAC-SHA256 shared secret; must be provided
     KB_WEBHOOK_MAX_RETRIES: int = 5
     KB_WEBHOOK_BACKOFF_BASE: int = 2   # 2s → 8s → 32s → 120s → 120s
 
     # -------------------------------------------------------------------------
     # Service-to-service auth — caller → KB API (Bearer token)
     # -------------------------------------------------------------------------
-    KB_API_SECRET: str  # Bearer token callers must supply; must be provided
+    KB_API_SECRET: str = Field(repr=False)  # Bearer token callers must supply; must be provided
 
     # -------------------------------------------------------------------------
     # Service metadata
@@ -111,6 +125,9 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     KB_SEARCH_MAX_DOCS: int = 10
     KB_SEARCH_SCORE_THRESHOLD: float = 0.7
+    KB_SEARCH_STRATEGY: Literal["semantic", "hybrid"] = "semantic"
+    KB_HYBRID_CANDIDATE_LIMIT: int = Field(default=50, ge=1)
+    KB_RRF_K: int = Field(default=60, ge=1)
 
     # -------------------------------------------------------------------------
     # Worker / vectorstore tuning
@@ -120,11 +137,15 @@ class Settings(BaseSettings):
 
     # -------------------------------------------------------------------------
     # Parser routing
-    #   OCR_PROVIDER="none" → NullOCRProvider (stub). High-complexity/scanned
-    #   PDFs fall back to the local text parser. Set to "textract" or "vlm" only
-    #   after implementing those providers (see app/infrastructure/STUBS.md).
+    #   OCR_PROVIDER="none" → NullOCRProvider. High-complexity/scanned PDFs fall
+    #   back to the local text parser. OCR_PROVIDER="vlm" sends scanned PDF
+    #   pages through the LiteLLM vision model alias configured above.
     # -------------------------------------------------------------------------
     OCR_PROVIDER: Literal["none", "textract", "vlm"] = "none"
+    VLM_OCR_DPI: int = 150
+    VLM_OCR_DETAIL: Literal["auto", "low", "high"] = "high"
+    VLM_OCR_MAX_PAGES: int = 50
+    VLM_OCR_REQUEST_TIMEOUT_SECONDS: float = 120.0
     ENABLE_DOCLING_ROUTING: bool = True
     DOC_PARSER_POLICY: str = "complexity"   # complexity | always_docling | always_basic
 
@@ -175,16 +196,36 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_provider_config(self) -> "Settings":
         errors: list[str] = []
-        if self.KB_LLM_PROVIDER_MODE == "direct" and not self.OPENAI_API_KEY:
-            errors.append("OPENAI_API_KEY is required when KB_LLM_PROVIDER_MODE=direct")
-        if self.KB_LLM_PROVIDER_MODE == "gateway" and not self.LLM_GATEWAY_BASE_URL:
+        if self.LLM_PROVIDER_MODE == "direct" and not self.OPENAI_API_KEY:
+            errors.append("OPENAI_API_KEY is required when LLM_PROVIDER_MODE=direct")
+        if self.LLM_PROVIDER_MODE == "litellm" and not self.LITELLM_BASE_URL:
             errors.append(
-                "LLM_GATEWAY_BASE_URL is required when KB_LLM_PROVIDER_MODE=gateway"
+                "LITELLM_BASE_URL is required when LLM_PROVIDER_MODE=litellm"
             )
-        if self.KB_LLM_PROVIDER_MODE == "gateway" and not self.LLM_GATEWAY_API_KEY:
+        if self.LLM_PROVIDER_MODE == "litellm" and not self.LITELLM_API_KEY:
             errors.append(
-                "LLM_GATEWAY_API_KEY is required when KB_LLM_PROVIDER_MODE=gateway"
+                "LITELLM_API_KEY is required when LLM_PROVIDER_MODE=litellm"
             )
+        if self.OCR_PROVIDER == "vlm":
+            if not self.LITELLM_BASE_URL:
+                errors.append("LITELLM_BASE_URL is required when OCR_PROVIDER=vlm")
+            if not self.LITELLM_API_KEY:
+                errors.append("LITELLM_API_KEY is required when OCR_PROVIDER=vlm")
+            if not self.LITELLM_VLM_MODEL:
+                errors.append("LITELLM_VLM_MODEL is required when OCR_PROVIDER=vlm")
+        if self.KB_RERANK_ENABLED:
+            if not self.LITELLM_BASE_URL:
+                errors.append(
+                    "LITELLM_BASE_URL is required when KB_RERANK_ENABLED=true"
+                )
+            if not self.LITELLM_API_KEY:
+                errors.append(
+                    "LITELLM_API_KEY is required when KB_RERANK_ENABLED=true"
+                )
+            if not self.LITELLM_RERANK_MODEL:
+                errors.append(
+                    "LITELLM_RERANK_MODEL is required when KB_RERANK_ENABLED=true"
+                )
         if _is_production_environment(self.ENVIRONMENT):
             _require_min_secret_length(
                 errors,
@@ -200,7 +241,12 @@ class Settings(BaseSettings):
             raise ValueError("; ".join(errors))
         return self
 
-    model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+        "hide_input_in_errors": True,
+    }
 
 
 settings = Settings()

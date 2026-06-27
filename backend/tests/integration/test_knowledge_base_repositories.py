@@ -73,6 +73,11 @@ async def test_kb_document_repository_manages_document_metadata_and_status(
         document,
         kb_service_document_id=kb_service_document_id,
     )
+    await document_repo.update_ingestion_mirror(
+        document,
+        summary="NIL handbook orientation summary.",
+        chunk_count=12,
+    )
 
     assert document.metadata_tags == {"topic": "compliance"}
     assert document.source_date == date(2026, 2, 1)
@@ -81,6 +86,8 @@ async def test_kb_document_repository_manages_document_metadata_and_status(
     assert document.processing_status == "failed"
     assert document.failure_reason == "No extractable text"
     assert document.kb_service_document_id == kb_service_document_id
+    assert document.summary == "NIL handbook orientation summary."
+    assert document.chunk_count == 12
 
 
 @pytest.mark.asyncio

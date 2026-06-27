@@ -18,6 +18,28 @@ services:
     env_file:
       - ../envs/.env.local
 
+  # Local PostgreSQL browser UI (see backstage/guides/postgresql_setup.md).
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:26.1.0
+    ports:
+      - "${DB_UI_PORT:-5050}:8978"
+    environment:
+      - CB_SERVER_NAME=Playbook Local DB UI
+      - CB_SERVER_URL=http://localhost:${DB_UI_PORT:-5050}/
+      - CB_ADMIN_NAME=playbook
+      - CB_ADMIN_PASSWORD=${DB_UI_ADMIN_PASSWORD:-playbook-local-db-ui}
+      - CLOUDBEAVER_APP_SUPPORTS_CUSTOM_CONNECTIONS=${DB_UI_CUSTOM_CONNECTIONS_ENABLED:-true}
+    volumes:
+      - cloudbeaver_workspace:/opt/cloudbeaver/workspace
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8978/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   litellm-db-init:
     image: postgres:16-alpine
     env_file:
@@ -48,6 +70,25 @@ services:
         condition: service_healthy
       litellm-db-init:
         condition: service_completed_successfully
+
+  reranker:
+    image: michaelf34/infinity:0.0.75
+    command:
+      - v2
+      - --model-id
+      - mixedbread-ai/mxbai-rerank-xsmall-v1
+      - --engine
+      - torch
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7997"
+    restart: "no"
+    ports:
+      - "7997:7997"
+    env_file:
+      - path: ../envs/.env.reranker.local
+        required: false
 
   backend:
     ports:
@@ -82,10 +123,12 @@ services:
       - /app/.next
     command: npm run dev
 
-  # Local S3-compatible object storage via MinIO (see docs/guides/minio_setup.md).
+  # Local S3-compatible object storage via MinIO (see backstage/guides/minio_setup.md).
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
+    environment:
+      MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -114,7 +157,8 @@ services:
         set -eu
         /usr/bin/mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
         /usr/bin/mc mb --ignore-existing "local/$${S3_BUCKET_NAME}"
-        /usr/bin/mc mb --ignore-existing "local/$${AWS_S3_BUCKET}"
+        echo "MinIO bucket ready for local direct-upload smoke: $${S3_BUCKET_NAME}"
+        echo "Validate browser preflight with backstage/guides/minio_setup.md"
 
   celery-worker:
     env_file:
@@ -184,3 +228,5 @@ services:
 volumes:
   minio_data:
     name: playbook_minio_data
+  cloudbeaver_workspace:
+    name: playbook_cloudbeaver_workspace

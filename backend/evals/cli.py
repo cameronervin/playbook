@@ -14,11 +14,11 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 import click
 
-from evals.core.runner import run_spec
+from evals.core.runner import DEFAULT_MAX_CONCURRENCY, run_spec
 from evals.core.sync import sync_dataset_to_langfuse
 from evals.specs import REGISTRY
 
@@ -29,7 +29,7 @@ if sys.platform == "win32":
 
 def _ensure_langfuse() -> None:
     """Initialise Langfuse from settings; abort with a clear message if not ready."""
-    from app.observability.langfuse_init import init_langfuse, is_langfuse_ready
+    from app.observability.langfuse_init import init_langfuse, is_langfuse_ready  # noqa: I001, PLC0415
 
     init_langfuse()
     if not is_langfuse_ready():
@@ -40,14 +40,14 @@ def _ensure_langfuse() -> None:
 
 
 def _shutdown_langfuse() -> None:
-    from app.observability.langfuse_init import shutdown_langfuse
+    from app.observability.langfuse_init import shutdown_langfuse  # noqa: PLC0415
 
     shutdown_langfuse()
 
 
 def dataset_exists(spec: object) -> bool:
     """Whether a spec's dataset YAML is present (not-yet-authored specs are skipped)."""
-    return os.path.exists(getattr(spec, "dataset_path"))
+    return os.path.exists(getattr(spec, "dataset_path"))  # noqa: B009
 
 
 @click.group()
@@ -58,30 +58,56 @@ def cli() -> None:
 @cli.command()
 @click.option("--agent", type=click.Choice(list(REGISTRY)), required=True)
 @click.option("--run-name", default=None, help="Optional explicit Langfuse run name.")
-def run(agent: str, run_name: str | None) -> None:
+@click.option(
+    "--max-concurrency",
+    envvar="EVAL_MAX_CONCURRENCY",
+    type=click.IntRange(1, 50),
+    default=DEFAULT_MAX_CONCURRENCY,
+    show_default=True,
+    help="Maximum concurrent dataset item executions for this spec.",
+)
+def run(agent: str, run_name: str | None, max_concurrency: int) -> None:
     """Run one agent's evals and print PASS/FAIL with mean scores."""
     _ensure_langfuse()
     try:
-        result = asyncio.run(run_spec(REGISTRY[agent], run_name=run_name))
+        result = asyncio.run(
+            run_spec(
+                REGISTRY[agent],
+                run_name=run_name,
+                max_concurrency=max_concurrency,
+            )
+        )
         click.echo(result.summary())
     finally:
         _shutdown_langfuse()
 
 
 @cli.command(name="run-all")
-def run_all() -> None:
+@click.option(
+    "--max-concurrency",
+    envvar="EVAL_MAX_CONCURRENCY",
+    type=click.IntRange(1, 50),
+    default=DEFAULT_MAX_CONCURRENCY,
+    show_default=True,
+    help="Maximum concurrent dataset item executions per spec.",
+)
+def run_all(max_concurrency: int) -> None:
     """Run every registered agent (e.g. nightly)."""
     _ensure_langfuse()
 
     async def _all() -> None:
-        stamp = datetime.now().strftime("%Y%m%d")
+        stamp = datetime.now(UTC).strftime("%Y%m%d")
         for name, spec in REGISTRY.items():
             # Skip not-yet-authored datasets so one missing spec can't abort the
             # whole nightly run (run_spec syncs the dataset, which would 404).
             if not dataset_exists(spec):
                 click.echo(f"skipped {name}: no dataset at {spec.dataset_path}")
                 continue
-            result = await run_spec(spec, run_name=f"{name}-nightly-{stamp}")
+            result = await run_spec(
+                spec,
+                run_name=f"{name}-nightly-{stamp}",
+                max_concurrency=max_concurrency,
+            )
             click.echo(result.summary())
 
     try:

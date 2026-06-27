@@ -13,14 +13,20 @@ a signed status webhook. The host app never blocks on ingestion.
 
 ## 1. Ingest data flow
 
-The host app uploads a document to S3, then calls `POST /api/kb/ingest/url`
-with a presigned URL and a configuration id. The service validates and records
+The host app uploads a document to S3, resolves the default configuration with
+`POST /api/kb/configuration/resolve`, then calls
+`POST /api/kb/ingest/document` with a presigned URL, Playbook document metadata,
+and a configuration id. The service validates and records
 the request, then dispatches a Celery chain. Heavy payloads (page text, chunks,
 embeddings) never travel through the broker — they are staged in S3 as NDJSON;
 only small summary dicts flow between tasks.
 
+Configuration resolution is automatic and idempotent. The KB service owns the
+singleton default (`Playbook KB Pipeline` / `playbook-kb`), creates it when
+missing, and reuses it on repeated or concurrent calls.
+
 ```
-                 POST /api/kb/ingest/url
+                 POST /api/kb/ingest/document
                          │
                          ▼
                  IngestionService
@@ -40,7 +46,7 @@ only small summary dicts flow between tasks.
                                    ▼
         ┌──────────── embed_batch_task × N (kb-io queue) ──────────┐
         │  read chunk slice [start,end) from S3 NDJSON            │
-        │  → embed via gateway (distributed rate limiter)         │
+        │  → embed via LiteLLM (distributed rate limiter)         │
         │  → INSERT batch vectors into kb.langchain_pg_embedding  │
         │  → INCR Redis progress counter                          │
         │  → last batch dispatches load_vector_task               │
@@ -76,7 +82,7 @@ embed started but never finalised.
 ## 2. Search flow
 
 ```
-POST /api/kb/search ──► SearchService ──► embed query (gateway/direct)
+POST /api/kb/search ──► SearchService ──► embed query (litellm/direct)
                                        └─► AsyncVectorRepository.search
                                              (cosine distance over pgvector,
                                               score = 1 - distance,
@@ -88,6 +94,9 @@ POST /api/kb/search ──► SearchService ──► embed query (gateway/direc
 Search runs synchronously inside the FastAPI request using the **async**
 `AsyncVectorRepository`. The sync `VectorRepository` (same SQL building blocks)
 is used by the Celery workers, which run on a threads pool and prefer sync I/O.
+Search resolves the default configuration before embedding the query, so a fresh
+database with no ingested vectors returns an empty result set without manual
+configuration setup.
 
 ---
 
@@ -99,12 +108,18 @@ contend for the same workers:
 | Queue        | Tasks                                                    | Pool / concurrency        | Why |
 |--------------|----------------------------------------------------------|---------------------------|-----|
 | `kb-cpu`     | `parse_task`, `chunk_task`, `embed_task` (dispatcher)    | prefork, ~2                | Docling + tiktoken are CPU-bound |
-| `kb-io`      | `embed_batch_task`, `load_vector_task`, `reconcile_stuck_embeds` | threads, ~50      | gateway HTTP + per-batch DB writes are I/O-bound |
+| `kb-io`      | `embed_batch_task`, `load_vector_task`, `reconcile_stuck_embeds` | threads, ~50      | LiteLLM HTTP + per-batch DB writes are I/O-bound |
 | `kb-notify`  | `notify_status_task`                                     | solo                       | dedicated low-latency, avoids head-of-line blocking |
 
 Reliability config applies to all queues: `task_acks_late`,
 `task_reject_on_worker_lost`, `worker_prefetch_multiplier=1`, and 25/30-min
 soft/hard time limits.
+
+Task registration is centralized through the `app.workers.tasks` package
+facade. The implementations are split into focused submodules for ingestion,
+embedding, finalization, notification, staging, progress, and watchdog behavior,
+but every Celery task keeps its stable `app.workers.tasks.<task_name>` name for
+routing, status lookup, and retry compatibility.
 
 ---
 

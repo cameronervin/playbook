@@ -23,8 +23,28 @@ api_router = APIRouter()
 # Health — no auth (must be reachable by infra probes without credentials)
 api_router.include_router(health_router, prefix="/health", tags=["health"])
 
-api_router.include_router(configuration_router, prefix="/configuration", tags=["configuration"], dependencies=_auth)
-api_router.include_router(ingest_router, prefix="/ingest", tags=["ingest"], dependencies=_auth)
-api_router.include_router(status_router, prefix="/status", tags=["status"], dependencies=_auth)
-api_router.include_router(search_router, prefix="/embed", tags=["search"], dependencies=_auth)
-api_router.include_router(documents_router, prefix="/document", tags=["documents"], dependencies=_auth)
+api_router.include_router(
+    configuration_router,
+    prefix="/configuration",
+    tags=["configuration"],
+    dependencies=_auth,
+)
+api_router.include_router(
+    ingest_router,
+    prefix="/ingest",
+    tags=["ingest"],
+    dependencies=_auth,
+)
+api_router.include_router(
+    status_router,
+    prefix="/status",
+    tags=["status"],
+    dependencies=_auth,
+)
+api_router.include_router(search_router, tags=["search"], dependencies=_auth)
+api_router.include_router(
+    documents_router,
+    prefix="/documents",
+    tags=["documents"],
+    dependencies=_auth,
+)

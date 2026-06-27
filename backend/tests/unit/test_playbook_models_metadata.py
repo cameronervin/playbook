@@ -13,9 +13,10 @@ EXPECTED_PLAYBOOK_TABLES = {
     "conversation_messages",
     "message_citations",
     "conversation_files",
-    "conversation_file_chunks",
+    "upload_requests",
     "kb_documents",
     "kb_document_events",
+    "kb_ingest_outbox",
     "dashboard_insight_runs",
     "dashboard_insights",
     "admin_chat_sessions",
@@ -29,6 +30,7 @@ def test_playbook_tables_are_registered_without_scaffold_examples() -> None:
 
     assert EXPECTED_PLAYBOOK_TABLES.issubset(table_names)
     assert "examples" not in table_names
+    assert "conversation_file_chunks" not in table_names
 
 
 def test_domain_model_modules_export_registered_models() -> None:
@@ -38,15 +40,16 @@ def test_domain_model_modules_export_registered_models() -> None:
         AuditLog,
         Conversation,
         ConversationFile,
-        ConversationFileChunk,
         ConversationMessage,
         DashboardInsight,
         DashboardInsightRun,
+        KBIngestOutbox,
         KBDocument,
         KBDocumentEvent,
         MessageCitation,
         OAuthAccount,
         Organization,
+        UploadRequest,
         User,
     )
     from app.models.analytics import (
@@ -59,7 +62,6 @@ def test_domain_model_modules_export_registered_models() -> None:
     from app.models.conversations import (
         Conversation as ConversationsConversation,
         ConversationFile as ConversationsConversationFile,
-        ConversationFileChunk as ConversationsConversationFileChunk,
         ConversationMessage as ConversationsConversationMessage,
         MessageCitation as ConversationsMessageCitation,
     )
@@ -68,6 +70,8 @@ def test_domain_model_modules_export_registered_models() -> None:
     from app.models.identity import User as IdentityUser
     from app.models.knowledge_base import KBDocument as KnowledgeBaseKBDocument
     from app.models.knowledge_base import KBDocumentEvent as KnowledgeBaseKBDocumentEvent
+    from app.models.uploads import KBIngestOutbox as UploadsKBIngestOutbox
+    from app.models.uploads import UploadRequest as UploadsUploadRequest
 
     assert IdentityOrganization is Organization
     assert IdentityUser is User
@@ -76,9 +80,10 @@ def test_domain_model_modules_export_registered_models() -> None:
     assert ConversationsConversationMessage is ConversationMessage
     assert ConversationsMessageCitation is MessageCitation
     assert ConversationsConversationFile is ConversationFile
-    assert ConversationsConversationFileChunk is ConversationFileChunk
     assert KnowledgeBaseKBDocument is KBDocument
     assert KnowledgeBaseKBDocumentEvent is KBDocumentEvent
+    assert UploadsUploadRequest is UploadRequest
+    assert UploadsKBIngestOutbox is KBIngestOutbox
     assert AnalyticsDashboardInsightRun is DashboardInsightRun
     assert AnalyticsDashboardInsight is DashboardInsight
     assert AnalyticsAdminChatSession is AdminChatSession
@@ -128,15 +133,13 @@ def test_jsonb_columns_have_server_defaults() -> None:
         },
         "message_citations": {"source_metadata": "'{}'::jsonb"},
         "conversation_files": {"extraction_metadata": "'{}'::jsonb"},
-        "conversation_file_chunks": {
-            "source_locator": "'{}'::jsonb",
-            "metadata": "'{}'::jsonb",
-        },
+        "upload_requests": {"request_metadata": "'{}'::jsonb"},
         "kb_documents": {
             "visibility_policy": """'{"scope":"all_athletes"}'::jsonb""",
             "metadata_tags": "'{}'::jsonb",
         },
         "kb_document_events": {"metadata": "'{}'::jsonb"},
+        "kb_ingest_outbox": {"failure_metadata": "'{}'::jsonb"},
         "dashboard_insight_runs": {"source_filters": "'{}'::jsonb"},
         "dashboard_insights": {
             "headline_cards": "'[]'::jsonb",
@@ -170,9 +173,15 @@ def test_key_foreign_key_delete_behaviors_are_explicit() -> None:
         ("message_citations", ("message_id",)): "CASCADE",
         ("conversation_files", ("conversation_id",)): "CASCADE",
         ("conversation_files", ("message_id",)): "SET NULL",
-        ("conversation_file_chunks", ("file_id",)): "CASCADE",
+        ("upload_requests", ("organization_id",)): "CASCADE",
+        ("upload_requests", ("requested_by",)): "SET NULL",
+        ("upload_requests", ("kb_document_id",)): "CASCADE",
+        ("upload_requests", ("conversation_file_id",)): "CASCADE",
         ("kb_documents", ("organization_id",)): "CASCADE",
         ("kb_document_events", ("document_id",)): "CASCADE",
+        ("kb_ingest_outbox", ("organization_id",)): "CASCADE",
+        ("kb_ingest_outbox", ("kb_document_id",)): "CASCADE",
+        ("kb_ingest_outbox", ("conversation_file_id",)): "CASCADE",
         ("dashboard_insight_runs", ("requested_by",)): "SET NULL",
         ("dashboard_insights", ("run_id",)): "CASCADE",
         ("admin_chat_sessions", ("created_by",)): "CASCADE",
@@ -203,9 +212,14 @@ def test_operational_indexes_are_registered() -> None:
         "ix_conversations_athlete_id",
         "ix_conversation_messages_conversation_id",
         "ix_conversation_files_conversation_id",
-        "ix_conversation_file_chunks_file_id",
+        "ix_upload_requests_status_expires_at",
+        "ix_upload_requests_kb_document_id",
+        "ix_upload_requests_conversation_file_id",
         "ix_kb_documents_organization_id",
         "ix_kb_documents_processing_status",
+        "ix_kb_ingest_outbox_status_next_attempt_at",
+        "ix_kb_ingest_outbox_kb_document_id",
+        "ix_kb_ingest_outbox_conversation_file_id",
         "ix_dashboard_insight_runs_organization_id",
         "ix_dashboard_insights_run_id",
         "ix_admin_chat_sessions_organization_id",

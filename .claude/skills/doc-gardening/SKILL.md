@@ -19,11 +19,11 @@ Check documentation files for outdated content:
 
 ```bash
 # Find docs not modified recently
-find docs/ -name "*.md" -mtime +90 -type f
+find backstage/ -name "*.md" -mtime +90 -type f
 
 # Check AGENTS.md structure matches actual folders
-ls -la docs/
-ls -la prd/
+ls -la backstage/
+ls -la backstage/prd/
 ls -la implementation/
 ```
 
@@ -31,9 +31,9 @@ ls -la implementation/
 
 | Area | Verify |
 |------|--------|
-| `docs/architecture/overview.md` | Matches current system design |
-| `docs/api/endpoints.md` | All endpoints documented, none missing |
-| `docs/guides/setup.md` | Setup instructions still work |
+| `backstage/architecture/overview.md` | Matches current system design |
+| `backstage/api/endpoints.md` | All endpoints documented, none missing |
+| `backstage/guides/setup.md` | Setup instructions still work |
 | `AGENTS.md` | Folder structure matches reality |
 
 **Compare code behavior to documented behavior:**
@@ -42,7 +42,7 @@ ls -la implementation/
 # List actual API endpoints
 rg "router\.(get|post|put|delete|patch)" backend/app/api/ -l
 
-# Compare to docs/api/endpoints.md
+# Compare to backstage/api/endpoints.md
 # Are all endpoints documented?
 ```
 
@@ -55,7 +55,7 @@ Look for missing documentation:
 # Find route definitions
 rg "@router\." backend/app/api/v1/ -A 2
 
-# Cross-reference with docs/api/endpoints.md
+# Cross-reference with backstage/api/endpoints.md
 ```
 
 **New features without architecture updates:**
@@ -70,7 +70,7 @@ git log --oneline --since="30 days ago" -- backend/app/agents/
 **Changed behavior without ADRs:**
 ```bash
 # List existing ADRs
-ls docs/architecture/decisions/
+ls backstage/architecture/decisions/
 
 # Were recent architectural changes documented?
 ```
@@ -80,8 +80,8 @@ ls docs/architecture/decisions/
 Verify consistency across documentation:
 
 **AGENTS.md matches actual structure:**
-- [ ] `docs/` folder structure accurate
-- [ ] `prd/` folder structure accurate
+- [ ] `backstage/` folder structure accurate
+- [ ] `backstage/prd/` folder structure accurate
 - [ ] `implementation/` folder structure accurate
 - [ ] Architecture diagram reflects current code
 - [ ] Libraries list reflects actual dependencies
@@ -89,7 +89,7 @@ Verify consistency across documentation:
 **ADRs reflect current decisions:**
 ```bash
 # Read each ADR and verify it's still accurate
-cat docs/architecture/decisions/*.md
+cat backstage/architecture/decisions/*.md
 ```
 
 **Setup guides work with current dependencies:**
@@ -107,7 +107,7 @@ Find broken internal references:
 
 ```bash
 # Find markdown links
-rg "\[.*\]\(.*\.md\)" docs/ --only-matching
+rg "\[.*\]\(.*\.md\)" backstage/ --only-matching
 
 # Verify each linked file exists
 ```

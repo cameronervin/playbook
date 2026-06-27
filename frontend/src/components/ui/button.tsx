@@ -17,16 +17,16 @@ const variantClasses: Record<ButtonVariant, string> = {
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-9 px-3 pb-ui-sm leading-none',
-  md: 'px-4 py-3 text-sm leading-none',
-  lg: 'px-6 py-4 text-base leading-none',
+  sm: 'pb-button-sm',
+  md: 'pb-button-md',
+  lg: 'pb-button-lg',
 }
 
 export function Button({ className, variant = 'primary', size = 'md', type = 'button', ...props }: ButtonProps) {
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md border font-semibold transition duration-150 ease-out active:translate-y-px disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-raised disabled:text-fg-4',
+        'pb-focus-control inline-flex items-center justify-center gap-2 rounded-md border font-semibold transition active:translate-y-px disabled:cursor-not-allowed disabled:border-transparent disabled:bg-surface-raised disabled:text-fg-4',
         variantClasses[variant],
         sizeClasses[size],
         className,

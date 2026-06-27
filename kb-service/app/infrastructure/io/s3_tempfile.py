@@ -77,12 +77,13 @@ def _sync_stream_to_path(
                             f"S3 object exceeds size limit: {settings.S3_STREAM_MAX_FILE_SIZE_MB} MB"
                         )
                     f.write(chunk)
-            return bytes_read
         except ClientError as exc:
             if exc.response["Error"]["Code"] in ("ExpiredToken", "InvalidClientTokenId") and attempt == 0:
                 invalidate_s3_client()
                 continue
             raise
+        else:
+            return bytes_read
         finally:
             if body is not None:
                 body.close()

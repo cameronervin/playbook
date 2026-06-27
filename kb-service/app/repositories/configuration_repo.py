@@ -47,6 +47,14 @@ class ConfigurationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_collection_name(self, collection_name: str) -> Configuration | None:
+        result = await self._session.execute(
+            select(Configuration).where(
+                Configuration.collection_name == collection_name
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def list(self, name_filter: str | None = None) -> list[Configuration]:
         stmt = select(Configuration)
         if name_filter:

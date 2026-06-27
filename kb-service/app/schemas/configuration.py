@@ -1,4 +1,4 @@
-"""Pydantic schemas for /api/kb/configuration endpoints."""
+"""Pydantic schemas for KB configuration contract endpoints."""
 from __future__ import annotations
 
 import uuid
@@ -14,6 +14,13 @@ class ConfigurationCreate(BaseModel):
     chunk_config: dict = Field(default_factory=dict)
     embed_config: dict = Field(default_factory=dict)
     vectorstore_config: dict = Field(default_factory=dict)
+
+
+class ConfigurationResolveRequest(BaseModel):
+    """Resolve or create the default Playbook KB configuration."""
+
+    name: str | None = Field(default=None, max_length=255)
+    collection_name: str | None = Field(default=None, max_length=255)
 
 
 class ConfigurationResponse(BaseModel):

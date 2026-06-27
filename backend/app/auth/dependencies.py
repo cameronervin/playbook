@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import Settings, get_request_settings
 from app.infrastructure.db.session import get_db
 from app.models.identity import User
 from app.repositories.identity import UserRepository
@@ -16,8 +16,6 @@ from app.repositories.identity import UserRepository
 logger = structlog.get_logger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
-
-AUTH_COOKIE_NAME = settings.ACCESS_TOKEN_COOKIE_NAME
 
 
 async def _resolve_token_from_request(
@@ -27,12 +25,13 @@ async def _resolve_token_from_request(
     """Extract the JWT from the Bearer header (priority) or configured cookie."""
     if bearer and bearer.credentials:
         return bearer.credentials
+    settings = get_request_settings(request)
     if access_token := request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME):
         return access_token
     return None
 
 
-def _decode_user_id(token: str | None) -> UUID | None:
+def _decode_user_id(token: str | None, settings: Settings) -> UUID | None:
     """Decode and validate the app JWT, returning the subject UUID or None."""
     if not token:
         return None
@@ -55,9 +54,10 @@ def _decode_user_id(token: str | None) -> UUID | None:
 async def current_active_user(
     token: Annotated[str | None, Depends(_resolve_token_from_request)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_request_settings)],
 ) -> User:
     """Return the active Playbook user represented by the app session token."""
-    user_id = _decode_user_id(token)
+    user_id = _decode_user_id(token, settings)
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -80,9 +80,10 @@ get_current_user = current_active_user
 async def optional_current_user(
     token: Annotated[str | None, Depends(_resolve_token_from_request)],
     session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_request_settings)],
 ) -> User | None:
     """Get the current active user if authenticated, else None."""
-    user_id = _decode_user_id(token)
+    user_id = _decode_user_id(token, settings)
     if user_id is None:
         return None
     user = await UserRepository(session).get(user_id)

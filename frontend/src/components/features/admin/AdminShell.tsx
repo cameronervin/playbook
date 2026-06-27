@@ -67,8 +67,8 @@ export function AdminShell() {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-lg border border-border-strong bg-surface">
             <Lock className="h-7 w-7 text-fg-3" />
           </div>
-          <h1 className="mt-5 font-display text-3xl font-black uppercase text-fg-1">Admins only</h1>
-          <p className="mt-3 text-sm leading-6 text-fg-3">
+          <h1 className="pb-h2 mt-5">Admins only</h1>
+          <p className="pb-body mt-3">
             The admin console is restricted to department admins. Your account does not have access to
             insights, analytics, or knowledge-base management.
           </p>
@@ -143,7 +143,7 @@ export function AdminShell() {
             onRetry={(id) => retryDocument.mutate(id)}
             onToggleOfficial={(id, isOfficial) => updateDocument.mutate({ documentId: id, isOfficial })}
             onUpdateMetadata={(documentId, metadata) => updateDocument.mutate({ documentId, metadata })}
-            onUpload={(request) => uploadDocument.mutate(request)}
+            onUpload={(request) => uploadDocument.mutateAsync(request)}
           />
         )}
         {adminTab === 'users' && isSuperAdmin && (

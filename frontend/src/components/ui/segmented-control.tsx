@@ -18,7 +18,7 @@ export function SegmentedControl<TValue extends string>({
       {options.map((option) => (
         <button
           className={cn(
-            'rounded-sm px-3 py-2 text-sm font-semibold text-fg-3 transition',
+            'pb-focus-control rounded-sm border border-transparent px-3 py-2 pb-ui-sm font-semibold text-fg-3 transition',
             value === option && 'bg-surface-raised text-brand',
           )}
           key={option}

@@ -2,27 +2,47 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { ChatComposer, type ChatComposerHandle } from '@/src/components/features/chat/ChatComposer'
 import { ChatNavRail } from '@/src/components/features/chat/ChatNavRail'
 import { ChatSourcesPanel } from '@/src/components/features/chat/ChatSourcesPanel'
 import { ChatThread } from '@/src/components/features/chat/ChatThread'
 import { ChatTopBar } from '@/src/components/features/chat/ChatTopBar'
+import { collectUniqueCitations, groupConversations } from '@/src/components/features/chat/conversationGrouping'
+import {
+  useChatFileUploads,
+  type UploadConversationFileMutation,
+} from '@/src/components/features/chat/useChatFileUploads'
 import { SettingsModal } from '@/src/components/features/common/SettingsModal'
 import { HorizonBackground } from '@/src/components/features/common/HorizonBackground'
 import { ChatWorkspaceSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
-import { useConversationDetail, useConversations, useCreateConversation } from '@/src/hooks/useConversations'
-import { ROUTES } from '@/src/lib/constants/config'
+import {
+  createSubmittedMessages,
+  useConversationDetail,
+  useConversationMessageStream,
+  useConversations,
+  useCreateConversation,
+  useSubmitConversationMessage,
+  useUploadConversationFile,
+} from '@/src/hooks/useConversations'
+import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
-import type { ChatMessage, ConversationSummary, Citation } from '@/src/types/conversations'
-import type { ConversationGroup } from './chatTypes'
+import type {
+  ChatMessage,
+  ConversationDetail,
+  ConversationSummary,
+  Citation,
+  MessageSubmitResponse,
+} from '@/src/types/conversations'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_CONVERSATIONS: ConversationSummary[] = []
 
 export function ChatShell() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const composerRef = useRef<ChatComposerHandle | null>(null)
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
   const { data: user, isLoading: userLoading } = useCurrentUser()
@@ -40,6 +60,22 @@ export function ChatShell() {
   const conversationDetailQuery = useConversationDetail(activeConversationId)
   const activeConversation = conversationDetailQuery.data
   const createConversation = useCreateConversation()
+  const submitConversationMessage = useSubmitConversationMessage()
+  const { start: startConversationStream, stop: stopConversationStream } = useConversationMessageStream()
+  const uploadConversationFile = useUploadConversationFile()
+  const uploadConversationFileMutation = useCallback<UploadConversationFileMutation>(
+    (request, options) => uploadConversationFile.mutate(request, options),
+    [uploadConversationFile],
+  )
+  const {
+    clearLocalUploads,
+    handleAttachFile,
+    localUploads,
+    uploadPendingFiles,
+  } = useChatFileUploads({
+    activeConversationId,
+    uploadConversationFile: uploadConversationFileMutation,
+  })
   const logout = useLogout()
 
   useEffect(() => {
@@ -58,11 +94,13 @@ export function ChatShell() {
   }, [])
 
   const handleNewChat = useCallback(() => {
+    stopConversationStream()
     setActiveConversationId(null)
+    clearLocalUploads()
     setSelectedCitationTitle(null)
     setSourcesOpen(false)
     focusComposer()
-  }, [focusComposer, setActiveConversationId, setSelectedCitationTitle, setSourcesOpen])
+  }, [clearLocalUploads, focusComposer, setActiveConversationId, setSelectedCitationTitle, setSourcesOpen, stopConversationStream])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -79,27 +117,77 @@ export function ChatShell() {
   const messages = activeConversation?.messages ?? EMPTY_MESSAGES
   const conversationDetailLoading = Boolean(activeConversationId) && conversationDetailQuery.isLoading && !activeConversation
   const hasMessages = messages.length > 0
-  const citations = useMemo(() => collectCitations(messages.flatMap((message) => message.citations)), [messages])
+  const citations = useMemo(() => collectUniqueCitations(messages.flatMap((message) => message.citations)), [messages])
   const showSourcesPanel = hasMessages && sourcesOpen
   const activeConversationTitle = activeConversation?.title?.trim() || 'New chat'
+  const conversationFiles = activeConversation?.files ?? []
 
   const handleSelectConversation = (conversationId: string) => {
     setPendingMessage(null)
+    stopConversationStream()
+    clearLocalUploads()
     setActiveConversationId(conversationId)
     setSelectedCitationTitle(null)
     setSourcesOpen(true)
   }
 
+  const appendSubmittedTurn = useCallback(
+    (conversationId: string, message: string, response: MessageSubmitResponse) => {
+      queryClient.setQueryData<ConversationDetail>(
+        [QUERY_KEYS.conversationDetail, conversationId],
+        (conversation) => {
+          if (!conversation) return conversation
+          return {
+            ...conversation,
+            messages: [
+              ...conversation.messages,
+              ...createSubmittedMessages(conversationId, message, response),
+            ],
+          }
+        },
+      )
+    },
+    [queryClient],
+  )
+
   const handleSend = (message: string) => {
     setPendingMessage(message)
+    if (activeConversationId) {
+      submitConversationMessage.mutate(
+        { conversationId: activeConversationId, content: message },
+        {
+          onSuccess: (response) => {
+            setPendingMessage(null)
+            appendSubmittedTurn(activeConversationId, message, response)
+            setSelectedCitationTitle(null)
+            setSourcesOpen(false)
+            startConversationStream({
+              assistantMessageId: response.assistant_message_id,
+              conversationId: activeConversationId,
+              streamUrl: response.stream_url,
+            })
+          },
+          onError: () => setPendingMessage(null),
+        },
+      )
+      return
+    }
+
     createConversation.mutate(
-      { initial_message: message },
+      { content: message },
       {
-        onSuccess: (conversation) => {
+        onSuccess: (response) => {
+          const conversation = response.conversation
           setPendingMessage(null)
           setActiveConversationId(conversation.id)
           setSelectedCitationTitle(null)
-          setSourcesOpen(conversation.messages.some((chatMessage) => chatMessage.citations.length > 0))
+          setSourcesOpen(false)
+          uploadPendingFiles(conversation.id)
+          startConversationStream({
+            assistantMessageId: response.assistant_message_id,
+            conversationId: conversation.id,
+            streamUrl: response.stream_url,
+          })
         },
         onError: () => setPendingMessage(null),
       },
@@ -151,7 +239,15 @@ export function ChatShell() {
           onCitationSelect={handleCitationSelect}
           pendingMessage={pendingMessage}
         />
-        <ChatComposer disabled={createConversation.isPending} onSend={handleSend} ref={composerRef} />
+        <ChatComposer
+          canAttach
+          conversationFiles={conversationFiles}
+          disabled={createConversation.isPending || submitConversationMessage.isPending}
+          localUploads={localUploads}
+          onAttachFile={handleAttachFile}
+          onSend={handleSend}
+          ref={composerRef}
+        />
       </div>
     </section>
   )
@@ -175,52 +271,4 @@ export function ChatShell() {
       />
     </>
   )
-}
-
-function groupConversations(conversations: ConversationSummary[]): ConversationGroup[] {
-  const grouped: Record<ConversationGroup['label'], ConversationSummary[]> = {
-    Today: [],
-    Yesterday: [],
-    'Previous 7 days': [],
-  }
-
-  conversations
-    .slice()
-    .sort((left, right) => getConversationTimestamp(right) - getConversationTimestamp(left))
-    .forEach((conversation) => {
-      grouped[getConversationGroupLabel(conversation)].push(conversation)
-    })
-
-  return (['Today', 'Yesterday', 'Previous 7 days'] as const)
-    .map((label) => ({ label, conversations: grouped[label] }))
-    .filter((group) => group.conversations.length > 0)
-}
-
-function getConversationGroupLabel(conversation: ConversationSummary): ConversationGroup['label'] {
-  const now = startOfDay(new Date())
-  const timestamp = new Date(getConversationTimestamp(conversation))
-  const conversationDay = startOfDay(timestamp)
-  const daysAgo = Math.floor((now.getTime() - conversationDay.getTime()) / 86_400_000)
-
-  if (daysAgo <= 0) return 'Today'
-  if (daysAgo === 1) return 'Yesterday'
-  return 'Previous 7 days'
-}
-
-function getConversationTimestamp(conversation: ConversationSummary) {
-  return new Date(conversation.last_message_at ?? conversation.created_at).getTime()
-}
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function collectCitations(citations: Citation[]) {
-  const seen = new Set<string>()
-  return citations.filter((citation) => {
-    const key = citation.id || citation.source_title
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
 }

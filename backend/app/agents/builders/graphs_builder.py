@@ -1,92 +1,107 @@
-"""Graph compilation for the example workflow.
-
-Pattern: the graphs builder ties everything together. It composes shared
-chain/node dependencies once, then compiles the topology with a checkpointer.
-``compile_example_graph`` is the single public entry point main.py calls at
-startup.
-"""
+"""Graph compilation for Playbook agent workflows."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 import structlog
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from app.agents.builders.chains_builder import create_example_chain_set
-from app.agents.builders.nodes_builder import create_example_node_set
-from app.agents.graphs.example_graph import create_example_graph
-from app.infrastructure.storage import StorageProvider
+from app.agents.builders.chains_builder import (
+    create_athlete_chat_chain_set,
+    create_conversation_title_chain_set,
+)
+from app.agents.builders.nodes_builder import (
+    create_athlete_chat_node_set,
+    create_conversation_title_node_set,
+)
+from app.agents.graphs.athlete_chat_graph import create_athlete_chat_graph
+from app.agents.graphs.conversation_title_graph import create_conversation_title_graph
+from app.agents.tools.tool_assignment import (
+    build_workflow_chain_tool_map,
+    resolve_active_tools,
+)
+from app.agents.tools.tool_registry import (
+    ToolBuildContext,
+)
+from app.core.config import Settings
 
 logger = structlog.get_logger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class GraphDependencies:
-    """Reusable chain/node maps shared across graph compilation."""
-
-    chains: dict[str, Any]
-    nodes: dict[str, Any]
-
-
-def compose_example_dependencies(
+def compose_athlete_chat_dependencies(
     *,
     chat_model: BaseChatModel,
-    get_session: Callable,
-    storage: StorageProvider | None = None,
-) -> GraphDependencies:
-    """Create the example workflow's chains and nodes."""
-    chains = create_example_chain_set(chat_model)
-    logger.info("agent_chains_created", count=len(chains), scope="example")
-    nodes = create_example_node_set(
-        chains=chains,
-        get_session=get_session,
-        storage=storage,
+    app_settings: Settings,
+) -> dict[str, Any]:
+    """Create the athlete chat workflow's tools, chains, and nodes."""
+    tool_context = ToolBuildContext(
+        settings=app_settings,
     )
-    logger.info("agent_nodes_created", count=len(nodes), scope="example")
-    return GraphDependencies(chains=chains, nodes=nodes)
-
-
-def compile_example_graph(
-    *,
-    chat_model: BaseChatModel,
-    get_session: Callable,
-    checkpointer: BaseCheckpointSaver,
-    storage: StorageProvider | None = None,
-):
-    """Build and compile the example graph (public entry point for main.py).
-
-    Args:
-        chat_model: LangChain chat model from the LLM provider.
-        get_session: Async session-factory dependency (e.g. ``get_db``).
-        checkpointer: LangGraph checkpointer for state persistence.
-        storage: Optional blob storage provider.
-
-    Returns:
-        A compiled LangGraph ready for ``ExampleExecutor``.
-    """
-    dependencies = compose_example_dependencies(
+    active_tools = resolve_active_tools(tool_context)
+    chain_tool_map = build_workflow_chain_tool_map(active_tools)
+    athlete_tools = chain_tool_map["athlete_chat"]["athlete_chat"]
+    chains = create_athlete_chat_chain_set(
         chat_model=chat_model,
-        get_session=get_session,
-        storage=storage,
+        tools=athlete_tools,
+        settings=app_settings,
     )
-    graph_builder = create_example_graph(nodes=dependencies.nodes["example"])
+    logger.info("agent_chains_created", count=len(chains), scope="athlete_chat")
+    nodes = create_athlete_chat_node_set(
+        chains=chains,
+    )
+    logger.info("agent_nodes_created", count=len(nodes), scope="athlete_chat")
+    return nodes
+
+
+def compose_conversation_title_dependencies(
+    *,
+    title_model: BaseChatModel,
+    app_settings: Settings,
+) -> dict[str, Any]:
+    """Create the conversation title workflow's chains and nodes."""
+    chains = create_conversation_title_chain_set(
+        title_model=title_model,
+        settings=app_settings,
+    )
+    logger.info("agent_chains_created", count=len(chains), scope="conversation_title")
+    nodes = create_conversation_title_node_set(
+        chains=chains,
+    )
+    logger.info("agent_nodes_created", count=len(nodes), scope="conversation_title")
+    return nodes
+
+
+def compile_athlete_chat_graph(
+    *,
+    chat_model: BaseChatModel,
+    checkpointer: BaseCheckpointSaver | None,
+    app_settings: Settings,
+):
+    """Build and compile the athlete chat graph."""
+    nodes = compose_athlete_chat_dependencies(
+        chat_model=chat_model,
+        app_settings=app_settings,
+    )
+    graph_builder = create_athlete_chat_graph(
+        nodes=nodes["athlete_chat"],
+    )
     return graph_builder.compile(checkpointer=checkpointer)
 
 
-def build_example_graph(
-    chat_model: BaseChatModel,
-    get_session: Callable,
-    checkpointer: BaseCheckpointSaver,
-    storage: StorageProvider | None = None,
+def compile_conversation_title_graph(
+    *,
+    title_model: BaseChatModel,
+    checkpointer: BaseCheckpointSaver | None,
+    app_settings: Settings,
 ):
-    """Positional-arg convenience wrapper around ``compile_example_graph``."""
-    return compile_example_graph(
-        chat_model=chat_model,
-        get_session=get_session,
-        checkpointer=checkpointer,
-        storage=storage,
+    """Build and compile the conversation title graph."""
+    nodes = compose_conversation_title_dependencies(
+        title_model=title_model,
+        app_settings=app_settings,
     )
+    graph_builder = create_conversation_title_graph(
+        nodes=nodes["conversation_title"],
+    )
+    return graph_builder.compile(checkpointer=checkpointer)

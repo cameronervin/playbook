@@ -10,7 +10,6 @@ from app.models.audit import AuditLog
 from app.models.conversations import (
     Conversation,
     ConversationFile,
-    ConversationFileChunk,
     ConversationMessage,
     MessageCitation,
 )
@@ -23,7 +22,6 @@ __all__ = [
     "AuditLog",
     "Conversation",
     "ConversationFile",
-    "ConversationFileChunk",
     "ConversationMessage",
     "DashboardInsight",
     "DashboardInsightRun",

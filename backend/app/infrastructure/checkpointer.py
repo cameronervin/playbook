@@ -11,7 +11,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -27,8 +27,11 @@ def _convert_to_psycopg_dsn(db_url: str) -> str:
     return db_url
 
 
-async def create_checkpointer_pool() -> AsyncConnectionPool:
+async def create_checkpointer_pool(
+    app_settings: Settings | None = None,
+) -> AsyncConnectionPool:
     """Create and open the async connection pool for the LangGraph checkpointer."""
+    settings = app_settings or get_settings()
     db_url = settings.LANGGRAPH_CHECKPOINT_DB_URL or settings.DATABASE_URL
     psycopg_url = _convert_to_psycopg_dsn(db_url)
 
@@ -56,12 +59,17 @@ async def cleanup_checkpointer_pool(pool: AsyncConnectionPool | None) -> None:
         await pool.close()
 
 
-async def prune_old_checkpoints(pool: AsyncConnectionPool, days: int | None = None) -> int:
+async def prune_old_checkpoints(
+    pool: AsyncConnectionPool,
+    days: int | None = None,
+    app_settings: Settings | None = None,
+) -> int:
     """Delete LangGraph checkpoint data older than *days* days.
 
     Removes rows from ``langgraph_checkpoint_writes`` and ``langgraph_checkpoints``
     older than the retention window. Returns the total number of rows deleted.
     """
+    settings = app_settings or get_settings()
     retention_days = days if days is not None else settings.CHECKPOINT_RETENTION_DAYS
     cutoff = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=retention_days)
 

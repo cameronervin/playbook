@@ -3,8 +3,8 @@ Create the next implementation phase document following this process:
 
 ## Steps
 
-1. **Read existing phases** — Read all files in `prd/03-implementation/` to understand completed work and current phase
-2. **Cross-reference PRD** — Review `prd/01-user-stories/_master-user-stories.md` and `prd/02-technical-docs/` for requirements
+1. **Read existing phases** — Read all files in `backstage/prd/03-implementation/` to understand completed work and current phase
+2. **Cross-reference PRD** — Review `backstage/prd/01-user-stories/_master-user-stories.md` and `backstage/prd/02-technical-docs/` for requirements
 3. **Validate codebase** — Use an explore agent to check which goals are already complete in the codebase
 4. **Define goals** — Create logical next goals that build on completed work
 5. **Create table** — Build deliverables table with: Status | Goal | Relevant User Stories | Owner(s) | Validation
@@ -30,7 +30,7 @@ Replace with your team. Map each member to their stack so goals can be assigned.
 
 ## Output Format
 
-Write to `prd/03-implementation/phase-{N}.md` using the same format as the previous phase file:
+Write to `backstage/prd/03-implementation/phase-{N}.md` using the same format as the previous phase file:
 
 ```markdown
 ### Phase N: [Title]

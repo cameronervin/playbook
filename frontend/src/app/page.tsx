@@ -31,7 +31,7 @@ export default function RootRedirect() {
     <main className="pb-stage flex min-h-dvh items-center justify-center p-6">
       <div className="flex flex-col items-center gap-4 text-center">
         <BrandLockup />
-        <p className="text-sm text-fg-3">Opening Playbook...</p>
+        <p className="pb-refresh-note">Opening Playbook</p>
       </div>
     </main>
   )

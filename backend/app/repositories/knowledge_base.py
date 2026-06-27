@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
@@ -81,9 +81,19 @@ class KBDocumentRepository:
         )
         return list(result.all())
 
+    async def count_by_status(self, *, processing_status: str) -> int:
+        """Return the number of KB documents in one processing status."""
+        result = await self.session.scalar(
+            select(func.count())
+            .select_from(KBDocument)
+            .where(KBDocument.processing_status == processing_status)
+        )
+        return int(result or 0)
+
     async def create(
         self,
         *,
+        document_id: UUID | None = None,
         organization_id: UUID,
         uploaded_by: UUID,
         title: str,
@@ -91,6 +101,7 @@ class KBDocumentRepository:
         content_type: str,
         size_bytes: int,
         storage_key: str,
+        processing_status: str = "uploaded",
         visibility_policy: dict[str, Any] | None = None,
         metadata_tags: dict[str, Any] | None = None,
         source_date: date | None = None,
@@ -99,6 +110,7 @@ class KBDocumentRepository:
     ) -> KBDocument:
         """Create a KB document metadata record without committing."""
         document = KBDocument(
+            id=document_id,
             organization_id=organization_id,
             uploaded_by=uploaded_by,
             title=title,
@@ -106,6 +118,7 @@ class KBDocumentRepository:
             content_type=content_type,
             size_bytes=size_bytes,
             storage_key=storage_key,
+            processing_status=processing_status,
             source_date=source_date,
             is_official=is_official,
             priority=priority,
@@ -157,6 +170,26 @@ class KBDocumentRepository:
         document.processing_status = processing_status
         if not isinstance(failure_reason, _UnsetType):
             document.failure_reason = failure_reason
+
+        await self.session.flush()
+        await self.session.refresh(document)
+        return document
+
+    async def update_ingestion_mirror(
+        self,
+        document: KBDocument,
+        *,
+        kb_service_document_id: UUID | None | _UnsetType = _UNSET,
+        summary: str | None | _UnsetType = _UNSET,
+        chunk_count: int | _UnsetType = _UNSET,
+    ) -> KBDocument:
+        """Update safe KB-service derived mirror metadata without committing."""
+        if not isinstance(kb_service_document_id, _UnsetType):
+            document.kb_service_document_id = kb_service_document_id
+        if not isinstance(summary, _UnsetType):
+            document.summary = summary
+        if not isinstance(chunk_count, _UnsetType):
+            document.chunk_count = chunk_count
 
         await self.session.flush()
         await self.session.refresh(document)

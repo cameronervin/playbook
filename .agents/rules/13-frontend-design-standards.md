@@ -1,7 +1,7 @@
 # Frontend Design Standards
 
-For Playbook UI work, read `docs/design/README.md`,
-`docs/design/frontend_wireframe_implementation_plan.md`, and the relevant
+For Playbook UI work, read `backstage/design/README.md`,
+`backstage/design/frontend_wireframe_implementation_plan.md`, and the relevant
 reference screen before editing.
 
 ## Tokens And Styling

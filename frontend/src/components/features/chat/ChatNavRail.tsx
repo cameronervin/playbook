@@ -54,25 +54,25 @@ export function ChatNavRail({
   )
   const showActiveNewChat = !activeConversationId && (!normalizedQuery || 'new chat'.includes(normalizedQuery))
   const initials = getInitials(user?.name)
-  const teamLabel = user?.sport_team ?? 'OSU Athletics'
+  const teamLabel = user?.sport_team ?? 'Athletics Department'
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
   return (
     <aside
-      className="flex h-dvh w-[264px] shrink-0 flex-col border-r border-border bg-bg-void text-fg-1"
+      className="pb-workspace-chat-rail flex h-dvh shrink-0 flex-col border-r border-border bg-bg-void text-fg-1"
       aria-label="Chat navigation"
     >
       <div className="flex items-center px-[18px] pb-3 pt-[18px]">
         <BrandLockup
           markSize={26}
-          wordmarkClassName="font-black uppercase tracking-normal text-[20px]"
+          wordmarkClassName="pb-chat-brand-wordmark"
           className="gap-3"
         />
       </div>
 
       <div className="px-3 pb-2 pt-1">
         <button
-          className="pb-ui-sm flex h-[42px] w-full items-center gap-3 rounded-md border border-border-strong bg-transparent px-3 text-left font-semibold text-fg-1 transition hover:bg-surface-hover active:translate-y-px"
+          className="pb-focus-control pb-ui-sm flex h-[42px] w-full items-center gap-3 rounded-md border border-border-strong bg-transparent px-3 text-left font-semibold text-fg-1 transition hover:bg-surface-hover active:translate-y-px"
           onClick={onNewChat}
           type="button"
         >
@@ -95,7 +95,7 @@ export function ChatNavRail({
           {query && (
             <button
               aria-label="Clear chat search"
-              className="text-fg-4 transition hover:text-fg-2"
+              className="pb-focus-control rounded-sm border border-transparent text-fg-4 transition hover:text-fg-2"
               onClick={() => setQuery('')}
               type="button"
             >
@@ -147,7 +147,7 @@ export function ChatNavRail({
         <DropdownMenuPrimitive.Root>
           <DropdownMenuPrimitive.Trigger asChild>
             <button
-              className="flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition hover:border-border-strong hover:bg-surface-hover data-[state=open]:border-border-strong data-[state=open]:bg-surface-hover"
+              className="pb-focus-control flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition hover:border-border-strong hover:bg-surface-hover data-[state=open]:border-border-strong data-[state=open]:bg-surface-hover"
               type="button"
               aria-label={`${user?.name ?? 'Playbook user'} account menu`}
             >
@@ -167,12 +167,12 @@ export function ChatNavRail({
           <DropdownMenuPrimitive.Portal>
             <DropdownMenuPrimitive.Content
               align="start"
-              className="pb-ui-sm z-50 w-[240px] rounded-lg border border-border-strong bg-surface-raised p-1.5 text-fg-2 shadow-lg"
+              className="pb-menu-content pb-ui-sm"
               side="top"
               sideOffset={8}
             >
               <div className="flex items-center gap-3 border-b border-border px-2 py-2.5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand font-display text-sm font-extrabold text-fg-on-brand">
+                <span className="pb-ui-sm flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand font-display font-extrabold text-fg-on-brand">
                   {initials}
                 </span>
                 <span className="min-w-0">
@@ -211,7 +211,7 @@ function ConversationRow({ active, onClick, title }: ConversationRowProps) {
   return (
     <button
       className={cn(
-        'pb-ui-sm relative mb-px flex w-full items-center rounded-sm px-[11px] py-2 text-left font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
+        'pb-focus-control pb-ui-sm relative mb-px flex w-full items-center rounded-sm border border-transparent px-[11px] py-2 text-left font-medium text-fg-2 transition hover:bg-surface-hover hover:text-fg-1',
         active && 'bg-brand-soft font-semibold text-brand hover:bg-brand-soft hover:text-brand',
       )}
       onClick={onClick}
@@ -239,7 +239,7 @@ function DropdownItem({ children, danger = false, disabled = false, icon, onSele
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'pb-ui-sm mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 font-medium outline-none transition focus:bg-surface-hover focus:text-fg-1 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'pb-focus-item pb-ui-sm mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 font-medium transition data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         danger ? 'text-danger focus:bg-danger-bg focus:text-danger' : 'text-fg-2',
       )}
       disabled={disabled}

@@ -15,19 +15,42 @@ class ToolPromptKey(NamedTuple):
     tool_name: str
 
 
-EXAMPLE_KB_PROMPT = """
+ATHLETE_KB_PROMPT = """
 <tools>
-- **query_example_knowledgebase**:
-You have access to a knowledge base retrieval tool.
+- **search_playbook_knowledgebase**:
+Use this tool before making NIL, compliance, recruiting, harassment/reporting,
+or department process claims. Query official Playbook athletic department
+knowledge base sources with focused, specific search terms.
 
-Query it for any supporting context that would improve your result. Prefer
-focused, specific queries over broad ones — narrower queries yield
-higher-relevance results. Treat the user's request as the primary source of
-truth and use retrieved context only to enhance your output.
+For supported answers, include every supporting source key returned by this tool
+in the structured cited_source_keys field. All shared KB results are
+admin-official. If comparable sources conflict, prefer the newest applicable
+source_date. Do not invent source keys. If tool results are missing or do not
+support the answer, use answer_type "unsupported" and direct the athlete to the
+athletic department.
+</tools>
+"""
+
+ATHLETE_CONVERSATION_FILE_PROMPT = """
+<tools>
+- **search_conversation_files**:
+Use this tool when the athlete asks about uploaded, attached, or
+conversation-specific files such as contracts, forms, PDFs, spreadsheets, or
+documents. The tool automatically searches only ready files scoped to this
+conversation; attached files narrow the private search when present.
+
+Use returned excerpt text as evidence for this conversation only. Source
+summaries are orientation only and must not be cited as supporting evidence. For
+supported answers, include every supporting source key returned by this tool in
+the structured cited_source_keys field. Do not invent source keys, file IDs, or
+file contents.
 </tools>
 """
 
 
 TOOL_PROMPT_REGISTRY: dict[ToolPromptKey, str] = {
-    ToolPromptKey("example", "query_example_knowledgebase"): EXAMPLE_KB_PROMPT,
+    ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"): ATHLETE_KB_PROMPT,
+    ToolPromptKey("athlete_chat", "search_conversation_files"): (
+        ATHLETE_CONVERSATION_FILE_PROMPT
+    ),
 }

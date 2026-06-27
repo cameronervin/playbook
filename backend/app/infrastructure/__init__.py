@@ -1,1 +1,1 @@
-"""Infrastructure: LLM, knowledgebase, storage, and checkpointer adapters."""
+"""Infrastructure: LLM, knowledgebase, storage, streaming, and checkpointer adapters."""

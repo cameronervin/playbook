@@ -3,30 +3,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import is_profile_complete
-from app.core.config import settings
+from app.auth.dev_personas import (
+    DEV_USER_SPECS,
+    ROLE_TARGET_KEY,
+    DevAuthPersona,
+    Role,
+)
+from app.auth.session import create_access_token
+from app.core.config import Settings
 from app.repositories.identity import OrganizationRepository, UserRepository
-from app.services.auth_service import create_access_token
 
-DevAuthPersona = Literal["athlete", "new_athlete", "admin", "super_admin"]
-Role = Literal["athlete", "admin", "super_admin"]
-ROLE_TARGET_KEY = "role_target"
-
-
-@dataclass(frozen=True)
-class DevUserSpec:
-    """Input spec for one deterministic local-development user."""
-
-    key: str
-    email: str
-    name: str
-    role: Role
-    sport_team: str | None = None
+__all__ = [
+    "DEV_USER_SPECS",
+    "DevAuthPersona",
+    "DevAuthService",
+    "ROLE_TARGET_KEY",
+    "Role",
+]
 
 
 @dataclass(frozen=True)
@@ -42,42 +40,6 @@ class SeededPrincipal:
     next_route: str
 
 
-DEV_USER_SPECS: tuple[DevUserSpec, ...] = (
-    DevUserSpec(
-        key="athlete",
-        email="phase1-athlete@example.com",
-        name="Phase 1 Athlete",
-        role="athlete",
-        sport_team="Basketball",
-    ),
-    DevUserSpec(
-        key="new_athlete",
-        email="phase1-new-athlete@example.com",
-        name="Phase 1 New Athlete",
-        role="athlete",
-    ),
-    DevUserSpec(
-        key="admin",
-        email="phase1-admin@example.com",
-        name="Phase 1 Admin",
-        role="admin",
-    ),
-    DevUserSpec(
-        key="super_admin",
-        email="phase1-super@example.com",
-        name="Phase 1 Super Admin",
-        role="super_admin",
-    ),
-    DevUserSpec(
-        key=ROLE_TARGET_KEY,
-        email="role-target@example.com",
-        name="Role Target",
-        role="athlete",
-        sport_team="Soccer",
-    ),
-)
-
-
 class DevAuthService:
     """Create deterministic local users and app sessions for UI validation."""
 
@@ -85,20 +47,24 @@ class DevAuthService:
         self,
         session: AsyncSession,
         *,
+        settings: Settings,
         org_repo: OrganizationRepository | None = None,
         user_repo: UserRepository | None = None,
     ) -> None:
         self.session = session
+        self.settings = settings
         self.org_repo = org_repo or OrganizationRepository(session)
         self.user_repo = user_repo or UserRepository(session)
 
     async def seed_users(self) -> dict[str, SeededPrincipal]:
         """Create or normalize deterministic local-development users."""
-        organization = await self.org_repo.get_by_slug(settings.DEFAULT_ORGANIZATION_SLUG)
+        organization = await self.org_repo.get_by_slug(
+            self.settings.DEFAULT_ORGANIZATION_SLUG
+        )
         if organization is None:
             organization = await self.org_repo.create(
-                name=settings.DEFAULT_ORGANIZATION_NAME,
-                slug=settings.DEFAULT_ORGANIZATION_SLUG,
+                name=self.settings.DEFAULT_ORGANIZATION_NAME,
+                slug=self.settings.DEFAULT_ORGANIZATION_SLUG,
             )
 
         seeded: dict[str, SeededPrincipal] = {}
@@ -137,7 +103,7 @@ class DevAuthService:
                 role=user.role,  # type: ignore[arg-type]
                 user_id=user.id,
                 organization_id=user.organization_id,
-                token=create_access_token(user),
+                token=create_access_token(user, self.settings),
                 next_route=self._next_route(spec.key, user),
             )
 

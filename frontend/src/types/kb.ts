@@ -1,4 +1,6 @@
-export type KBDocumentStatus = 'uploaded' | 'processing' | 'ready' | 'failed'
+import type { DirectUploadContract, DirectUploadMutationOptions } from '@/src/types/uploads'
+
+export type KBDocumentStatus = 'upload_pending' | 'uploaded' | 'processing' | 'ready' | 'failed'
 
 export interface KBDocument {
   id: string
@@ -25,6 +27,27 @@ export interface KBDocumentMetadataUpdateRequest {
   source_date?: string | null
   is_official?: boolean
   priority?: number
+}
+
+export interface KBDocumentUploadIntentRequest {
+  filename: string
+  content_type: string
+  size_bytes: number
+  title?: string
+  metadata_tags?: Record<string, unknown>
+  source_date?: string | null
+}
+
+export interface KBDocumentUploadIntentResponse {
+  document: KBDocument
+  upload: DirectUploadContract
+}
+
+export interface UploadKBDocumentRequest extends DirectUploadMutationOptions {
+  file: File
+  title?: string
+  metadata_tags?: Record<string, unknown>
+  source_date?: string | null
 }
 
 export type KBCollectionIcon = 'shield' | 'plane' | 'book-open' | 'users' | 'database'

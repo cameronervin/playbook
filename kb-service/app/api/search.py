@@ -1,8 +1,7 @@
-"""POST /api/kb/embed/search — semantic similarity search.
-
-Mounted under the /embed prefix, so the full path is /api/kb/embed/search.
-"""
+"""POST /api/kb/search — semantic similarity search."""
 from __future__ import annotations
+
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -14,11 +13,14 @@ router = APIRouter()
 
 
 @router.post("/search", response_model=SearchResponse)
-async def embed_search(
+async def search(
     body: SearchRequest,
-    svc: SearchService = Depends(get_search_service),
+    svc: Annotated[SearchService, Depends(get_search_service)],
 ) -> SearchResponse:
     try:
         return await svc.search(body)
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

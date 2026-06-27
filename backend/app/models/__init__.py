@@ -11,12 +11,12 @@ from app.models.base import Base
 from app.models.conversations import (
     Conversation,
     ConversationFile,
-    ConversationFileChunk,
     ConversationMessage,
     MessageCitation,
 )
 from app.models.identity import OAuthAccount, Organization, User
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
+from app.models.uploads import KBIngestOutbox, UploadRequest
 
 __all__ = [
     "AdminChatMessage",
@@ -25,14 +25,15 @@ __all__ = [
     "Base",
     "Conversation",
     "ConversationFile",
-    "ConversationFileChunk",
     "ConversationMessage",
     "DashboardInsight",
     "DashboardInsightRun",
+    "KBIngestOutbox",
     "KBDocument",
     "KBDocumentEvent",
     "MessageCitation",
     "OAuthAccount",
     "Organization",
+    "UploadRequest",
     "User",
 ]

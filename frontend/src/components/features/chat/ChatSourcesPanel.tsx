@@ -24,11 +24,11 @@ export function ChatSourcesPanel({
     <WorkspaceSidePanel
       aria-label="Sources"
     >
-      <header className="flex h-16 shrink-0 items-center border-b border-border px-[18px]">
-        <h2 className="pb-ui-sm font-bold text-fg-1">Sources</h2>
+      <header className="pb-panel-header">
+        <h2 className="pb-panel-title">Sources</h2>
         <button
           aria-label="Close sources"
-          className="ml-auto inline-flex h-[34px] w-[34px] items-center justify-center rounded-sm text-fg-2 transition hover:bg-surface-hover hover:text-fg-1"
+          className="pb-panel-close pb-focus-control ml-auto"
           onClick={onClose}
           type="button"
         >
@@ -45,7 +45,7 @@ export function ChatSourcesPanel({
           citations.map((citation) => (
             <button
               className={cn(
-                'flex gap-3 rounded-md border p-3 text-left transition hover:border-border-strong hover:bg-surface-raised',
+                'pb-focus-control flex gap-3 rounded-md border p-3 text-left transition hover:border-border-strong hover:bg-surface-raised',
                 citation.source_title === selectedCitation?.source_title
                   ? 'border-border-brand bg-brand-soft'
                   : 'border-border bg-surface',
@@ -58,13 +58,13 @@ export function ChatSourcesPanel({
                 <FileText className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs text-fg-1">{citation.source_title}</span>
+                <span className="pb-chat-meta block truncate text-fg-1">{citation.source_title}</span>
                 <span className="pb-ui-xs mt-0.5 block text-fg-3">{formatCitationMeta(citation)}</span>
               </span>
             </button>
           ))
         ) : (
-          <p className="rounded-md border border-border bg-surface p-3 text-xs leading-5 text-fg-3">
+          <p className="pb-chat-meta rounded-md border border-border bg-surface p-3 leading-5 text-fg-3">
             Sources will appear here after Playbook grounds an answer in department documents.
           </p>
         )}
@@ -84,7 +84,7 @@ function SelectedSource({ citation }: { citation: Citation }) {
       <p className="pb-ui-xs mb-2 inline-flex rounded-pill bg-brand-soft px-2 py-1 font-semibold text-brand">
         Selected source
       </p>
-      <p className="border-l-2 border-brand pl-3 text-sm leading-6 text-fg-2">
+      <p className="pb-chat-body border-l-2 border-brand pl-3 text-fg-2">
         This citation is linked to the assistant answer. Open the source record to review the exact retrieved passage when
         retrieval excerpts are available.
       </p>

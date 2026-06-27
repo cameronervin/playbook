@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
@@ -59,6 +59,93 @@ class DocumentRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_admin_source_identity(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        playbook_document_id: uuid.UUID,
+    ) -> Document | None:
+        """Return the first admin-upload document for a trusted Playbook source."""
+        result = await self._session.execute(
+            self.admin_source_identity_statement(
+                configuration_id=configuration_id,
+                organization_id=organization_id,
+                playbook_document_id=playbook_document_id,
+            )
+        )
+        return result.scalars().first()
+
+    @classmethod
+    def admin_source_identity_statement(
+        cls,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        playbook_document_id: uuid.UUID,
+    ) -> Select[tuple[Document]]:
+        """Build the JSONB lookup for idempotent admin-upload ingestion."""
+        metadata_filter = {
+            "source_type": "admin_upload",
+            "organization_id": str(organization_id),
+            "playbook_document_id": str(playbook_document_id),
+        }
+        return (
+            select(Document)
+            .where(
+                Document.configuration_id == configuration_id,
+                Document.metadata_.contains(metadata_filter),
+            )
+            .order_by(Document.created_at.asc(), Document.id.asc())
+            .limit(1)
+        )
+
+    async def get_by_conversation_file_source_identity(
+        self,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        conversation_file_id: uuid.UUID,
+    ) -> Document | None:
+        """Return the first private document for a trusted conversation file."""
+        result = await self._session.execute(
+            self.conversation_file_source_identity_statement(
+                configuration_id=configuration_id,
+                organization_id=organization_id,
+                conversation_id=conversation_id,
+                conversation_file_id=conversation_file_id,
+            )
+        )
+        return result.scalars().first()
+
+    @classmethod
+    def conversation_file_source_identity_statement(
+        cls,
+        *,
+        configuration_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        conversation_file_id: uuid.UUID,
+    ) -> Select[tuple[Document]]:
+        """Build the JSONB lookup for idempotent conversation-file ingestion."""
+        metadata_filter = {
+            "source_type": "conversation_file",
+            "organization_id": str(organization_id),
+            "conversation_id": str(conversation_id),
+            "conversation_file_id": str(conversation_file_id),
+            "visibility_policy": {"scope": "conversation"},
+        }
+        return (
+            select(Document)
+            .where(
+                Document.configuration_id == configuration_id,
+                Document.metadata_.contains(metadata_filter),
+            )
+            .order_by(Document.created_at.asc(), Document.id.asc())
+            .limit(1)
+        )
+
     async def update_status(
         self,
         document_id: uuid.UUID,
@@ -69,7 +156,21 @@ class DocumentRepository:
         if not doc:
             return None
         doc.status = status
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(doc)
+        return doc
+
+    async def update_summary(
+        self,
+        document_id: uuid.UUID,
+        summary: str | None,
+    ) -> Document | None:
+        doc = await self.get(document_id)
+        if not doc:
+            return None
+        doc.summary = summary
+        doc.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(doc)
         return doc

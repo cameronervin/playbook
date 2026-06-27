@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.config import Settings
 from app.core.exception_handlers import (
     http_exception_handler,
     validation_exception_handler,
@@ -17,11 +18,11 @@ class Payload(BaseModel):
     name: str
 
 
-def _test_app() -> FastAPI:
+def _test_app(settings: Settings) -> FastAPI:
     app = FastAPI()
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    setup_cors(app)
+    setup_cors(app, settings)
     setup_request_context(app)
 
     @app.get("/ok")
@@ -39,8 +40,8 @@ def _test_app() -> FastAPI:
     return app
 
 
-def test_request_context_generates_and_preserves_request_id() -> None:
-    with TestClient(_test_app()) as client:
+def test_request_context_generates_and_preserves_request_id(test_settings) -> None:
+    with TestClient(_test_app(test_settings)) as client:
         generated = client.get("/ok")
         preserved = client.get("/ok", headers={"X-Request-ID": "req-known"})
 
@@ -48,8 +49,8 @@ def test_request_context_generates_and_preserves_request_id() -> None:
     assert preserved.headers["X-Request-ID"] == "req-known"
 
 
-def test_cors_allows_configured_origin_and_exposes_request_id() -> None:
-    with TestClient(_test_app()) as client:
+def test_cors_allows_configured_origin_and_exposes_request_id(test_settings) -> None:
+    with TestClient(_test_app(test_settings)) as client:
         preflight = client.options(
             "/ok",
             headers={
@@ -67,8 +68,8 @@ def test_cors_allows_configured_origin_and_exposes_request_id() -> None:
     assert "X-Request-ID" in response.headers["access-control-expose-headers"]
 
 
-def test_http_errors_use_nested_error_contract_with_request_id() -> None:
-    with TestClient(_test_app()) as client:
+def test_http_errors_use_nested_error_contract_with_request_id(test_settings) -> None:
+    with TestClient(_test_app(test_settings)) as client:
         response = client.get("/forbidden", headers={"X-Request-ID": "req-error"})
 
     assert response.status_code == 403
@@ -83,8 +84,8 @@ def test_http_errors_use_nested_error_contract_with_request_id() -> None:
     }
 
 
-def test_validation_errors_use_nested_error_contract() -> None:
-    with TestClient(_test_app()) as client:
+def test_validation_errors_use_nested_error_contract(test_settings) -> None:
+    with TestClient(_test_app(test_settings)) as client:
         response = client.post("/payload", json={}, headers={"X-Request-ID": "req-val"})
 
     assert response.status_code == 422

@@ -7,10 +7,10 @@ the Claude Design handoff; do not invent a new aesthetic.
 
 Read these before frontend edits:
 
-- `docs/design/README.md`
-- `docs/design/frontend_wireframe_implementation_plan.md`
-- `docs/design/source/colors_and_type.css`
-- The relevant reference screen in `docs/design/design-reference/`
+- `backstage/design/README.md`
+- `backstage/design/frontend_wireframe_implementation_plan.md`
+- `backstage/design/source/colors_and_type.css`
+- The relevant reference screen in `backstage/design/design-reference/`
 
 ## Direction
 
@@ -26,7 +26,7 @@ decorative blobs, and marketing-style hero pages.
 - Use Radix primitives for dialogs, dropdowns, tabs, tooltips, and switches.
 - Use `lucide-react` for ordinary icons.
 - Inline SVG is allowed only for the Playbook mark and SSO provider logos.
-- Treat `docs/design/source/` as structural reference, not production code.
+- Treat `backstage/design/source/` as structural reference, not production code.
 - Drop prototype quirks: Tweaks panels, CDN React, Babel, `window` globals, and
   fake `window.location` navigation.
 - Keep server state in TanStack Query and UI-only state in Zustand.

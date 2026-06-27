@@ -46,10 +46,14 @@ npm run dev
 ### 5. Start Celery Workers (optional, in background)
 ```bash
 # Working directory: backend/
-celery -A app.workers.celery_app worker -c 2 --loglevel=info
+celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
 ```
 
-> Only needed if the project uses background tasks. Start additional workers per queue as your project defines them.
+> Only needed if the project uses background tasks. The backend worker scaffold
+> routes interactive agents, conversation files, dashboard insights, and
+> maintenance tasks to named queues. Worker verbosity is controlled by
+> `CELERY_WORKER_LOG_LEVEL` separately from API `LOG_LEVEL`; restart existing
+> worker processes after changing it.
 
 ### 6. Verify All Services Running
 - Backend: "Uvicorn running on http://127.0.0.1:8000"

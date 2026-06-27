@@ -32,8 +32,9 @@ def get_eval_chat_model() -> "BaseChatModel":
     """Judge LLM, routed through LiteLLM."""
     from langchain_openai import ChatOpenAI
 
-    from app.core.config import settings
+    from app.core.config import get_settings
 
+    settings = get_settings()
     return ChatOpenAI(
         model=settings.EVAL_JUDGE_MODEL or settings.LLM_CHAT_MODEL,
         base_url=settings.LITELLM_BASE_URL,
@@ -50,8 +51,9 @@ def get_eval_embeddings() -> "Embeddings | None":
     Returns ``None`` when ``EVAL_EMBEDDINGS_MODEL`` is blank or construction fails,
     in which case the embeddings-dependent metric is skipped rather than erroring.
     """
-    from app.core.config import settings
+    from app.core.config import get_settings
 
+    settings = get_settings()
     model = settings.EVAL_EMBEDDINGS_MODEL
     if not model:
         return None
@@ -72,14 +74,20 @@ def get_eval_embeddings() -> "Embeddings | None":
 # --------------------------------------------------------------------------- #
 def _agent_chat_model() -> "BaseChatModel":
     # Imported lazily so importing this module never forces provider init.
+    from app.core.config import get_settings
     from app.infrastructure.llm.factory import get_llm_provider
 
-    return get_llm_provider().get_chat_model()
+    settings = get_settings()
+    return get_llm_provider(app_settings=settings).get_chat_model()
 
 
 @lru_cache
 def get_example_chains() -> dict[str, Any]:
     """Example chain set: ``{"example": chain}``."""
+    from app.core.config import get_settings
     from app.agents.builders.chains_builder import create_example_chain_set
 
-    return create_example_chain_set(_agent_chat_model())
+    return create_example_chain_set(
+        _agent_chat_model(),
+        app_settings=get_settings(),
+    )

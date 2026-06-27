@@ -14,7 +14,7 @@ UserRole = Literal["athlete", "admin", "super_admin"]
 class AuthProviderResponse(BaseModel):
     """Enabled OAuth provider descriptor."""
 
-    provider: Literal["google", "microsoft"]
+    provider: Literal["google", "microsoft", "dev"]
     label: str
     enabled: bool
     login_url: str

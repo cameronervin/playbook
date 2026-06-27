@@ -83,6 +83,12 @@ class KBDocument(Base):
         PG_UUID(as_uuid=True),
         nullable=True,
     )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_count: Mapped[int] = mapped_column(
+        Integer,
+        server_default=text("0"),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
 

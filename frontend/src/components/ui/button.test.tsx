@@ -7,10 +7,8 @@ describe('Button', () => {
     render(<Button size="sm">Regenerate</Button>)
 
     expect(screen.getByRole('button', { name: /regenerate/i })).toHaveClass(
-      'h-9',
-      'px-3',
-      'pb-ui-sm',
-      'leading-none',
+      'pb-button-sm',
+      'pb-focus-control',
     )
   })
 })

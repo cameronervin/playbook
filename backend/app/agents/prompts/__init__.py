@@ -1,5 +1,5 @@
 """System prompt strings for agent chains."""
 
-from app.agents.prompts.example_prompt import DEFAULT_EXAMPLE_PROMPT
+from app.agents.prompts.athlete_chat_prompt import ATHLETE_CHAT_SYSTEM_PROMPT
 
-__all__ = ["DEFAULT_EXAMPLE_PROMPT"]
+__all__ = ["ATHLETE_CHAT_SYSTEM_PROMPT"]

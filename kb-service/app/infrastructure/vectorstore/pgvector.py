@@ -6,25 +6,21 @@ strings here). The repository builds the search statement with pgvector's
 ``.cosine_distance()``; relevance is reported as ``score = 1 - distance`` and an
 optional ``metadata_filter`` is applied via JSONB containment.
 
-The ``VectorEmbedding`` model and the ``_build_*`` / ``_map_search_row`` helpers
-are authored by another part of the service (``app.models.vector_embedding`` /
-``app.repositories.vector_repo``). The imports below resolve once those files
-land; the whole tree is compiled together at verification time.
+The ``VectorEmbedding`` model and focused vector repository helper modules own
+the SQL construction and row mapping details.
 """
 from __future__ import annotations
 
 import uuid
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import delete, insert
 
 from app.models.vector_embedding import VectorEmbedding
-from app.repositories.vector_repo import (
-    _build_chunk_records,
-    _build_search_statement,
-    _map_search_row,
-)
+from app.repositories.vector_repo.mapping import _map_search_row
+from app.repositories.vector_repo.queries import _build_search_statement
+from app.repositories.vector_repo.records import _build_chunk_records
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +56,7 @@ def bulk_insert_embeddings(
 def cosine_search(
     pg_engine,
     collection_id: uuid.UUID,
+    organization_id: uuid.UUID,
     query_vector: list[float],
     max_docs: int,
     score_threshold: float,
@@ -74,6 +71,7 @@ def cosine_search(
         query_vector=query_vector,
         max_docs=max_docs,
         score_threshold=score_threshold,
+        organization_id=organization_id,
         metadata_filter=metadata_filter,
     )
 
@@ -91,6 +89,7 @@ def cosine_search(
 async def async_cosine_search(
     session: "AsyncSession",
     collection_id: uuid.UUID,
+    organization_id: uuid.UUID,
     query_vector: list[float],
     max_docs: int,
     score_threshold: float,
@@ -105,6 +104,7 @@ async def async_cosine_search(
         query_vector=query_vector,
         max_docs=max_docs,
         score_threshold=score_threshold,
+        organization_id=organization_id,
         metadata_filter=metadata_filter,
     )
 

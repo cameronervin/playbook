@@ -55,6 +55,37 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Infinity reranker — self-hosted cross-encoder serving for LiteLLM /rerank.
+  # Enable with the "reranker" profile:
+  #   docker compose -f base.yml -f <env>.yml --profile reranker up reranker litellm
+  reranker:
+    image: michaelf34/infinity:latest-cpu
+    command:
+      - v2
+      - --model-id
+      - BAAI/bge-reranker-base
+      - --engine
+      - optimum
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7997"
+    volumes:
+      - reranker_cache:/app/.cache
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7997/health', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+    profiles:
+      - reranker
+
   backend:
     build:
       context: ../../backend
@@ -86,7 +117,7 @@ services:
     build:
       context: ../../backend
       dockerfile: ../deploy/docker/Dockerfile.backend
-    command: celery -A app.infrastructure.tasks.celery_app worker --concurrency=2 --loglevel=info
+    command: celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
     depends_on:
       db:
         condition: service_healthy
@@ -173,6 +204,7 @@ volumes:
   postgres_data:
   valkey_data:
   kb_valkey_data:
+  reranker_cache:
 
 networks:
   default:

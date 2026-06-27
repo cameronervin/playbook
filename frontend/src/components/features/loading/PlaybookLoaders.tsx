@@ -7,19 +7,19 @@ import { BrandLockup, Button, PlaybookMark, Skeleton, SkeletonAvatar, SkeletonBu
 export function AuthLoginSkeleton() {
   return (
     <AuthCard className="flex flex-col items-center text-center" data-testid="auth-loading-skeleton">
-      <BrandLockup className="justify-center gap-[11px]" markSize={34} wordmarkClassName="text-[26px] leading-none tracking-normal" />
+      <BrandLockup className="justify-center gap-[11px]" markSize={34} wordmarkClassName="pb-auth-wordmark" />
       <h1
         aria-label="Log in to continue"
-        className="mt-6 font-display text-lg font-bold uppercase leading-[1.2] tracking-normal text-fg-1"
+        className="pb-auth-heading mt-6"
       >
-        LOG IN TO CONTINUE
+        Log in to continue
       </h1>
       <div className="mt-8 grid w-full gap-3">
         {['microsoft', 'google'].map((provider) => (
           <AuthProviderSkeleton key={provider} />
         ))}
       </div>
-      <footer className="mt-8 w-full border-t border-border pt-6 text-xs text-fg-3">
+      <footer className="pb-auth-footer mt-8 w-full border-t border-border pt-6">
         <span>Privacy Policy</span>
         <span className="px-2 text-fg-4">·</span>
         <span>Terms of Service</span>
@@ -31,20 +31,20 @@ export function AuthLoginSkeleton() {
 export function ProfileCardSkeleton() {
   return (
     <AuthCard className="flex flex-col items-center text-center" data-testid="profile-card-skeleton">
-      <BrandLockup className="justify-center gap-[11px]" markSize={34} wordmarkClassName="text-[26px] leading-none tracking-normal" />
-      <h1 className="mt-6 font-display text-lg font-bold leading-[1.2] tracking-normal text-fg-1">
+      <BrandLockup className="justify-center gap-[11px]" markSize={34} wordmarkClassName="pb-auth-wordmark" />
+      <h1 className="pb-auth-heading mt-6">
         Complete your profile
       </h1>
       <div className="mt-7 grid w-full gap-5 text-left">
-        <div className="grid gap-2 text-sm font-semibold text-fg-2">
+        <div className="pb-auth-label grid gap-2">
           Name
-          <div aria-hidden="true" className="h-[52px] w-full rounded-md border border-border-strong bg-surface" />
+          <div aria-hidden="true" className="pb-auth-control w-full rounded-md border border-border-strong bg-surface" />
         </div>
-        <div className="grid gap-2 text-sm font-semibold text-fg-2">
+        <div className="pb-auth-label grid gap-2">
           Sport or team
-          <div aria-hidden="true" className="h-[52px] w-full rounded-md border border-border-strong bg-surface" />
+          <div aria-hidden="true" className="pb-auth-control w-full rounded-md border border-border-strong bg-surface" />
         </div>
-        <div aria-hidden="true" className="inline-flex min-h-[52px] w-full items-center justify-center rounded-md bg-brand px-4 text-base font-semibold text-fg-on-brand opacity-70">
+        <div aria-hidden="true" className="pb-auth-control inline-flex w-full items-center justify-center rounded-md bg-brand px-4 pb-auth-input font-semibold text-fg-on-brand opacity-70">
           {"I'm ready"}
         </div>
       </div>
@@ -79,15 +79,15 @@ export function ChatNavSkeleton() {
   return (
     <aside
       aria-label="Chat navigation loading"
-      className="flex h-dvh w-[264px] shrink-0 flex-col border-r border-border bg-bg-void text-fg-1"
+      className="pb-workspace-chat-rail flex h-dvh shrink-0 flex-col border-r border-border bg-bg-void text-fg-1"
       data-testid="chat-workspace-skeleton"
     >
       <div className="flex items-center px-[18px] pb-3 pt-[18px]">
-        <BrandLockup markSize={26} wordmarkClassName="font-black uppercase tracking-normal text-[20px]" className="gap-3" />
+        <BrandLockup markSize={26} wordmarkClassName="pb-chat-brand-wordmark" className="gap-3" />
       </div>
       <div className="px-3 pb-2 pt-1">
         <button
-          className="pb-ui-sm flex h-[42px] w-full items-center gap-3 rounded-md border border-border-strong bg-transparent px-3 text-left font-semibold text-fg-1 transition"
+          className="pb-focus-control pb-ui-sm flex h-[42px] w-full items-center gap-3 rounded-md border border-border-strong bg-transparent px-3 text-left font-semibold text-fg-1 transition"
           disabled
           type="button"
         >
@@ -137,22 +137,27 @@ export function ChatMainSkeleton() {
         <HorizonBackground />
       </div>
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 justify-center overflow-y-auto py-7" data-testid="chat-empty-skeleton">
-          <div className="flex w-full max-w-[760px] flex-col items-center gap-3 px-7 pb-4 pt-[13vh] text-center">
+        <div className="pb-chat-thread" data-testid="chat-empty-skeleton">
+          <div className="pb-chat-content flex w-full flex-col items-center gap-3 px-7 pb-4 pt-[13vh] text-center">
             <div className="flex items-center justify-center gap-3.5">
               <PlaybookMark className="pb-think text-fg-1" size={36} />
-              <h1 className="m-0 font-display text-[30px] font-extrabold leading-none tracking-normal text-fg-1 sm:text-[34px]">
+              <h1 className="pb-chat-empty-title">
                 Ask PlaybookAI
               </h1>
             </div>
+            <p className="pb-chat-body m-0 text-balance text-fg-3">
+              Get answers to your athletics questions,
+              <br />
+              PlaybookAI is your coach off the field.
+            </p>
           </div>
         </div>
-        <div className="flex shrink-0 justify-center bg-bg-base px-7 pb-[22px] pt-3.5">
-          <div className="w-full max-w-[760px]">
-            <div className="pb-field-shell rounded-lg border border-border-solid bg-surface p-3 shadow-sm" data-testid="chat-composer-shell">
+        <div className="pb-chat-composer">
+          <div className="pb-chat-content w-full">
+            <div className="pb-chat-composer-shell pb-field-shell" data-testid="chat-composer-shell">
               <textarea
                 aria-label="Message Playbook loading"
-                className="min-h-[48px] w-full resize-none border-0 bg-transparent px-1 pb-2.5 pt-1 text-sm leading-6 text-fg-1 outline-none placeholder:text-fg-4"
+                className="pb-chat-composer-input px-1 pb-2.5 pt-1"
                 disabled
                 readOnly
                 rows={1}
@@ -160,7 +165,7 @@ export function ChatMainSkeleton() {
               <div className="flex items-center gap-2.5">
                 <button
                   aria-label="Attach file"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-sm text-fg-2 transition disabled:cursor-not-allowed disabled:text-fg-4"
+                  className="pb-focus-control inline-flex h-9 w-9 items-center justify-center rounded-sm border border-transparent text-fg-2 transition disabled:cursor-not-allowed disabled:text-fg-4"
                   disabled
                   type="button"
                 >
@@ -185,7 +190,7 @@ export function ChatMainSkeleton() {
 export function ChatThreadSkeleton({ label = 'Loading conversation' }: { label?: string }) {
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-y-auto py-7" data-testid="chat-thread-skeleton">
-      <div className="flex w-full max-w-[760px] flex-col gap-6 px-7">
+      <div className="pb-chat-content flex w-full flex-col gap-6 px-7">
         <p className="pb-refresh-note">
           <PlaybookMark className="pb-think text-brand" size={18} />
           {label}
@@ -223,18 +228,18 @@ export function AdminNavSkeleton() {
   ]
 
   return (
-    <aside className="flex h-dvh w-[244px] shrink-0 flex-col border-r border-border bg-bg-void text-fg-1" aria-label="Admin sidebar loading">
+    <aside className="pb-workspace-admin-rail flex h-dvh shrink-0 flex-col border-r border-border bg-bg-void text-fg-1" aria-label="Admin sidebar loading">
       <div className="px-[18px] pb-4 pt-5">
-        <BrandLockup className="gap-2.5" markSize={24} wordmarkClassName="text-[19px] font-black uppercase leading-none tracking-normal" />
+        <BrandLockup className="gap-2.5" markSize={24} wordmarkClassName="pb-admin-brand-wordmark" />
         <span className="sr-only">Admin</span>
-        <span className="float-right -mt-4 text-[10.5px] font-bold uppercase tracking-[0.08em] text-fg-3">Admin</span>
+        <span className="pb-admin-sidebar-label float-right -mt-4">Admin</span>
       </div>
       <nav className="flex-1 px-3 py-0.5" aria-label="Admin navigation loading">
         {navItems.map((item) => {
           const Icon = item.icon
           return (
             <div
-              className={`pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm px-[11px] py-2.5 font-medium ${item.active ? 'bg-brand-soft text-brand' : 'text-fg-2'}`}
+              className={`pb-focus-control pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm border border-transparent px-[11px] py-2.5 font-medium ${item.active ? 'bg-brand-soft text-brand' : 'text-fg-2'}`}
               key={item.label}
             >
               {item.active && <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-sm bg-brand" />}
@@ -272,10 +277,10 @@ export function AdminInsightsSkeleton() {
         </div>
       </header>
       <div className="px-7 py-4">
-        <div className="mx-auto w-full max-w-[1000px]">
-          <section className="rounded-lg border border-border-brand bg-[linear-gradient(180deg,rgba(255,115,0,0.06),transparent_52%),var(--surface)] p-[18px]">
+        <div className="pb-admin-content-width mx-auto w-full">
+          <section className="pb-dashboard-summary-card">
             <div className="mb-3 flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-2 text-xs font-bold text-brand">
+              <span className="pb-dashboard-section-label inline-flex items-center gap-2 font-bold text-brand">
                 <Sparkles className="h-4 w-4" />
                 AI summary
               </span>
@@ -325,7 +330,7 @@ export function AdminUsersSkeleton() {
       <div className="hidden grid-cols-[2fr_1.2fr_150px] gap-3.5 border-b border-border bg-bg-base px-4 py-[11px] md:grid">
         {['User', 'Role', ''].map((header) => (
           <span
-            className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-fg-4"
+            className="pb-admin-table-heading"
             key={header || 'actions'}
           >
             {header}
@@ -348,7 +353,7 @@ export function AdminUsersSkeleton() {
 
 function AdminDashboardCardSkeleton({ className, title }: { className?: string; title: string }) {
   return (
-    <section className={`rounded-lg border border-border-strong bg-surface p-[18px] ${className ?? ''}`}>
+    <section className={`pb-dashboard-card ${className ?? ''}`}>
       <div className="mb-3 flex items-baseline">
         <h2 className="pb-card-title">{title}</h2>
       </div>
@@ -361,13 +366,13 @@ function AuthProviderSkeleton() {
   return (
     <div
       aria-hidden="true"
-      className="grid min-h-[52px] w-full grid-cols-[50px_1fr] overflow-hidden rounded-md border border-border-strong bg-surface"
+      className="pb-auth-provider-button"
       data-testid="auth-provider-skeleton"
     >
-      <span className="flex items-center justify-center border-r border-border bg-surface-raised">
+      <span className="pb-auth-provider-icon">
         <Skeleton className="h-5 w-5 rounded-sm" />
       </span>
-      <span className="flex items-center justify-center py-[15px] pr-[50px] text-center">
+      <span className="pb-auth-provider-label">
         <Skeleton className="h-4 w-[190px] max-w-[80%] rounded-sm" />
       </span>
     </div>

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from typing import Annotated, Any, Literal
 
-from pydantic import field_validator, model_validator
+from fastapi import Request
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -36,13 +38,16 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "DEBUG"
 
     # --- Database --------------------------------------------------------------
-    DATABASE_URL: str = "postgresql+asyncpg://app:localpass@localhost:5433/playbook"
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://app:localpass@localhost:5433/playbook",
+        repr=False,
+    )
 
     # LangGraph checkpoint database (optional — defaults to DATABASE_URL)
-    LANGGRAPH_CHECKPOINT_DB_URL: str | None = None
+    LANGGRAPH_CHECKPOINT_DB_URL: str | None = Field(default=None, repr=False)
 
     # --- Security --------------------------------------------------------------
-    SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str = Field(default="change-me-in-production", repr=False)
     CORS_ORIGINS: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
     FRONTEND_URL: str = "http://localhost:3000"
     API_PUBLIC_URL: str = "http://localhost:8000"
@@ -51,15 +56,15 @@ class Settings(BaseSettings):
     JWT_REFRESH_THRESHOLD_SECONDS: int = 1800  # Renew if < 30 min remaining
     # Cookie domain: "" or "localhost" for local dev, ".example.com" for prod
     COOKIE_DOMAIN: str = "localhost"
-    OAUTH_STATE_SECRET: str = "change-me-oauth-state"
+    OAUTH_STATE_SECRET: str = Field(default="change-me-oauth-state", repr=False)
     OAUTH_STATE_COOKIE_NAME: str = "playbook_oauth_state"
     ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
     DEV_AUTH_ENABLED: bool = False
 
     GOOGLE_OAUTH_CLIENT_ID: str = ""
-    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = Field(default="", repr=False)
     MICROSOFT_OAUTH_CLIENT_ID: str = ""
-    MICROSOFT_OAUTH_CLIENT_SECRET: str = ""
+    MICROSOFT_OAUTH_CLIENT_SECRET: str = Field(default="", repr=False)
     MICROSOFT_OAUTH_TENANT: str = "common"
 
     DEFAULT_ORGANIZATION_NAME: str = "Playbook Athletics"
@@ -69,34 +74,42 @@ class Settings(BaseSettings):
     # Set S3_ENDPOINT_URL to a MinIO URL (e.g. http://minio:9000) for local/dev.
     # Leave empty/None for production AWS S3.
     S3_ENDPOINT_URL: str | None = None
+    # Optional browser-facing S3-compatible endpoint for direct upload contracts.
+    # Local Docker uses S3_ENDPOINT_URL=http://minio:9000 internally while the
+    # browser must POST to http://localhost:9000.
+    S3_PUBLIC_ENDPOINT_URL: str | None = None
     S3_BUCKET_NAME: str = "playbook-bucket"
     S3_REGION: str = "us-east-1"
     # Explicit credentials (MinIO: local dev credentials). If unset, boto3
     # falls back to AWS_PROFILE, then the default credential chain / IAM role
-    S3_ACCESS_KEY_ID: str | None = None
-    S3_SECRET_ACCESS_KEY: str | None = None
+    S3_ACCESS_KEY_ID: str | None = Field(default=None, repr=False)
+    S3_SECRET_ACCESS_KEY: str | None = Field(default=None, repr=False)
     AWS_PROFILE: str | None = None
     S3_TIMEOUT: int = 120
     S3_PRESIGNED_URL_EXPIRY: int = 3600
+    CONVERSATION_FILE_MAX_UPLOAD_MB: int = 200
 
     # --- Workers ---------------------------------------------------------------
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/0", repr=False)
+    CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/1", repr=False)
     CELERY_TASK_SOFT_TIME_LIMIT: int = 600  # 10 min
     CELERY_TASK_HARD_TIME_LIMIT: int = 660
     CELERY_TASK_MAX_RETRIES: int = 3
     CELERY_TASK_RETRY_COUNTDOWN: int = 60  # seconds before retry
+    CELERY_WORKER_LOG_LEVEL: str = "INFO"
+    AGENT_STREAM_VALKEY_URL: str = Field(default="redis://localhost:6379/2", repr=False)
 
     # --- LLM --------------------------------------------------------------------
     # "litellm" = route every request through a LiteLLM OpenAI-compatible proxy
     # "direct" = call the selected model provider SDK directly
     LLM_PROVIDER_MODE: Literal["direct", "litellm"] = "direct"
     LLM_CHAT_MODEL: str = "claude-sonnet-4-6"
+    LLM_TITLE_MODEL: str = ""
     LLM_DIRECT_PROVIDER: Literal["anthropic", "openai", "google"] = "anthropic"
 
     # --- LiteLLM mode ---
     LITELLM_BASE_URL: str = "http://localhost:4000"
-    LITELLM_API_KEY: str = ""
+    LITELLM_API_KEY: str = Field(default="", repr=False)
 
     # --- Common LLM settings (all modes) ---
     LLM_TEMPERATURE: float = 0.2
@@ -104,9 +117,9 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: int = 600
 
     # --- API keys (required based on provider selection) ---
-    ANTHROPIC_API_KEY: str | None = None
-    OPENAI_API_KEY: str | None = None
-    GEMINI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = Field(default=None, repr=False)
+    OPENAI_API_KEY: str | None = Field(default=None, repr=False)
+    GEMINI_API_KEY: str | None = Field(default=None, repr=False)
 
     # --- Eval harness (dev/CI only — see backend/evals) ---
     # Judge LLM for the eval harness; falls back to LLM_CHAT_MODEL when empty
@@ -122,8 +135,8 @@ class Settings(BaseSettings):
 
     # Local KB service connection (only used when KB_PROVIDER_MODE=local)
     KB_LOCAL_BASE_URL: str = "http://kb-api:8001"
-    KB_API_SECRET: str = ""  # Bearer token sent with every call to the KB service
-    KB_WEBHOOK_SECRET: str = ""
+    KB_API_SECRET: str = Field(default="", repr=False)  # Bearer token sent with every call to the KB service
+    KB_WEBHOOK_SECRET: str = Field(default="", repr=False)
     KB_CONFIG_NAME: str = "Playbook KB Pipeline"
     KB_TIMEOUT: int = 30
 
@@ -142,6 +155,8 @@ class Settings(BaseSettings):
     AGENT_MAX_RETRIES: int = 3
     AGENT_RETRY_BACKOFF: float = 2.0  # Initial backoff (seconds, exponential)
     CHECKPOINT_RETENTION_DAYS: int = 30
+    ATHLETE_CHAT_HISTORY_LIMIT: int = 20
+    ATHLETE_CHAT_MAX_CITATIONS: int = 5
 
     # --- Observability ---------------------------------------------------------
     TRACING_ENABLED: bool = False
@@ -149,7 +164,7 @@ class Settings(BaseSettings):
     # Langfuse — LLM tracing + eval dataset/score sync (used by evals/)
     # Install the dependency group: uv sync --group evals
     LANGFUSE_ENABLED: bool = False
-    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = Field(default="", repr=False)
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
@@ -260,7 +275,44 @@ class Settings(BaseSettings):
             and self.ENVIRONMENT.lower() in {"local", "development"}
         )
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
 
 
-settings = Settings()
+_settings_override: Settings | None = None
+
+
+@lru_cache(maxsize=1)
+def _load_settings() -> Settings:
+    """Load runtime settings from the configured Pydantic sources."""
+    return Settings()
+
+
+def get_settings() -> Settings:
+    """Return application settings, honoring a test-installed override."""
+    if _settings_override is not None:
+        return _settings_override
+    return _load_settings()
+
+
+def set_settings_override(app_settings: Settings | None) -> None:
+    """Install or clear an explicit settings object for tests and app factories."""
+    global _settings_override
+    _settings_override = app_settings
+    clear_settings_cache()
+
+
+def clear_settings_cache() -> None:
+    """Clear cached runtime settings."""
+    _load_settings.cache_clear()
+
+
+def get_request_settings(request: Request) -> Settings:
+    """Return settings attached to the FastAPI app, falling back to runtime config."""
+    app_settings = getattr(request.app.state, "settings", None)
+    if isinstance(app_settings, Settings):
+        return app_settings
+    return get_settings()

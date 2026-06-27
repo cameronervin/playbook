@@ -81,7 +81,7 @@ Before drafting, you need two things:
 Read these in order (skip what isn't available):
 
 1. **`references/team-and-products.md`** — always read this. It tells you who's on which team, which product has what context to mention, and common collaborators.
-2. **The active implementation phase file** — run `scripts/gather_phase_context.py` to find the current phase file in `prd/03-implementation/`. If you have no filesystem access, ask the author to paste the current phase content or tell you which phase they're in.
+2. **The active implementation phase file** — run `scripts/gather_phase_context.py` to find the current phase file in `backstage/prd/03-implementation/`. If you have no filesystem access, ask the author to paste the current phase content or tell you which phase they're in.
 3. **The previous note (if available)** — skim it for carry-over items. Don't invent carry-overs; only reference what's actually there.
 4. **`references/voice-and-structure.md`** — read this before drafting so the voice comes out right.
 

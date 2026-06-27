@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -18,6 +20,11 @@ const chatMocks = vi.hoisted(() => ({
   logoutMutateAsync: vi.fn(),
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
+  startConversationStream: vi.fn(),
+  stopConversationStream: vi.fn(),
+  submitConversationMessageMutate: vi.fn(),
+  submitConversationMessagePending: false,
+  uploadConversationFileMutate: vi.fn(),
 }))
 
 const currentUser = vi.hoisted(() => ({
@@ -49,6 +56,42 @@ vi.mock('@/src/hooks/useAuth', () => ({
 }))
 
 vi.mock('@/src/hooks/useConversations', () => ({
+  createSubmittedMessages: (conversationId: string, content: string, response: {
+    assistant_message_id: string
+    status: string
+    task_id: string
+    user_message_id: string
+  }) => {
+    const createdAt = new Date(0).toISOString()
+    return [
+      {
+        id: response.user_message_id,
+        conversation_id: conversationId,
+        role: 'user',
+        content,
+        status: 'complete',
+        safety_outcome: null,
+        topic_labels: [],
+        risk_labels: [],
+        metadata: {},
+        citations: [],
+        created_at: createdAt,
+      },
+      {
+        id: response.assistant_message_id,
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: '',
+        status: response.status,
+        safety_outcome: null,
+        topic_labels: [],
+        risk_labels: [],
+        metadata: { task_id: response.task_id, user_message_id: response.user_message_id },
+        citations: [],
+        created_at: createdAt,
+      },
+    ]
+  },
   useConversations: () => ({
     data: chatMocks.conversationsLoading ? undefined : chatMocks.conversations,
     isFetching: chatMocks.conversationsFetching,
@@ -58,16 +101,35 @@ vi.mock('@/src/hooks/useConversations', () => ({
     mutate: chatMocks.createConversationMutate,
     isPending: chatMocks.createConversationPending,
   }),
+  useSubmitConversationMessage: () => ({
+    mutate: chatMocks.submitConversationMessageMutate,
+    isPending: chatMocks.submitConversationMessagePending,
+  }),
+  useConversationMessageStream: () => ({
+    start: chatMocks.startConversationStream,
+    stop: chatMocks.stopConversationStream,
+  }),
   useConversationDetail: (conversationId: string | null) => ({
     data: conversationId && !chatMocks.detailLoading ? chatMocks.details.get(conversationId) : undefined,
     isFetching: chatMocks.detailFetching,
     isLoading: chatMocks.detailLoading,
   }),
+  useUploadConversationFile: () => ({
+    mutate: chatMocks.uploadConversationFileMutate,
+    isPending: false,
+  }),
 }))
 
-const today = new Date('2026-06-08T15:30:00.000Z')
-const yesterday = new Date('2026-06-07T15:30:00.000Z')
-const previous = new Date('2026-06-03T15:30:00.000Z')
+const today = conversationDateDaysAgo(0)
+const yesterday = conversationDateDaysAgo(1)
+const previous = conversationDateDaysAgo(4)
+
+function conversationDateDaysAgo(daysAgo: number) {
+  const date = new Date()
+  date.setHours(15, 30, 0, 0)
+  date.setDate(date.getDate() - daysAgo)
+  return date
+}
 
 function summary(id: string, title: string | null, createdAt: Date): ConversationSummary {
   return {
@@ -83,7 +145,18 @@ function summary(id: string, title: string | null, createdAt: Date): Conversatio
 }
 
 function detail(summaryRecord: ConversationSummary): ConversationDetail {
-  return { ...summaryRecord, messages: [] }
+  return { ...summaryRecord, messages: [], files: [] }
+}
+
+function startResponse(conversation: ConversationDetail) {
+  return {
+    assistant_message_id: 'assistant-start',
+    conversation,
+    status: 'streaming',
+    stream_url: `/api/v1/conversations/${conversation.id}/messages/assistant-start/stream?task_id=task-start`,
+    task_id: 'task-start',
+    user_message_id: 'user-start',
+  }
 }
 
 function renderChat() {
@@ -95,11 +168,14 @@ function renderChat() {
   )
 }
 
+const globalsCss = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8')
+
 beforeEach(() => {
   chatMocks.conversations = []
   chatMocks.conversationsFetching = false
   chatMocks.conversationsLoading = false
   chatMocks.createConversationPending = false
+  chatMocks.submitConversationMessagePending = false
   chatMocks.detailFetching = false
   chatMocks.detailLoading = false
   chatMocks.details = new Map()
@@ -109,6 +185,10 @@ beforeEach(() => {
   chatMocks.routerReplace.mockReset()
   chatMocks.logoutMutateAsync.mockReset()
   chatMocks.createConversationMutate.mockReset()
+  chatMocks.submitConversationMessageMutate.mockReset()
+  chatMocks.startConversationStream.mockReset()
+  chatMocks.stopConversationStream.mockReset()
+  chatMocks.uploadConversationFileMutate.mockReset()
   useUIStore.setState({
     activeConversationId: null,
     sourcesOpen: true,
@@ -137,7 +217,8 @@ describe('ChatShell', () => {
     expect(searchChats).toBeDisabled()
     expect(askButton).toBeDisabled()
     expect(askButton).toHaveClass('disabled:bg-surface-raised')
-    expect(screen.queryByText(/get answers to your athletics questions/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/get answers to your athletics questions,/i)).toBeInTheDocument()
+    expect(screen.getByText(/playbookai is your coach off the field\./i)).toBeInTheDocument()
     expect(screen.getByText(/responses are ai generated/i)).toBeInTheDocument()
     expect(screen.queryByTestId('chat-composer-content-skeleton')).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: /sources/i })).not.toBeInTheDocument()
@@ -180,14 +261,65 @@ describe('ChatShell', () => {
   it('renders the design empty state without a top bar or sources panel', () => {
     renderChat()
 
-    expect(screen.getByRole('heading', { name: /ask playbookai/i })).toBeInTheDocument()
+    const composer = screen.getByLabelText(/message playbook/i)
+    const heading = screen.getByRole('heading', { name: /ask playbookai/i })
+    const thread = heading.closest('.pb-chat-thread')
+    const composerShell = composer.closest('.pb-chat-composer')
+
+    expect(screen.getByTestId('horizon-background')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-empty-layout')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chat-empty-thread')).not.toBeInTheDocument()
+    expect(thread).toBeInTheDocument()
+    expect(composerShell).toBeInTheDocument()
+    expect(thread?.nextElementSibling).toBe(composerShell)
+    expect(thread).toContainElement(heading)
+    expect(globalsCss).toMatch(/\.pb-chat-content\s*{[^}]*padding-bottom:\s*0;/s)
+    expect(heading).toBeInTheDocument()
     expect(screen.getByText(/get answers to your athletics questions,/i)).toBeInTheDocument()
     expect(screen.getByText(/playbookai is your coach off the field\./i)).toBeInTheDocument()
     expect(screen.getByText(/responses are ai generated\. review to confirm accuracy\./i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /attach file/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /attach file/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /^ask$/i })).toBeDisabled()
     expect(screen.queryByRole('banner', { name: /chat actions/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: /sources/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps conversations with messages on the normal thread layout', () => {
+    const conversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [conversation]
+    chatMocks.details = new Map([
+      [
+        'c1',
+        {
+          ...conversation,
+          messages: [
+            {
+              id: 'm1',
+              conversation_id: 'c1',
+              role: 'assistant',
+              content: 'Athletes disclose NIL agreements within 72 hours.',
+              status: 'complete',
+              safety_outcome: null,
+              topic_labels: [],
+              risk_labels: [],
+              metadata: {},
+              citations: [],
+              created_at: today.toISOString(),
+            },
+          ],
+          files: [],
+        },
+      ],
+    ])
+    useUIStore.setState({ activeConversationId: 'c1', sourcesOpen: false })
+
+    renderChat()
+
+    expect(screen.queryByTestId('chat-empty-layout')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chat-empty-thread')).not.toBeInTheDocument()
+    expect(screen.getByRole('banner', { name: /chat actions/i })).toBeInTheDocument()
+    expect(screen.getByText(/athletes disclose nil agreements/i)).toBeInTheDocument()
   })
 
   it('groups conversation history and filters search results', async () => {
@@ -255,12 +387,11 @@ describe('ChatShell', () => {
     const composer = screen.getByLabelText(/message playbook/i)
 
     expect(newChatAction).toHaveClass('pb-ui-sm')
+    expect(newChatAction).toHaveClass('pb-focus-control')
     expect(historyRow).toHaveClass('pb-ui-sm')
+    expect(historyRow).toHaveClass('pb-focus-control')
     expect(groupLabel).toHaveClass('pb-ui-xs')
-    expect(composer).toHaveClass('text-sm')
-    expect(newChatAction).not.toHaveClass('text-sm')
-    expect(historyRow).not.toHaveClass('text-[13.5px]')
-    expect(composer).not.toHaveClass('text-[15px]')
+    expect(composer).toHaveClass('pb-chat-composer-input')
   })
 
   it('submits non-empty composer text while preserving multiline drafts', async () => {
@@ -273,12 +404,158 @@ describe('ChatShell', () => {
     expect(screen.getByText('Can I travel?')).toBeInTheDocument()
     expect(screen.getByText(/thinking/i)).toBeInTheDocument()
     expect(chatMocks.createConversationMutate).toHaveBeenCalledWith(
-      { initial_message: 'Can I travel?' },
+      { content: 'Can I travel?' },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     )
 
     await userEvent.type(textarea, 'Line one{shift>}{enter}{/shift}Line two')
     expect(textarea).toHaveValue('Line one\nLine two')
+  })
+
+  it('enables conversation file uploads for an active conversation', async () => {
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.details = new Map([['c1', detail(todayConversation)]])
+    useUIStore.setState({ activeConversationId: 'c1' })
+
+    renderChat()
+
+    expect(screen.getByRole('button', { name: /attach file/i })).toBeEnabled()
+  })
+
+  it('queues a home-screen attachment and uploads it after the first message creates a conversation', async () => {
+    const createdConversation = summary('c-new', 'Travel form review', today)
+    chatMocks.createConversationMutate.mockImplementation((_request, options) => {
+      options?.onSuccess?.(startResponse({ ...detail(createdConversation), messages: [] }))
+    })
+    chatMocks.uploadConversationFileMutate.mockImplementation((request, options) => {
+      request.onProgress?.({ loaded: 5, percent: 50, total: 10 })
+      options?.onSuccess?.({
+        id: 'file-1',
+        conversation_id: 'c-new',
+        message_id: null,
+        filename: request.file.name,
+        content_type: request.file.type,
+        size_bytes: request.file.size,
+        extraction_status: 'uploaded',
+        chunk_count: 0,
+        created_at: today.toISOString(),
+        updated_at: today.toISOString(),
+      })
+    })
+
+    renderChat()
+
+    await userEvent.upload(
+      screen.getByLabelText(/attach conversation file/i),
+      new File(['hello'], 'travel-form.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(screen.getByText('travel-form.pdf')).toBeInTheDocument()
+    expect(screen.getByText('Pending upload')).toBeInTheDocument()
+    expect(chatMocks.uploadConversationFileMutate).not.toHaveBeenCalled()
+
+    await userEvent.type(screen.getByLabelText(/message playbook/i), 'Can you review this?')
+    await userEvent.click(screen.getByRole('button', { name: /^ask$/i }))
+
+    expect(chatMocks.uploadConversationFileMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'c-new',
+        file: expect.objectContaining({ name: 'travel-form.pdf' }),
+        onProgress: expect.any(Function),
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    )
+    expect(screen.getByText('Queued')).toBeInTheDocument()
+  })
+
+  it('submits follow-up messages to the active conversation and opens the returned stream', async () => {
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.details = new Map([['c1', detail(todayConversation)]])
+    chatMocks.submitConversationMessageMutate.mockImplementation((_request, options) => {
+      options?.onSuccess?.({
+        assistant_message_id: 'assistant-follow-up',
+        status: 'streaming',
+        stream_url: '/api/v1/conversations/c1/messages/assistant-follow-up/stream?task_id=task-follow-up',
+        task_id: 'task-follow-up',
+        user_message_id: 'user-follow-up',
+      })
+    })
+    useUIStore.setState({ activeConversationId: 'c1' })
+
+    renderChat()
+
+    await userEvent.type(screen.getByLabelText(/message playbook/i), 'Can I follow up?')
+    await userEvent.click(screen.getByRole('button', { name: /^ask$/i }))
+
+    expect(chatMocks.submitConversationMessageMutate).toHaveBeenCalledWith(
+      { conversationId: 'c1', content: 'Can I follow up?' },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+    expect(chatMocks.startConversationStream).toHaveBeenCalledWith({
+      assistantMessageId: 'assistant-follow-up',
+      conversationId: 'c1',
+      streamUrl: '/api/v1/conversations/c1/messages/assistant-follow-up/stream?task_id=task-follow-up',
+    })
+  })
+
+  it('uploads an active conversation file and shows queued status', async () => {
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.details = new Map([['c1', detail(todayConversation)]])
+    chatMocks.uploadConversationFileMutate.mockImplementation((request, options) => {
+      request.onProgress?.({ loaded: 5, percent: 50, total: 10 })
+      options?.onSuccess?.({
+        id: 'file-1',
+        conversation_id: 'c1',
+        message_id: null,
+        filename: request.file.name,
+        content_type: request.file.type,
+        size_bytes: request.file.size,
+        extraction_status: 'uploaded',
+        chunk_count: 0,
+        created_at: today.toISOString(),
+        updated_at: today.toISOString(),
+      })
+    })
+    useUIStore.setState({ activeConversationId: 'c1' })
+
+    renderChat()
+
+    await userEvent.upload(
+      screen.getByLabelText(/attach conversation file/i),
+      new File(['hello'], 'contract.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(chatMocks.uploadConversationFileMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'c1',
+        file: expect.objectContaining({ name: 'contract.pdf' }),
+        onProgress: expect.any(Function),
+      }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    )
+    expect(screen.getByText('contract.pdf')).toBeInTheDocument()
+    expect(screen.getByText('Queued')).toBeInTheDocument()
+  })
+
+  it('rejects unsupported conversation files before creating an upload intent', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const todayConversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [todayConversation]
+    chatMocks.details = new Map([['c1', detail(todayConversation)]])
+    useUIStore.setState({ activeConversationId: 'c1' })
+
+    renderChat()
+
+    await user.upload(
+      screen.getByLabelText(/attach conversation file/i),
+      new File(['hello'], 'notes.txt', { type: 'text/plain' }),
+    )
+
+    expect(screen.getByText(/playbook supports pdf, docx, pptx, and xlsx uploads/i)).toBeInTheDocument()
+    expect(chatMocks.uploadConversationFileMutate).not.toHaveBeenCalled()
   })
 
   it('opens sources from a citation click and highlights the cited source', async () => {
@@ -315,6 +592,7 @@ describe('ChatShell', () => {
               created_at: today.toISOString(),
             },
           ],
+          files: [],
         },
       ],
     ])
