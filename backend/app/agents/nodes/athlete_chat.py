@@ -9,12 +9,13 @@ from uuid import UUID
 import structlog
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from sqlalchemy.ext.asyncio import AsyncSession
+from langgraph.runtime import Runtime
 
 from app.agents.context.middleware.athlete_chat_middleware import (
     format_uploaded_file_manifest,
 )
 from app.agents.guardrails.safety import evaluate_athlete_message_safety
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.agents.states.athlete_chat_state import (
     AthleteChatState,
     AthleteChatStructuredResponse,
@@ -24,16 +25,13 @@ from app.agents.tools.knowledgebase import (
     SourceRegistry,
     conversation_file_search_context,
 )
-from app.core.config import Settings
 from app.core.exceptions import NotFoundError
-from app.infrastructure.knowledgebase import BaseKnowledgebaseProvider
 from app.repositories.conversations import (
     ConversationFileRepository,
     ConversationMessageRepository,
     ConversationRepository,
     MessageCitationRepository,
 )
-from app.services.agent_stream_service import AgentStreamService
 
 logger = structlog.get_logger(__name__)
 
@@ -46,20 +44,16 @@ UNSUPPORTED_RESPONSE = (
 def create_athlete_chat_nodes(
     *,
     chains: dict[str, Any],
-    session: AsyncSession,
-    settings: Settings,
-    stream_service: AgentStreamService,
-    source_registry: SourceRegistry,
-    knowledgebase_provider: BaseKnowledgebaseProvider,
 ) -> dict[str, Any]:
     """Create all nodes needed by the athlete chat graph."""
-    conversation_repo = ConversationRepository(session)
-    message_repo = ConversationMessageRepository(session)
-    citation_repo = MessageCitationRepository(session)
-    file_repo = ConversationFileRepository(session)
-
-    async def load_state(state: AthleteChatState) -> dict[str, Any]:
+    async def load_state(
+        state: AthleteChatState,
+        runtime: Runtime[AthleteChatRuntimeContext],
+    ) -> dict[str, Any]:
         """Validate task ownership and load bounded conversation history."""
+        context = runtime.context
+        conversation_repo = ConversationRepository(context.session)
+        message_repo = ConversationMessageRepository(context.session)
         task_id = state["task_id"]
         conversation_id = UUID(state["conversation_id"])
         athlete_user_id = UUID(state["athlete_user_id"])
@@ -67,7 +61,7 @@ def create_athlete_chat_nodes(
         assistant_message_id = UUID(state["assistant_message_id"])
         organization_id = UUID(state["organization_id"])
 
-        await stream_service.publish_progress(
+        await context.stream_service.publish_progress(
             task_id,
             status="loading_context",
             metadata={"conversation_id": str(conversation_id)},
@@ -101,7 +95,7 @@ def create_athlete_chat_nodes(
 
         rows = await message_repo.list_recent_for_conversation(
             conversation_id,
-            limit=settings.ATHLETE_CHAT_HISTORY_LIMIT,
+            limit=context.settings.ATHLETE_CHAT_HISTORY_LIMIT,
         )
         messages: list[RemoveMessage | HumanMessage | AIMessage] = [
             RemoveMessage(id=REMOVE_ALL_MESSAGES)
@@ -124,10 +118,14 @@ def create_athlete_chat_nodes(
             "user_message_content": user_message.content,
         }
 
-    async def safety_check(state: AthleteChatState) -> dict[str, Any]:
+    async def safety_check(
+        state: AthleteChatState,
+        runtime: Runtime[AthleteChatRuntimeContext],
+    ) -> dict[str, Any]:
         """Run deterministic pre-generation safety and topic labeling."""
+        context = runtime.context
         task_id = state["task_id"]
-        await stream_service.publish_progress(
+        await context.stream_service.publish_progress(
             task_id,
             status="checking_safety",
             metadata={"assistant_message_id": state["assistant_message_id"]},
@@ -157,15 +155,18 @@ def create_athlete_chat_nodes(
 
     async def prepare_conversation_file_scope(
         state: AthleteChatState,
+        runtime: Runtime[AthleteChatRuntimeContext],
     ) -> dict[str, Any]:
         """Prepare trusted private conversation-file IDs for the search tool."""
         if state.get("should_bypass_agent", False):
             return _empty_conversation_file_scope()
 
+        context = runtime.context
+        file_repo = ConversationFileRepository(context.session)
         task_id = state["task_id"]
         conversation_id = UUID(state["conversation_id"])
         attached_file_ids = _uuid_list(state.get("attached_file_ids", []))
-        await stream_service.publish_progress(
+        await context.stream_service.publish_progress(
             task_id,
             status="preparing_file_scope",
             metadata={
@@ -209,10 +210,14 @@ def create_athlete_chat_nodes(
             "conversation_file_manifest": manifest,
         }
 
-    async def run_agent(state: AthleteChatState) -> dict[str, Any]:
+    async def run_agent(
+        state: AthleteChatState,
+        runtime: Runtime[AthleteChatRuntimeContext],
+    ) -> dict[str, Any]:
         """Invoke the structured athlete chat agent."""
+        context = runtime.context
         task_id = state["task_id"]
-        await stream_service.publish_progress(task_id, status="running_agent")
+        await context.stream_service.publish_progress(task_id, status="running_agent")
         with conversation_file_search_context(
             organization_id=state["organization_id"],
             conversation_id=state["conversation_id"],
@@ -236,7 +241,9 @@ def create_athlete_chat_nodes(
                     "requires_kb_support": state.get("requires_kb_support", False),
                     "topic_labels": state.get("topic_labels", []),
                     "risk_labels": state.get("risk_labels", []),
-                }
+                },
+                config=_agent_chain_config(state),
+                context=context,
             )
         structured = _structured_response(result)
         return {
@@ -254,11 +261,20 @@ def create_athlete_chat_nodes(
             "safety_outcome": structured.safety_outcome,
         }
 
-    async def save_state(state: AthleteChatState) -> dict[str, Any]:
+    async def save_state(
+        state: AthleteChatState,
+        runtime: Runtime[AthleteChatRuntimeContext],
+    ) -> dict[str, Any]:
         """Persist final assistant response, citations, and terminal stream event."""
+        context = runtime.context
+        message_repo = ConversationMessageRepository(context.session)
+        citation_repo = MessageCitationRepository(context.session)
         task_id = state["task_id"]
         assistant_message_id = UUID(state["assistant_message_id"])
-        await stream_service.publish_progress(task_id, status="persisting_response")
+        await context.stream_service.publish_progress(
+            task_id,
+            status="persisting_response",
+        )
 
         assistant_message = await message_repo.get(assistant_message_id)
         if assistant_message is None:
@@ -266,7 +282,7 @@ def create_athlete_chat_nodes(
 
         cited_sources = _sources_for_keys(
             state.get("cited_source_keys", []),
-            source_registry,
+            context.source_registry,
         )
         answer = state.get("answer", "").strip()
         answer_type = state.get("answer_type", "grounded_answer")
@@ -277,16 +293,17 @@ def create_athlete_chat_nodes(
             answer = UNSUPPORTED_RESPONSE
             answer_type = "unsupported"
 
-        limited_sources = cited_sources[: settings.ATHLETE_CHAT_MAX_CITATIONS]
+        limited_sources = cited_sources[: context.settings.ATHLETE_CHAT_MAX_CITATIONS]
         metadata = {
             **assistant_message.message_metadata,
             "task_id": task_id,
             "answer_type": answer_type,
             "source_keys": [source.source_key for source in limited_sources],
             "kb_zero_hit": bool(
-                not state.get("should_bypass_agent", False) and not source_registry
+                not state.get("should_bypass_agent", False)
+                and not context.source_registry
             ),
-            "model": settings.LLM_CHAT_MODEL,
+            "model": context.settings.LLM_CHAT_MODEL,
         }
         await message_repo.update_status_and_content(
             assistant_message,
@@ -307,7 +324,7 @@ def create_athlete_chat_nodes(
                 source_metadata=source.metadata,
                 rank=rank,
             )
-        await session.commit()
+        await context.session.commit()
 
         completion_result = {
             "status": "complete",
@@ -325,6 +342,20 @@ def create_athlete_chat_nodes(
         "prepare_conversation_file_scope": prepare_conversation_file_scope,
         "run_agent": run_agent,
         "save_state": save_state,
+    }
+
+
+def _agent_chain_config(state: AthleteChatState) -> dict[str, object]:
+    return {
+        "configurable": {
+            "task_id": state["task_id"],
+            "conversation_id": state["conversation_id"],
+            "organization_id": state["organization_id"],
+            "conversation_file_ready_file_ids": state.get(
+                "conversation_file_ready_file_ids",
+                [],
+            ),
+        }
     }
 
 

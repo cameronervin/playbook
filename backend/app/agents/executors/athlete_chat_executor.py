@@ -10,8 +10,9 @@ import structlog
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.builders.graphs_builder import compile_athlete_chat_graph
 from app.agents.executors.conversation_title_executor import ConversationTitleExecutor
+from app.agents.graph_provider import AgentGraphProvider
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.agents.tools.knowledgebase import knowledgebase_organization_context
 from app.core.config import Settings
 from app.core.error_codes import ErrorCode
@@ -26,7 +27,6 @@ logger = structlog.get_logger(__name__)
 ATHLETE_CHAT_MODE = "athlete_chat"
 ATHLETE_CHAT_PHASE = "respond"
 
-GraphFactory = Callable[..., Any]
 TitleExecutorFactory = Callable[..., ConversationTitleExecutor]
 
 
@@ -43,7 +43,7 @@ class AthleteChatExecutor:
         settings: Settings,
         title_model: BaseChatModel | None = None,
         checkpointer: Any | None = None,
-        graph_factory: GraphFactory = compile_athlete_chat_graph,
+        graph_provider: AgentGraphProvider | None = None,
         title_executor_factory: TitleExecutorFactory = ConversationTitleExecutor,
     ) -> None:
         self.session = session
@@ -53,7 +53,12 @@ class AthleteChatExecutor:
         self.stream_service = stream_service
         self.settings = settings
         self.checkpointer = checkpointer
-        self.graph_factory = graph_factory
+        self.graph_provider = graph_provider or AgentGraphProvider(
+            chat_model=self.chat_model,
+            title_model=self.title_model,
+            settings=settings,
+            checkpointer=checkpointer,
+        )
         self.title_executor_factory = title_executor_factory
         self.message_repo = ConversationMessageRepository(session)
 
@@ -74,13 +79,12 @@ class AthleteChatExecutor:
             status="starting_agent",
             metadata={"conversation_id": str(conversation_id)},
         )
-        graph = self.graph_factory(
-            chat_model=self.chat_model,
+        graph = self.graph_provider.athlete_chat_graph()
+        runtime_context = AthleteChatRuntimeContext(
             session=self.session,
+            settings=self.settings,
             knowledgebase_provider=self.knowledgebase_provider,
             stream_service=self.stream_service,
-            checkpointer=self.checkpointer,
-            app_settings=self.settings,
         )
         config = build_graph_invoke_config(
             thread_id=conversation_id,
@@ -109,6 +113,7 @@ class AthleteChatExecutor:
             async for part in graph.astream(
                 initial_state,
                 config=config,
+                context=runtime_context,
                 stream_mode=["updates", "custom"],
                 version="v2",
             ):
@@ -160,6 +165,7 @@ class AthleteChatExecutor:
                 title_model=self.title_model,
                 settings=self.settings,
                 checkpointer=self.checkpointer,
+                graph_provider=self.graph_provider,
             )
             return await executor.execute(
                 task_id=task_id,

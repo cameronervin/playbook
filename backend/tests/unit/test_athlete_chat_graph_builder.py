@@ -3,14 +3,12 @@ from __future__ import annotations
 from app.agents import builders
 from app.agents.builders import chains_builder, graphs_builder
 from app.agents.chains import athlete_chat_chain, conversation_title_chain
+from app.agents.runtime_context import (
+    AthleteChatRuntimeContext,
+    ConversationTitleRuntimeContext,
+)
 from app.agents.states.athlete_chat_state import AthleteChatState
 from app.agents.states.conversation_title_state import ConversationTitleState
-from app.infrastructure.streaming import InMemoryAgentStreamProvider
-from app.services.agent_stream_service import AgentStreamService
-
-
-class FakeKnowledgebaseProvider:
-    provider_name = "fake"
 
 
 class FakeChain:
@@ -43,6 +41,7 @@ def test_create_athlete_chat_chain_wires_stateful_middleware(monkeypatch) -> Non
     middleware = captured_kwargs["middleware"]
     assert result is not None
     assert captured_kwargs["state_schema"] is AthleteChatState
+    assert captured_kwargs["context_schema"] is AthleteChatRuntimeContext
     assert isinstance(middleware, list)
     assert len(middleware) == 1
     assert hasattr(middleware[0], "awrap_model_call")
@@ -63,6 +62,7 @@ def test_create_conversation_title_chain_wires_structured_agent(monkeypatch) -> 
 
     assert result is not None
     assert captured_kwargs["state_schema"] is ConversationTitleState
+    assert captured_kwargs["context_schema"] is ConversationTitleRuntimeContext
     assert captured_kwargs["tools"] == []
 
 
@@ -71,19 +71,24 @@ def test_agent_builder_exports_athlete_chat_and_title_without_example_graph() ->
     assert "compile_conversation_title_graph" in builders.__all__
     assert "create_athlete_chat_node_set" in builders.__all__
     assert "create_conversation_title_node_set" in builders.__all__
+    assert "build_athlete_chat_graph" not in builders.__all__
+    assert "build_conversation_title_graph" not in builders.__all__
+    assert "create_all_chains" not in builders.__all__
+    assert "create_all_nodes" not in builders.__all__
     assert "compile_example_graph" not in builders.__all__
     assert "create_example_node_set" not in builders.__all__
 
 
-def test_compile_athlete_chat_graph_uses_injected_dependencies(
+def test_compile_athlete_chat_graph_builds_static_dependencies(
     test_settings,
     monkeypatch,
 ) -> None:
-    captured_source_registries: list[dict] = []
     original_create_nodes = graphs_builder.create_athlete_chat_node_set
 
     def spy_create_nodes(**kwargs: object) -> dict:
-        captured_source_registries.append(kwargs["source_registry"])  # type: ignore[arg-type]
+        assert "session" not in kwargs
+        assert "stream_service" not in kwargs
+        assert "source_registry" not in kwargs
         return original_create_nodes(**kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(
@@ -99,9 +104,6 @@ def test_compile_athlete_chat_graph_uses_injected_dependencies(
 
     graph = graphs_builder.compile_athlete_chat_graph(
         chat_model=object(),
-        session=object(),
-        knowledgebase_provider=FakeKnowledgebaseProvider(),
-        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
         checkpointer=None,
         app_settings=test_settings,
     )
@@ -111,7 +113,6 @@ def test_compile_athlete_chat_graph_uses_injected_dependencies(
         "search_playbook_knowledgebase",
         "search_conversation_files",
     ]
-    assert captured_source_registries == [{}]
     assert not hasattr(graphs_builder, "ATHLETE_KB_TOOL_PROFILE")
 
 
@@ -133,7 +134,6 @@ def test_compile_conversation_title_graph_uses_title_dependencies(
 
     graph = graphs_builder.compile_conversation_title_graph(
         title_model="title-model",
-        session=object(),
         checkpointer=None,
         app_settings=test_settings,
     )

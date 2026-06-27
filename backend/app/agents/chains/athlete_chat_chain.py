@@ -13,6 +13,7 @@ from app.agents.context.middleware.athlete_chat_middleware import (
     create_athlete_chat_middleware,
 )
 from app.agents.prompts.athlete_chat_prompt import ATHLETE_CHAT_SYSTEM_PROMPT
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.agents.states.athlete_chat_state import (
     AthleteChatState,
     AthleteChatStructuredResponse,
@@ -35,6 +36,7 @@ def create_athlete_chat_chain(
         system_prompt=system_prompt,
         middleware=[create_athlete_chat_middleware(settings=settings)],
         state_schema=AthleteChatState,
+        context_schema=AthleteChatRuntimeContext,
         response_format=ToolStrategy(AthleteChatStructuredResponse),
         checkpointer=checkpointer,
     )

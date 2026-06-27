@@ -9,12 +9,8 @@ import structlog
 from celery.signals import worker_ready
 
 from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
+from app.agents.graph_provider import AgentGraphProvider, AgentGraphProviderCache
 from app.core.config import get_settings
-from app.infrastructure.checkpointer import (
-    cleanup_checkpointer_pool,
-    create_checkpointer,
-    create_checkpointer_pool,
-)
 from app.infrastructure.knowledgebase import get_kb_provider
 from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import get_storage_provider
@@ -24,7 +20,7 @@ from app.services.kb_ingest_outbox import KbIngestOutboxService
 from app.services.upload_reconciliation_service import (
     UploadRequestReconciliationService,
 )
-from app.workers.app import backend_worker, run_async
+from app.workers.app import backend_worker, get_worker_checkpointer, run_async
 from app.workers.queues import WorkerTaskName
 from app.workers.scheduling import (
     MAINTENANCE_STARTUP_EXPIRES_SECONDS,
@@ -36,6 +32,7 @@ logger = structlog.get_logger(__name__)
 TASK_MAX_RETRIES = backend_worker.conf.playbook_task_max_retries
 DEFAULT_OUTBOX_DRAIN_LIMIT = 25
 DEFAULT_UPLOAD_RECONCILE_LIMIT = 100
+_agent_graph_provider_cache = AgentGraphProviderCache()
 
 
 def _raise_scaffold_not_implemented(task_name: WorkerTaskName, **context: Any) -> None:
@@ -97,21 +94,27 @@ async def _run_athlete_chat_agent(
     attached_file_ids: list[str],
 ) -> dict[str, Any]:
     stream_service = AgentStreamService(get_agent_stream_provider())
-    checkpointer_pool = None
     try:
         settings = get_settings()
-        checkpointer_pool = await create_checkpointer_pool(settings)
-        checkpointer = await create_checkpointer(checkpointer_pool)
+        checkpointer = await get_worker_checkpointer(settings)
         async with worker_db_session(settings) as session:
             llm_provider = get_llm_provider(app_settings=settings)
+            chat_model = llm_provider.get_chat_model()
+            title_model = llm_provider.get_title_model()
             executor = AthleteChatExecutor(
                 session=session,
-                chat_model=llm_provider.get_chat_model(),
-                title_model=llm_provider.get_title_model(),
+                chat_model=chat_model,
+                title_model=title_model,
                 knowledgebase_provider=get_kb_provider(app_settings=settings),
                 stream_service=stream_service,
                 settings=settings,
                 checkpointer=checkpointer,
+                graph_provider=_get_agent_graph_provider(
+                    settings=settings,
+                    chat_model=chat_model,
+                    title_model=title_model,
+                    checkpointer=checkpointer,
+                ),
             )
             return await executor.execute(
                 task_id=task_id,
@@ -173,8 +176,22 @@ async def _run_athlete_chat_agent(
             "organization_id": organization_id,
             "attached_file_count": len(attached_file_ids),
         }
-    finally:
-        await cleanup_checkpointer_pool(checkpointer_pool)
+
+
+def _get_agent_graph_provider(
+    *,
+    settings: Any,
+    chat_model: Any,
+    title_model: Any,
+    checkpointer: Any,
+) -> AgentGraphProvider:
+    """Return a cached worker-process graph provider for current dependencies."""
+    return _agent_graph_provider_cache.get_or_create(
+        chat_model=chat_model,
+        title_model=title_model,
+        settings=settings,
+        checkpointer=checkpointer,
+    )
 
 
 @backend_worker.task(

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agents.runtime_context import ConversationTitleRuntimeContext
 from app.agents.states.conversation_title_state import ConversationTitleState
 
 
 def create_conversation_title_graph(nodes: dict[str, object]) -> StateGraph:
     """Create the conversation title graph topology without compiling it."""
-    builder = StateGraph(ConversationTitleState)
+    builder = StateGraph(
+        ConversationTitleState,
+        context_schema=ConversationTitleRuntimeContext,
+    )
     for name, node_fn in nodes.items():
         builder.add_node(name, node_fn)
 

@@ -17,7 +17,12 @@ class TitleChain:
         self.title = title
         self.calls = 0
 
-    async def ainvoke(self, input: dict) -> dict[str, ConversationTitleStructuredResponse]:
+    async def ainvoke(
+        self,
+        input: dict,
+        config: dict | None = None,
+        context: object | None = None,
+    ) -> dict[str, ConversationTitleStructuredResponse]:
         self.calls += 1
         return {
             "structured_response": ConversationTitleStructuredResponse(

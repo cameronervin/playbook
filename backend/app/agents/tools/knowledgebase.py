@@ -11,16 +11,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
+from langchain.tools import ToolRuntime
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
 
-from app.core.config import Settings, get_settings
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.core.exceptions import KnowledgebaseError
-from app.infrastructure.knowledgebase import (
-    BaseKnowledgebaseProvider,
-    get_kb_provider,
-)
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
 
 logger = structlog.get_logger(__name__)
@@ -36,24 +32,6 @@ _KB_CONVERSATION_FILE_IDS: ContextVar[tuple[str, ...]] = ContextVar(
     "kb_conversation_file_ids",
     default=(),
 )
-
-
-class KnowledgebaseSearchInput(BaseModel):
-    """Input schema for reusable KB search tools."""
-
-    query: str = Field(..., description="Natural language retrieval query")
-    max_docs: int | None = Field(
-        default=None,
-        ge=1,
-        le=50,
-        description="Optional maximum number of chunks to retrieve",
-    )
-    score_threshold: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Optional minimum similarity threshold",
-    )
 
 
 @dataclass(frozen=True)
@@ -149,25 +127,25 @@ def conversation_file_search_context(
 
 def create_knowledgebase_search_tool(
     profile: KnowledgebaseToolProfile,
-    *,
-    provider: BaseKnowledgebaseProvider | None = None,
-    app_settings: Settings | None = None,
-    source_registry: SourceRegistry | None = None,
 ) -> StructuredTool:
     """Create a named KB search tool using a profile-specific model contract."""
-    settings = app_settings or get_settings()
-    registry = source_registry if source_registry is not None else {}
 
     async def _search(
         query: str,
+        runtime: ToolRuntime,
         max_docs: int | None = None,
         score_threshold: float | None = None,
         # LangChain injects runtime config only when the annotation is exactly RunnableConfig.
         config: RunnableConfig = None,
     ) -> str:
-        kb_provider = provider or get_kb_provider(app_settings=settings)
+        runtime_config = _runtime_config(runtime, config)
+        runtime_context = _runtime_context(runtime, tool_name=profile.tool_name)
+        if runtime_context is None:
+            return profile.unavailable_message
+        kb_provider = runtime_context.knowledgebase_provider
+        registry = runtime_context.source_registry
         organization_id = (
-            _organization_id_from_config(config) or _KB_ORGANIZATION_ID.get()
+            _organization_id_from_config(runtime_config) or _KB_ORGANIZATION_ID.get()
         )
         if not organization_id:
             logger.warning(
@@ -220,36 +198,35 @@ def create_knowledgebase_search_tool(
         coroutine=_search,
         name=profile.tool_name,
         description=profile.description,
-        args_schema=KnowledgebaseSearchInput,
     )
 
 
 def create_conversation_file_search_tool(
     profile: KnowledgebaseToolProfile,
-    *,
-    provider: BaseKnowledgebaseProvider | None = None,
-    app_settings: Settings | None = None,
-    source_registry: SourceRegistry | None = None,
 ) -> StructuredTool:
     """Create a private conversation-file search tool with hidden scope."""
-    settings = app_settings or get_settings()
-    registry = source_registry if source_registry is not None else {}
 
     async def _search(
         query: str,
+        runtime: ToolRuntime,
         max_docs: int | None = None,
         score_threshold: float | None = None,
         # LangChain injects runtime config only when the annotation is exactly RunnableConfig.
         config: RunnableConfig = None,
     ) -> str:
-        kb_provider = provider or get_kb_provider(app_settings=settings)
+        runtime_config = _runtime_config(runtime, config)
+        runtime_context = _runtime_context(runtime, tool_name=profile.tool_name)
+        if runtime_context is None:
+            return profile.unavailable_message
+        kb_provider = runtime_context.knowledgebase_provider
+        registry = runtime_context.source_registry
         organization_id = (
-            _organization_id_from_config(config) or _KB_ORGANIZATION_ID.get()
+            _organization_id_from_config(runtime_config) or _KB_ORGANIZATION_ID.get()
         )
         conversation_id = (
-            _conversation_id_from_config(config) or _KB_CONVERSATION_ID.get()
+            _conversation_id_from_config(runtime_config) or _KB_CONVERSATION_ID.get()
         )
-        file_ids = _conversation_file_ids_from_config(config) or list(
+        file_ids = _conversation_file_ids_from_config(runtime_config) or list(
             _KB_CONVERSATION_FILE_IDS.get()
         )
         if not organization_id or not conversation_id:
@@ -314,8 +291,33 @@ def create_conversation_file_search_tool(
         coroutine=_search,
         name=profile.tool_name,
         description=profile.description,
-        args_schema=KnowledgebaseSearchInput,
     )
+
+
+def _runtime_config(
+    runtime: ToolRuntime,
+    config: RunnableConfig | None,
+) -> RunnableConfig | None:
+    if config is not None:
+        return config
+    runtime_config = getattr(runtime, "config", None)
+    return runtime_config if isinstance(runtime_config, Mapping) else None
+
+
+def _runtime_context(
+    runtime: ToolRuntime,
+    *,
+    tool_name: str,
+) -> AthleteChatRuntimeContext | None:
+    context = getattr(runtime, "context", None)
+    if isinstance(context, AthleteChatRuntimeContext):
+        return context
+    logger.warning(
+        "agent_kb_tool_missing_runtime_context",
+        tool_name=tool_name,
+        context_type=type(context).__name__ if context is not None else None,
+    )
+    return None
 
 
 def _organization_id_from_config(config: RunnableConfig | None) -> str | None:

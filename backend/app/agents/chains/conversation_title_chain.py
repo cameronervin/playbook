@@ -11,6 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from app.agents.prompts.conversation_title_prompt import (
     CONVERSATION_TITLE_SYSTEM_PROMPT,
 )
+from app.agents.runtime_context import ConversationTitleRuntimeContext
 from app.agents.states.conversation_title_state import (
     ConversationTitleState,
     ConversationTitleStructuredResponse,
@@ -29,6 +30,7 @@ def create_conversation_title_chain(
         tools=[],
         system_prompt=system_prompt,
         state_schema=ConversationTitleState,
+        context_schema=ConversationTitleRuntimeContext,
         response_format=ToolStrategy(ConversationTitleStructuredResponse),
         checkpointer=checkpointer,
     )

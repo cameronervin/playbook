@@ -7,13 +7,13 @@ from uuid import UUID
 
 import structlog
 from langchain_core.messages import HumanMessage
-from sqlalchemy.ext.asyncio import AsyncSession
+from langgraph.runtime import Runtime
 
+from app.agents.runtime_context import ConversationTitleRuntimeContext
 from app.agents.states.conversation_title_state import (
     ConversationTitleState,
     ConversationTitleStructuredResponse,
 )
-from app.core.config import Settings
 from app.core.exceptions import NotFoundError
 from app.repositories.conversations import (
     ConversationMessageRepository,
@@ -27,15 +27,16 @@ logger = structlog.get_logger(__name__)
 def create_conversation_title_nodes(
     *,
     chains: dict[str, Any],
-    session: AsyncSession,
-    settings: Settings,
 ) -> dict[str, Any]:
     """Create all nodes needed by the conversation title graph."""
-    conversation_repo = ConversationRepository(session)
-    message_repo = ConversationMessageRepository(session)
-
-    async def load_title_context(state: ConversationTitleState) -> dict[str, Any]:
+    async def load_title_context(
+        state: ConversationTitleState,
+        runtime: Runtime[ConversationTitleRuntimeContext],
+    ) -> dict[str, Any]:
         """Validate ownership and load the first-turn title context."""
+        context = runtime.context
+        conversation_repo = ConversationRepository(context.session)
+        message_repo = ConversationMessageRepository(context.session)
         conversation_id = UUID(state["conversation_id"])
         athlete_user_id = UUID(state["athlete_user_id"])
         organization_id = UUID(state["organization_id"])
@@ -74,7 +75,10 @@ def create_conversation_title_nodes(
             "provisional_title": provisional_title,
         }
 
-    async def generate_title(state: ConversationTitleState) -> dict[str, Any]:
+    async def generate_title(
+        state: ConversationTitleState,
+        runtime: Runtime[ConversationTitleRuntimeContext],
+    ) -> dict[str, Any]:
         """Invoke the structured conversation title chain."""
         result = await chains["conversation_title"].ainvoke(
             {
@@ -83,13 +87,20 @@ def create_conversation_title_nodes(
                 ],
                 "task_id": state.get("task_id", ""),
                 "conversation_id": state["conversation_id"],
-            }
+            },
+            config=_title_chain_config(state),
+            context=runtime.context,
         )
         structured = _structured_title_response(result)
         return {"generated_title": structured.title}
 
-    async def save_title(state: ConversationTitleState) -> dict[str, Any]:
+    async def save_title(
+        state: ConversationTitleState,
+        runtime: Runtime[ConversationTitleRuntimeContext],
+    ) -> dict[str, Any]:
         """Persist the title if the provisional title is still current."""
+        context = runtime.context
+        conversation_repo = ConversationRepository(context.session)
         conversation_id = UUID(state["conversation_id"])
         athlete_user_id = UUID(state["athlete_user_id"])
         organization_id = UUID(state["organization_id"])
@@ -118,11 +129,11 @@ def create_conversation_title_nodes(
             title=title,
             expected_title=provisional_title,
         )
-        await session.commit()
+        await context.session.commit()
         logger.info(
             "conversation_title_updated",
             conversation_id=str(conversation_id),
-            model=settings.LLM_TITLE_MODEL or "default",
+            model=context.settings.LLM_TITLE_MODEL or "default",
         )
         return {"conversation_title": title}
 
@@ -130,6 +141,17 @@ def create_conversation_title_nodes(
         "load_title_context": load_title_context,
         "generate_title": generate_title,
         "save_title": save_title,
+    }
+
+
+def _title_chain_config(state: ConversationTitleState) -> dict[str, object]:
+    return {
+        "configurable": {
+            "task_id": state.get("task_id", ""),
+            "conversation_id": state["conversation_id"],
+            "organization_id": state["organization_id"],
+            "assistant_message_id": state["assistant_message_id"],
+        }
     }
 
 

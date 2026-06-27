@@ -25,6 +25,11 @@ from celery.signals import (
 
 from app.core.config import Settings, get_settings
 from app.core.logging_config import configure_logging, install_secret_redaction_filter
+from app.infrastructure.checkpointer import (
+    cleanup_checkpointer_pool,
+    create_checkpointer,
+    create_checkpointer_pool,
+)
 from app.workers.queues import (
     TASK_QUEUES,
     TASK_ROUTES,
@@ -152,6 +157,8 @@ for _signal_name in ("after_setup_logger", "after_setup_task_logger"):
 _worker_loop: asyncio.AbstractEventLoop | None = None
 _worker_loop_owner_thread: int | None = None
 _worker_resources_initialized = False
+_worker_checkpointer_pool: Any | None = None
+_worker_checkpointer: Any | None = None
 
 
 def get_worker_loop() -> asyncio.AbstractEventLoop:
@@ -185,6 +192,26 @@ def run_async(coro: Coroutine[Any, Any, _ASYNC_RESULT]) -> _ASYNC_RESULT:
         raise
 
 
+async def get_worker_checkpointer(app_settings: Settings) -> Any:
+    """Return the worker-process LangGraph checkpointer."""
+    global _worker_checkpointer_pool, _worker_checkpointer
+
+    if _worker_checkpointer is None:
+        _worker_checkpointer_pool = await create_checkpointer_pool(app_settings)
+        _worker_checkpointer = await create_checkpointer(_worker_checkpointer_pool)
+        logger.info("backend_worker_checkpointer_initialised")
+    return _worker_checkpointer
+
+
+async def cleanup_worker_checkpointer() -> None:
+    """Close the worker-process LangGraph checkpointer pool."""
+    global _worker_checkpointer_pool, _worker_checkpointer
+
+    await cleanup_checkpointer_pool(_worker_checkpointer_pool)
+    _worker_checkpointer_pool = None
+    _worker_checkpointer = None
+
+
 @worker_process_init.connect
 @worker_ready.connect
 def init_worker_resources(**_: Any) -> None:
@@ -216,6 +243,7 @@ def teardown_worker_resources(**_: Any) -> None:
     global _worker_loop, _worker_loop_owner_thread, _worker_resources_initialized
 
     if _worker_loop is not None and not _worker_loop.is_closed():
+        _worker_loop.run_until_complete(cleanup_worker_checkpointer())
         _worker_loop.close()
 
     _worker_loop = None

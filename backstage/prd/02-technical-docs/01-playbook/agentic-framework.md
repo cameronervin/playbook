@@ -49,6 +49,16 @@ persistent environments. The checkpointer stores durable graph state keyed by
 thread/session IDs so streamed or multi-step agent runs can resume safely after
 process restarts.
 
+Backend worker agent graphs are compiled as process-local reusable objects, not
+rebuilt for every task. Compiled graph topology, chains, tools, and checkpointer
+are static for a worker process and are owned by an explicit
+`AgentGraphProviderCache`. Per-task dependencies such as SQLAlchemy sessions,
+stream services, KB providers, and mutable citation registries are passed
+through LangGraph/LangChain runtime context at invocation time. Graph nodes
+create repositories from the runtime session during execution, and KB tools read
+provider/source-registry dependencies only from `ToolRuntime.context` with no
+build-time fallback registry or provider.
+
 Interactive agent generation must not run inside the request handler. Athlete
 chat and admin chat message APIs persist the user/admin turn and assistant
 placeholder, then dispatch a Celery task. The worker executes the agent and

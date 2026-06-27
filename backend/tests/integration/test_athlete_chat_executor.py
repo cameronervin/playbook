@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
+from langchain.tools import ToolRuntime
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.agents.builders import chains_builder
@@ -149,8 +151,16 @@ class ToolCallingChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, AthleteChatStructuredResponse]:
-        tool_result = await self.tool.ainvoke({"query": "nil disclosure"})
+        tool_result = await self.tool.ainvoke(
+            {
+                "query": "nil disclosure",
+                "runtime": _tool_runtime(config=config, context=context),
+            },
+            config=config,
+        )
         source_key = tool_result.split("]", maxsplit=1)[0].lstrip("[")
         return {
             "structured_response": AthleteChatStructuredResponse(
@@ -170,8 +180,16 @@ class MultiSourceToolCallingChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, AthleteChatStructuredResponse]:
-        tool_result = await self.tool.ainvoke({"query": "nil disclosure"})
+        tool_result = await self.tool.ainvoke(
+            {
+                "query": "nil disclosure",
+                "runtime": _tool_runtime(config=config, context=context),
+            },
+            config=config,
+        )
         source_keys = re.findall(r"\[(S-[^\]]+)\]", tool_result)
         return {
             "structured_response": AthleteChatStructuredResponse(
@@ -188,6 +206,8 @@ class NoToolChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, AthleteChatStructuredResponse]:
         return {
             "structured_response": AthleteChatStructuredResponse(
@@ -204,6 +224,8 @@ class TitleChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, ConversationTitleStructuredResponse]:
         return {
             "structured_response": ConversationTitleStructuredResponse(
@@ -216,6 +238,8 @@ class FailIfInvokedChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, AthleteChatStructuredResponse]:
         pytest.fail("safety bypass should not invoke the athlete chat agent")
 
@@ -232,6 +256,8 @@ class FileToolChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, AthleteChatStructuredResponse]:
         message_render = "\n".join(
             str(getattr(message, "content", "")) for message in input["messages"]
@@ -242,7 +268,13 @@ class FileToolChain:
             manifest = str(input.get("conversation_file_manifest", ""))
             assert "## Uploaded File Manifest" in manifest
             assert "search_conversation_files excerpts as evidence" in manifest
-        tool_result = await self.file_tool.ainvoke({"query": "contract approval"})
+        tool_result = await self.file_tool.ainvoke(
+            {
+                "query": "contract approval",
+                "runtime": _tool_runtime(config=config, context=context),
+            },
+            config=config,
+        )
         source_key = _source_key_from_tool_result(tool_result)
         if source_key is None:
             return {
@@ -273,10 +305,24 @@ class MixedSourceChain:
     async def ainvoke(
         self,
         input: dict,
+        config: dict | None = None,
+        context: object | None = None,
     ) -> dict[str, AthleteChatStructuredResponse]:
-        kb_result = await self.kb_tool.ainvoke({"query": "nil disclosure"})
+        kb_result = await self.kb_tool.ainvoke(
+            {
+                "query": "nil disclosure",
+                "runtime": _tool_runtime(config=config, context=context),
+            },
+            config=config,
+        )
         admin_source_key = kb_result.split("]", maxsplit=1)[0].lstrip("[")
-        file_result = await self.file_tool.ainvoke({"query": "contract approval"})
+        file_result = await self.file_tool.ainvoke(
+            {
+                "query": "contract approval",
+                "runtime": _tool_runtime(config=config, context=context),
+            },
+            config=config,
+        )
         file_source_key = _source_key_from_tool_result(file_result)
         assert file_source_key is not None
         return {
@@ -291,6 +337,21 @@ class MixedSourceChain:
                 risk_labels=["compliance"],
             )
         }
+
+
+def _tool_runtime(
+    *,
+    config: dict | None = None,
+    context: object | None = None,
+) -> ToolRuntime:
+    return ToolRuntime(
+        state={},
+        context=context or SimpleNamespace(),
+        config=config or {},
+        stream_writer=lambda _: None,
+        tool_call_id=None,
+        store=None,
+    )
 
 
 def fake_chain_with_tool(*, tools: list, **_: object) -> ToolCallingChain:

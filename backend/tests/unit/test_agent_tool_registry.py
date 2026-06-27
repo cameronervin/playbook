@@ -7,33 +7,10 @@ from app.agents.tools.tool_assignment import (
 )
 from app.agents.tools.tool_prompts import ToolPromptKey
 from app.agents.tools.tool_registry import (
-    ATHLETE_CHAT_SOURCE_REGISTRY_KEY,
     TOOL_REGISTRY,
     WORKFLOW_CHAIN_NAMES,
     ToolBuildContext,
 )
-from app.schemas.knowledgebase import KnowledgebaseResult
-
-
-class FakeKnowledgebaseProvider:
-    provider_name = "fake"
-
-    async def search(
-        self,
-        query: str,
-        organization_id: str,
-        max_docs: int = 10,
-        score_threshold: float = 0.7,
-        metadata_filter: dict | None = None,
-        configuration_id: str | None = None,
-    ) -> KnowledgebaseResult:
-        return KnowledgebaseResult(
-            query=query,
-            context="",
-            sources=[],
-            zero_hit=True,
-            latency_ms=1,
-        )
 
 
 def test_registry_declares_athlete_chat_knowledgebase_tools() -> None:
@@ -53,13 +30,10 @@ def test_registry_declares_athlete_chat_knowledgebase_tools() -> None:
     )
 
 
-def test_registry_builds_athlete_tools_and_shared_source_registry(
+def test_registry_builds_athlete_tools_without_build_time_source_registry(
     test_settings,
 ) -> None:
-    context = ToolBuildContext(
-        settings=test_settings,
-        knowledgebase_provider=FakeKnowledgebaseProvider(),
-    )
+    context = ToolBuildContext(settings=test_settings)
 
     tools = resolve_active_tools(context)
 
@@ -67,15 +41,12 @@ def test_registry_builds_athlete_tools_and_shared_source_registry(
         "search_playbook_knowledgebase",
         "search_conversation_files",
     ]
-    assert ATHLETE_CHAT_SOURCE_REGISTRY_KEY in context.source_registries
-    assert context.source_registries[ATHLETE_CHAT_SOURCE_REGISTRY_KEY] == {}
+    assert not hasattr(context, "source_registries")
+    assert not hasattr(context, "knowledgebase_provider")
 
 
 def test_assignment_maps_athlete_kb_tool_to_athlete_chat(test_settings) -> None:
-    context = ToolBuildContext(
-        settings=test_settings,
-        knowledgebase_provider=FakeKnowledgebaseProvider(),
-    )
+    context = ToolBuildContext(settings=test_settings)
     tools = resolve_active_tools(context)
 
     assignments = build_workflow_chain_tool_map(tools)

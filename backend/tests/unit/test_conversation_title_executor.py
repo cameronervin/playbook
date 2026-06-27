@@ -12,14 +12,25 @@ from app.agents.executors.conversation_title_executor import ConversationTitleEx
 class CapturingGraph:
     def __init__(self) -> None:
         self.config: dict[str, object] | None = None
+        self.context: object | None = None
 
     async def ainvoke(
         self,
         input: dict[str, object],
         config: dict[str, object] | None = None,
+        context: object | None = None,
     ) -> dict[str, str]:
         self.config = config
+        self.context = context
         return {"conversation_title": "Captured Title"}
+
+
+class CapturingGraphProvider:
+    def __init__(self, graph: CapturingGraph) -> None:
+        self.graph = graph
+
+    def conversation_title_graph(self) -> CapturingGraph:
+        return self.graph
 
 
 class FakeMessageRepository:
@@ -59,15 +70,12 @@ async def test_conversation_title_executor_passes_checkpointer_config(
     organization_id = uuid4()
     graph = CapturingGraph()
 
-    def graph_factory(**_: object) -> CapturingGraph:
-        return graph
-
     executor = ConversationTitleExecutor(
         session=object(),
         title_model=object(),
         settings=test_settings,
         checkpointer=InMemorySaver(),
-        graph_factory=graph_factory,
+        graph_provider=CapturingGraphProvider(graph),
     )
     executor.message_repo = FakeMessageRepository(
         task_id=task_id,
@@ -96,3 +104,6 @@ async def test_conversation_title_executor_passes_checkpointer_config(
     assert configurable["assistant_message_id"] == str(assistant_message_id)
     assert configurable["organization_id"] == str(organization_id)
     assert configurable["user_message_id"] == str(user_message_id)
+    assert graph.context is not None
+    assert graph.context.session is executor.session
+    assert graph.context.settings is test_settings

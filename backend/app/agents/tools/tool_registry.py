@@ -8,7 +8,7 @@ builders do not need to know profile details for individual tools.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 import structlog
@@ -17,13 +17,11 @@ from langchain_core.tools import BaseTool
 from app.agents.tools.knowledgebase import (
     ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
     ATHLETE_KB_TOOL_PROFILE,
-    SourceRegistry,
     create_conversation_file_search_tool,
     create_knowledgebase_search_tool,
 )
 from app.agents.tools.tool_prompts import ToolPromptKey
 from app.infrastructure.knowledgebase import (
-    BaseKnowledgebaseProvider,
     is_kb_feature_enabled,
 )
 
@@ -32,7 +30,6 @@ logger = structlog.get_logger(__name__)
 ToolWorkflow = Literal["athlete_chat"]
 
 ATHLETE_CHAT_CHAIN_NAMES: tuple[str, ...] = ("athlete_chat",)
-ATHLETE_CHAT_SOURCE_REGISTRY_KEY = "athlete_chat"
 
 WORKFLOW_CHAIN_NAMES: dict[ToolWorkflow, tuple[str, ...]] = {
     "athlete_chat": ATHLETE_CHAT_CHAIN_NAMES,
@@ -44,8 +41,6 @@ class ToolBuildContext:
     """Context passed to registry factories when building tools."""
 
     settings: object
-    knowledgebase_provider: BaseKnowledgebaseProvider | None = None
-    source_registries: dict[str, SourceRegistry] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,26 +67,12 @@ def _kb_tools_enabled(context: ToolBuildContext) -> bool:
     return enabled
 
 
-def _create_athlete_kb_tool(context: ToolBuildContext) -> BaseTool:
-    return create_knowledgebase_search_tool(
-        ATHLETE_KB_TOOL_PROFILE,
-        provider=context.knowledgebase_provider,
-        app_settings=context.settings,  # type: ignore[arg-type]
-        source_registry=_athlete_chat_source_registry(context),
-    )
+def _create_athlete_kb_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_knowledgebase_search_tool(ATHLETE_KB_TOOL_PROFILE)
 
 
-def _create_athlete_conversation_file_tool(context: ToolBuildContext) -> BaseTool:
-    return create_conversation_file_search_tool(
-        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
-        provider=context.knowledgebase_provider,
-        app_settings=context.settings,  # type: ignore[arg-type]
-        source_registry=_athlete_chat_source_registry(context),
-    )
-
-
-def _athlete_chat_source_registry(context: ToolBuildContext) -> SourceRegistry:
-    return context.source_registries.setdefault(ATHLETE_CHAT_SOURCE_REGISTRY_KEY, {})
+def _create_athlete_conversation_file_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_conversation_file_search_tool(ATHLETE_CONVERSATION_FILE_TOOL_PROFILE)
 
 
 TOOL_REGISTRY: tuple[ToolSpec, ...] = (

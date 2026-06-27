@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import UUID
+
+from langchain.tools import ToolRuntime
 
 from app.agents.tools.knowledgebase import (
     ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
@@ -12,8 +15,11 @@ from app.agents.tools.knowledgebase import (
     format_conversation_file_context,
     register_knowledgebase_sources,
 )
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.infrastructure.knowledgebase.providers.local_kb import LocalKBProvider
+from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
+from app.services.agent_stream_service import AgentStreamService
 
 ORG_ID = UUID("00000000-0000-0000-0000-000000000099")
 CONVERSATION_ID = UUID("00000000-0000-0000-0000-000000000098")
@@ -137,20 +143,85 @@ class _RecordingLocalKBProvider(LocalKBProvider):
         return self.payload
 
 
-async def _invoke_tool(tool, query: str):
+async def _invoke_tool(
+    tool,
+    query: str,
+    *,
+    provider: object,
+    settings: object | None = None,
+    source_registry: dict | None = None,
+):
+    config = {"configurable": {"organization_id": str(ORG_ID)}}
+    runtime_context = _athlete_runtime_context(
+        provider=provider,
+        settings=settings or SimpleNamespace(),
+        source_registry=source_registry if source_registry is not None else {},
+    )
     return await tool.ainvoke(
-        {"query": query},
-        config={"configurable": {"organization_id": str(ORG_ID)}},
+        {
+            "query": query,
+            "runtime": _tool_runtime(config=config, context=runtime_context),
+        },
+        config=config,
     )
 
 
-async def _invoke_conversation_file_tool(tool, query: str):
+async def _invoke_conversation_file_tool(
+    tool,
+    query: str,
+    *,
+    provider: object,
+    settings: object | None = None,
+    source_registry: dict | None = None,
+):
+    config = {"configurable": {"organization_id": str(ORG_ID)}}
+    runtime_context = _athlete_runtime_context(
+        provider=provider,
+        settings=settings or SimpleNamespace(),
+        source_registry=source_registry if source_registry is not None else {},
+    )
     with conversation_file_search_context(
         organization_id=str(ORG_ID),
         conversation_id=str(CONVERSATION_ID),
         file_ids=[str(FILE_ID)],
     ):
-        return await tool.ainvoke({"query": query})
+        return await tool.ainvoke(
+            {
+                "query": query,
+                "runtime": _tool_runtime(config=config, context=runtime_context),
+            },
+            config=config,
+        )
+
+
+def _tool_runtime(
+    *,
+    config: dict | None = None,
+    context: object | None = None,
+) -> ToolRuntime:
+    return ToolRuntime(
+        state={},
+        context=context,
+        config=config or {},
+        stream_writer=lambda _: None,
+        tool_call_id=None,
+        store=None,
+    )
+
+
+def _athlete_runtime_context(
+    *,
+    provider: object,
+    settings: object,
+    source_registry: dict,
+) -> AthleteChatRuntimeContext:
+    return AthleteChatRuntimeContext(
+        session=object(),
+        settings=settings,
+        knowledgebase_provider=provider,
+        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
+        source_registry=source_registry,
+    )
 
 
 def _profile(**overrides: object) -> KnowledgebaseToolProfile:
@@ -163,6 +234,43 @@ def _profile(**overrides: object) -> KnowledgebaseToolProfile:
     }
     values.update(overrides)
     return KnowledgebaseToolProfile(**values)
+
+
+async def test_knowledgebase_tool_returns_unavailable_without_runtime_context() -> None:
+    tool = create_knowledgebase_search_tool(
+        _profile(unavailable_message="KB runtime missing.")
+    )
+    config = {"configurable": {"organization_id": str(ORG_ID)}}
+
+    result = await tool.ainvoke(
+        {"query": "nil", "runtime": _tool_runtime(config=config)},
+        config=config,
+    )
+
+    assert result == "KB runtime missing."
+
+
+async def test_conversation_file_tool_returns_unavailable_for_malformed_context() -> None:
+    tool = create_conversation_file_search_tool(ATHLETE_CONVERSATION_FILE_TOOL_PROFILE)
+    config = {"configurable": {"organization_id": str(ORG_ID)}}
+
+    with conversation_file_search_context(
+        organization_id=str(ORG_ID),
+        conversation_id=str(CONVERSATION_ID),
+        file_ids=[str(FILE_ID)],
+    ):
+        result = await tool.ainvoke(
+            {
+                "query": "contract",
+                "runtime": _tool_runtime(
+                    config=config,
+                    context=SimpleNamespace(knowledgebase_provider=object()),
+                ),
+            },
+            config=config,
+        )
+
+    assert result == ATHLETE_CONVERSATION_FILE_TOOL_PROFILE.unavailable_message
 
 
 async def test_knowledgebase_tool_uses_profile_name_description_and_filters() -> None:
@@ -190,13 +298,14 @@ async def test_knowledgebase_tool_uses_profile_name_description_and_filters() ->
         )
     )
     source_registry = {}
-    tool = create_knowledgebase_search_tool(
-        _profile(),
+    tool = create_knowledgebase_search_tool(_profile())
+
+    result = await _invoke_tool(
+        tool,
+        "nil disclosure",
         provider=provider,
         source_registry=source_registry,
     )
-
-    result = await _invoke_tool(tool, "nil disclosure")
 
     assert tool.name == "search_playbook_knowledgebase"
     assert "athlete answers" in tool.description
@@ -240,9 +349,9 @@ async def test_knowledgebase_tool_formats_citation_ready_metadata() -> None:
             latency_ms=12,
         )
     )
-    tool = create_knowledgebase_search_tool(_profile(), provider=provider)
+    tool = create_knowledgebase_search_tool(_profile())
 
-    result = await _invoke_tool(tool, "nil disclosure")
+    result = await _invoke_tool(tool, "nil disclosure", provider=provider)
 
     assert "Document ID: 00000000-0000-0000-0000-000000000011" in result
     assert "KB Service Document ID: 00000000-0000-0000-0000-000000000021" in result
@@ -293,13 +402,14 @@ async def test_knowledgebase_tool_uses_provider_order_for_ranks_and_sources() ->
         )
     )
     source_registry = {}
-    tool = create_knowledgebase_search_tool(
-        _profile(),
+    tool = create_knowledgebase_search_tool(_profile())
+
+    result = await _invoke_tool(
+        tool,
+        "nil disclosure",
         provider=provider,
         source_registry=source_registry,
     )
-
-    result = await _invoke_tool(tool, "nil disclosure")
     registered_sources = list(source_registry.values())
 
     assert result.index("First Ranked Source") < result.index("Second Ranked Source")
@@ -318,6 +428,70 @@ async def test_knowledgebase_tool_uses_provider_order_for_ranks_and_sources() ->
     )
     assert registered_sources[0].metadata["rerank_score"] == 0.77
     assert registered_sources[0].metadata["ranking_strategy"] == "hybrid_rerank"
+
+
+async def test_knowledgebase_tool_uses_runtime_source_registry_per_invocation(
+    test_settings,
+) -> None:
+    provider = FakeKnowledgebaseProvider(
+        KnowledgebaseResult(
+            query="nil",
+            context="context",
+            sources=[
+                RetrievedChunk(
+                    text="Each run keeps citations isolated.",
+                    similarity_score=0.9,
+                    metadata={
+                        "document_id": "00000000-0000-0000-0000-000000000111",
+                        "chunk_id": "00000000-0000-0000-0000-000000000112",
+                        "source_title": "Runtime Registry Source",
+                    },
+                )
+            ],
+            confidence=0.9,
+            zero_hit=False,
+            latency_ms=10,
+        )
+    )
+    tool = create_knowledgebase_search_tool(_profile())
+    first_registry: dict = {}
+    second_registry: dict = {}
+    config = {"configurable": {"organization_id": str(ORG_ID)}}
+
+    await tool.ainvoke(
+        {
+            "query": "nil disclosure",
+            "runtime": _tool_runtime(
+                config=config,
+                context=_athlete_runtime_context(
+                    provider=provider,
+                    settings=test_settings,
+                    source_registry=first_registry,
+                ),
+            ),
+        },
+        config=config,
+    )
+    await tool.ainvoke(
+        {
+            "query": "nil disclosure",
+            "runtime": _tool_runtime(
+                config=config,
+                context=_athlete_runtime_context(
+                    provider=provider,
+                    settings=test_settings,
+                    source_registry=second_registry,
+                ),
+            ),
+        },
+        config=config,
+    )
+
+    assert first_registry
+    assert second_registry
+    assert first_registry is not second_registry
+    assert list(first_registry.values())[0].source_title == "Runtime Registry Source"
+    assert list(second_registry.values())[0].source_title == "Runtime Registry Source"
 
 
 async def test_local_kb_provider_accepts_canonical_results_payload(
@@ -466,12 +640,9 @@ async def test_local_kb_provider_resolves_default_configuration_without_manual_c
 
 async def test_athlete_kb_tool_filters_by_visibility_policy_scope() -> None:
     provider = FakeKnowledgebaseProvider()
-    tool = create_knowledgebase_search_tool(
-        ATHLETE_KB_TOOL_PROFILE,
-        provider=provider,
-    )
+    tool = create_knowledgebase_search_tool(ATHLETE_KB_TOOL_PROFILE)
 
-    await _invoke_tool(tool, "nil disclosure")
+    await _invoke_tool(tool, "nil disclosure", provider=provider)
 
     assert provider.admin_upload_requests == provider.requests
     assert provider.requests == [
@@ -488,12 +659,9 @@ async def test_athlete_kb_tool_filters_by_visibility_policy_scope() -> None:
 
 async def test_knowledgebase_tool_uses_admin_upload_provider_method() -> None:
     provider = FakeKnowledgebaseProvider()
-    tool = create_knowledgebase_search_tool(
-        ATHLETE_KB_TOOL_PROFILE,
-        provider=provider,
-    )
+    tool = create_knowledgebase_search_tool(ATHLETE_KB_TOOL_PROFILE)
 
-    await _invoke_tool(tool, "compliance")
+    await _invoke_tool(tool, "compliance", provider=provider)
 
     assert len(provider.admin_upload_requests) == 1
     assert provider.admin_upload_requests[0]["metadata_filter"] == {
@@ -532,13 +700,14 @@ async def test_conversation_file_tool_hides_private_scope_and_searches_ready_fil
         )
     )
     registry = {}
-    tool = create_conversation_file_search_tool(
-        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
+    tool = create_conversation_file_search_tool(ATHLETE_CONVERSATION_FILE_TOOL_PROFILE)
+
+    result = await _invoke_conversation_file_tool(
+        tool,
+        "contract approval",
         provider=provider,
         source_registry=registry,
     )
-
-    result = await _invoke_conversation_file_tool(tool, "contract approval")
 
     assert tool.name == "search_conversation_files"
     assert "organization_id" not in tool.args
@@ -568,9 +737,11 @@ async def test_conversation_file_tool_returns_no_ready_files_message_without_pro
     None
 ):
     provider = FakeKnowledgebaseProvider()
-    tool = create_conversation_file_search_tool(
-        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
+    tool = create_conversation_file_search_tool(ATHLETE_CONVERSATION_FILE_TOOL_PROFILE)
+    runtime_context = _athlete_runtime_context(
         provider=provider,
+        settings=SimpleNamespace(),
+        source_registry={},
     )
 
     with conversation_file_search_context(
@@ -578,7 +749,12 @@ async def test_conversation_file_tool_returns_no_ready_files_message_without_pro
         conversation_id=str(CONVERSATION_ID),
         file_ids=[],
     ):
-        result = await tool.ainvoke({"query": "approval"})
+        result = await tool.ainvoke(
+            {
+                "query": "approval",
+                "runtime": _tool_runtime(context=runtime_context),
+            },
+        )
 
     assert result == "No ready uploaded conversation files are available."
     assert provider.conversation_file_requests == []
@@ -595,12 +771,14 @@ async def test_conversation_file_tool_handles_provider_errors_without_leaking_de
         ) -> KnowledgebaseResult:
             raise RuntimeError("secret private retrieval details")
 
-    tool = create_conversation_file_search_tool(
-        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
-        provider=BrokenProvider(),
-    )
+    provider = BrokenProvider()
+    tool = create_conversation_file_search_tool(ATHLETE_CONVERSATION_FILE_TOOL_PROFILE)
 
-    result = await _invoke_conversation_file_tool(tool, "approval")
+    result = await _invoke_conversation_file_tool(
+        tool,
+        "approval",
+        provider=provider,
+    )
 
     assert result == "Conversation file search temporarily unavailable."
     assert "secret" not in result
@@ -651,18 +829,15 @@ def test_conversation_file_context_registers_sources_and_redacts_sensitive_metad
 
 
 async def test_knowledgebase_tool_profiles_can_be_reused_for_distinct_agents() -> None:
-    provider = FakeKnowledgebaseProvider()
     athlete_tool = create_knowledgebase_search_tool(
         _profile(tool_name="search_playbook_knowledgebase"),
-        provider=provider,
     )
     admin_tool = create_knowledgebase_search_tool(
         _profile(
             tool_name="search_compliance_knowledgebase",
             description="Search compliance knowledge for admin analysis.",
             metadata_filter={"visibility": "admin"},
-        ),
-        provider=provider,
+        )
     )
 
     assert athlete_tool.name == "search_playbook_knowledgebase"
@@ -674,10 +849,10 @@ async def test_knowledgebase_tool_profiles_can_be_reused_for_distinct_agents() -
 async def test_knowledgebase_tool_returns_zero_hit_message() -> None:
     tool = create_knowledgebase_search_tool(
         _profile(no_results_message="No athlete-visible sources found."),
-        provider=FakeKnowledgebaseProvider(),
     )
+    provider = FakeKnowledgebaseProvider()
 
-    result = await _invoke_tool(tool, "unknown")
+    result = await _invoke_tool(tool, "unknown", provider=provider)
 
     assert result == "No athlete-visible sources found."
 
@@ -689,12 +864,12 @@ async def test_knowledgebase_tool_handles_provider_errors_without_leaking_detail
         async def search(self, *args: object, **kwargs: object) -> KnowledgebaseResult:
             raise RuntimeError("secret transport details")
 
+    provider = BrokenProvider()
     tool = create_knowledgebase_search_tool(
-        _profile(unavailable_message="Knowledge base unavailable."),
-        provider=BrokenProvider(),
+        _profile(unavailable_message="Knowledge base unavailable.")
     )
 
-    result = await _invoke_tool(tool, "nil")
+    result = await _invoke_tool(tool, "nil", provider=provider)
 
     assert result == "Knowledge base unavailable."
     assert "secret" not in result

@@ -45,24 +45,3 @@ def create_conversation_title_chain_set(
             title_model=title_model,
         )
     }
-
-
-def create_all_chains(
-    *,
-    chat_model: BaseChatModel,
-    title_model: BaseChatModel | None = None,
-    tools: Sequence[BaseTool],
-    settings: Settings,
-) -> dict[str, Any]:
-    """Create all chain sets for the active agent subsystem."""
-    return {
-        **create_athlete_chat_chain_set(
-            chat_model=chat_model,
-            tools=tools,
-            settings=settings,
-        ),
-        **create_conversation_title_chain_set(
-            title_model=title_model or chat_model,
-            settings=settings,
-        ),
-    }

@@ -6,12 +6,16 @@ from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.agents.states.athlete_chat_state import AthleteChatState
 
 
 def create_athlete_chat_graph(nodes: dict[str, object]) -> StateGraph:
     """Create the athlete chat graph topology without compiling it."""
-    builder = StateGraph(AthleteChatState)
+    builder = StateGraph(
+        AthleteChatState,
+        context_schema=AthleteChatRuntimeContext,
+    )
     for name, node_fn in nodes.items():
         builder.add_node(name, node_fn)
 

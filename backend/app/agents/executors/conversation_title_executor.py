@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -10,7 +9,8 @@ import structlog
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.builders.graphs_builder import compile_conversation_title_graph
+from app.agents.graph_provider import AgentGraphProvider
+from app.agents.runtime_context import ConversationTitleRuntimeContext
 from app.core.config import Settings
 from app.observability.agent_trace import build_graph_invoke_config
 from app.repositories.conversations import (
@@ -23,8 +23,6 @@ logger = structlog.get_logger(__name__)
 CONVERSATION_TITLE_MODE = "conversation_title"
 CONVERSATION_TITLE_PHASE = "title"
 
-GraphFactory = Callable[..., Any]
-
 
 class ConversationTitleExecutor:
     """Execute the title graph for a first-turn assistant response."""
@@ -36,13 +34,18 @@ class ConversationTitleExecutor:
         title_model: BaseChatModel,
         settings: Settings,
         checkpointer: Any | None = None,
-        graph_factory: GraphFactory = compile_conversation_title_graph,
+        graph_provider: AgentGraphProvider | None = None,
     ) -> None:
         self.session = session
         self.title_model = title_model
         self.settings = settings
         self.checkpointer = checkpointer
-        self.graph_factory = graph_factory
+        self.graph_provider = graph_provider or AgentGraphProvider(
+            chat_model=title_model,
+            title_model=title_model,
+            settings=settings,
+            checkpointer=checkpointer,
+        )
         self.conversation_repo = ConversationRepository(session)
         self.message_repo = ConversationMessageRepository(session)
 
@@ -67,11 +70,10 @@ class ConversationTitleExecutor:
         if provisional_title is None:
             return None
 
-        graph = self.graph_factory(
-            title_model=self.title_model,
+        graph = self.graph_provider.conversation_title_graph()
+        runtime_context = ConversationTitleRuntimeContext(
             session=self.session,
-            checkpointer=self.checkpointer,
-            app_settings=self.settings,
+            settings=self.settings,
         )
         initial_state = {
             "task_id": task_id,
@@ -95,7 +97,11 @@ class ConversationTitleExecutor:
                 "user_message_id": str(user_message_id),
             },
         )
-        result = await graph.ainvoke(initial_state, config=config)
+        result = await graph.ainvoke(
+            initial_state,
+            config=config,
+            context=runtime_context,
+        )
         title = result.get("conversation_title") if isinstance(result, dict) else None
         return title if isinstance(title, str) and title.strip() else None
 
