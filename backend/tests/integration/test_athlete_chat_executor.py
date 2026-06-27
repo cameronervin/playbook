@@ -4,6 +4,7 @@ import re
 from uuid import UUID
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 
 from app.agents.builders import chains_builder
 from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
@@ -473,6 +474,7 @@ async def test_athlete_chat_executor_generates_first_turn_title_before_complete(
         knowledgebase_provider=kb_provider,
         stream_service=AgentStreamService(provider),
         settings=test_settings,
+        checkpointer=InMemorySaver(),
     ).execute(
         task_id="task-first-turn-title",
         conversation_id=conversation.id,

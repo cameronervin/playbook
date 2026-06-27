@@ -6,11 +6,6 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from app.workers.scheduling import expires_for_countdown
-from app.workers.tasks import (
-    drain_kb_ingest_outbox_task,
-    reconcile_upload_requests_task,
-    run_athlete_chat_task,
-)
 
 
 @dataclass(frozen=True)
@@ -43,6 +38,8 @@ class AthleteChatTaskDispatcher:
 
     def dispatch(self, *, task_id: str, payload: AthleteChatTaskPayload) -> str:
         """Enqueue athlete chat work and return the Celery task id."""
+        from app.workers.tasks import run_athlete_chat_task  # noqa: PLC0415
+
         result = run_athlete_chat_task.apply_async(
             kwargs=payload.to_kwargs(),
             task_id=task_id,
@@ -55,6 +52,8 @@ class KbIngestOutboxTaskDispatcher:
 
     def dispatch(self, *, limit: int = 25, countdown: int | None = None) -> str:
         """Enqueue outbox draining and return the Celery task id."""
+        from app.workers.tasks import drain_kb_ingest_outbox_task  # noqa: PLC0415
+
         options: dict[str, object] = {
             "kwargs": {"limit": limit},
             "retry": False,
@@ -71,6 +70,8 @@ class UploadRequestReconciliationTaskDispatcher:
 
     def dispatch(self, *, limit: int = 100, countdown: int | None = None) -> str:
         """Enqueue expired direct-upload reconciliation and return the task id."""
+        from app.workers.tasks import reconcile_upload_requests_task  # noqa: PLC0415
+
         options: dict[str, object] = {
             "kwargs": {"limit": limit},
             "retry": False,

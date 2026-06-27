@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypedDict
+from typing import Literal
 
-from langchain_core.messages import BaseMessage
-from langgraph.graph.message import add_messages
+from langchain.agents import AgentState
 from pydantic import BaseModel, Field
 
 AthleteChatAnswerType = Literal[
@@ -42,14 +41,13 @@ class AthleteChatStructuredResponse(BaseModel):
     )
 
 
-class AthleteChatState(TypedDict, total=False):
+class AthleteChatState(AgentState[AthleteChatStructuredResponse], total=False):
     """LangGraph state for one athlete chat task.
 
     Non-message fields are intentionally JSON-safe so Postgres checkpoints do not
     need to serialize repository objects, provider objects, or source dataclasses.
     """
 
-    messages: Annotated[list[BaseMessage], add_messages]
     task_id: str
     conversation_id: str
     athlete_user_id: str

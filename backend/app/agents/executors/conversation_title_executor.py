@@ -12,12 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.builders.graphs_builder import compile_conversation_title_graph
 from app.core.config import Settings
+from app.observability.agent_trace import build_graph_invoke_config
 from app.repositories.conversations import (
     ConversationMessageRepository,
     ConversationRepository,
 )
 
 logger = structlog.get_logger(__name__)
+
+CONVERSATION_TITLE_MODE = "conversation_title"
+CONVERSATION_TITLE_PHASE = "title"
 
 GraphFactory = Callable[..., Any]
 
@@ -69,17 +73,29 @@ class ConversationTitleExecutor:
             checkpointer=self.checkpointer,
             app_settings=self.settings,
         )
-        result = await graph.ainvoke(
-            {
+        initial_state = {
+            "task_id": task_id,
+            "conversation_id": str(conversation_id),
+            "athlete_user_id": str(athlete_user_id),
+            "organization_id": str(organization_id),
+            "user_message_id": str(user_message_id),
+            "assistant_message_id": str(assistant_message_id),
+            "provisional_title": provisional_title,
+        }
+        config = build_graph_invoke_config(
+            thread_id=conversation_id,
+            phase=CONVERSATION_TITLE_PHASE,
+            mode=CONVERSATION_TITLE_MODE,
+            settings=self.settings,
+            extra_configurable={
+                "checkpoint_ns": f"{CONVERSATION_TITLE_MODE}:{assistant_message_id}",
                 "task_id": task_id,
-                "conversation_id": str(conversation_id),
-                "athlete_user_id": str(athlete_user_id),
+                "assistant_message_id": str(assistant_message_id),
                 "organization_id": str(organization_id),
                 "user_message_id": str(user_message_id),
-                "assistant_message_id": str(assistant_message_id),
-                "provisional_title": provisional_title,
-            }
+            },
         )
+        result = await graph.ainvoke(initial_state, config=config)
         title = result.get("conversation_title") if isinstance(result, dict) else None
         return title if isinstance(title, str) and title.strip() else None
 

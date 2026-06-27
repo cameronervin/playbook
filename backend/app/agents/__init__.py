@@ -4,7 +4,7 @@ This package houses the LangGraph agent subsystem. The active product workflow
 is athlete chat, executed by a Celery worker after the API persists the user
 turn and assistant placeholder:
 
-    states/   -> typed graph state (TypedDict + add_messages reducer)
+    states/   -> typed graph state extending LangChain AgentState
     prompts/  -> system prompt strings
     chains/   -> structured create_agent units
     nodes/    -> graph nodes (load_state -> safety -> agent -> save_state)

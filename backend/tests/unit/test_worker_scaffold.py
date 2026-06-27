@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -12,8 +15,7 @@ from app.infrastructure.streaming import (
     AgentStreamEventType,
     InMemoryAgentStreamProvider,
 )
-from app.workers import tasks as worker_tasks
-from app.workers import app as worker_app
+from app.workers import app as worker_app, tasks as worker_tasks
 from app.workers.app import backend_worker, create_worker_app
 from app.workers.dispatcher import (
     AthleteChatTaskDispatcher,
@@ -147,6 +149,33 @@ def test_worker_logging_quiets_noisy_third_party_loggers(monkeypatch) -> None:
     finally:
         for name, level in original_levels.items():
             logging.getLogger(name).setLevel(level)
+
+
+def test_backend_worker_app_imports_in_fresh_process() -> None:
+    env = {
+        **os.environ,
+        "ENVIRONMENT": "test",
+        "DEBUG": "false",
+        "DEV_AUTH_ENABLED": "false",
+        "SECRET_KEY": "test-secret-value-that-is-long-enough",
+        "OAUTH_STATE_SECRET": "test-oauth-secret-value-that-is-long-enough",
+        "LLM_PROVIDER_MODE": "direct",
+        "LLM_DIRECT_PROVIDER": "anthropic",
+        "ANTHROPIC_API_KEY": "test-anthropic-key",
+    }
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import app.workers.app"],
+        check=False,
+        cwd=os.getcwd(),
+        env=env,
+        stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_backend_worker_registers_and_routes_named_tasks() -> None:

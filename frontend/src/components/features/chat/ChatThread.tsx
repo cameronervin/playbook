@@ -85,7 +85,9 @@ interface AssistantMessageProps {
 
 function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) {
   const isFailed = message.status === 'failed'
-  const isThinking = !isFailed && (message.status === 'pending' || message.status === 'streaming' || !message.content)
+  const hasContent = message.content.trim().length > 0
+  const isAwaitingContent = message.status === 'pending' || message.status === 'streaming'
+  const isThinking = !isFailed && isAwaitingContent && !hasContent
   const checkedSources = getNumberMetadata(message.metadata, 'checked_sources')
   const responseTime = getStringMetadata(message.metadata, 'response_time')
 

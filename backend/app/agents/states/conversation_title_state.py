@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, TypedDict
-
-from langchain_core.messages import BaseMessage
-from langgraph.graph.message import add_messages
+from langchain.agents import AgentState
 from pydantic import BaseModel, Field
 
 
@@ -18,10 +15,12 @@ class ConversationTitleStructuredResponse(BaseModel):
     )
 
 
-class ConversationTitleState(TypedDict, total=False):
+class ConversationTitleState(
+    AgentState[ConversationTitleStructuredResponse],
+    total=False,
+):
     """LangGraph state for one conversation title generation run."""
 
-    messages: Annotated[list[BaseMessage], add_messages]
     task_id: str
     conversation_id: str
     athlete_user_id: str
