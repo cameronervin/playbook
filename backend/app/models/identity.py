@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -102,11 +103,41 @@ class User(Base):
     )
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
+    app_sessions: Mapped[list["AppSession"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+
+class AppSession(Base):
+    """Server-side Playbook application session for sliding JWT renewal."""
+
+    __tablename__ = "app_sessions"
+    __table_args__ = (
+        Index("ix_app_sessions_user_id", "user_id"),
+        Index("ix_app_sessions_expires_at", "expires_at"),
+        Index("ix_app_sessions_revoked_at", "revoked_at"),
+    )
+
+    id: Mapped[UUID] = uuid_primary_key()
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = created_at_column()
+    updated_at: Mapped[datetime] = updated_at_column()
+    user: Mapped[User] = relationship(back_populates="app_sessions")
 
 
 class OAuthAccount(Base):

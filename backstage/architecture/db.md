@@ -27,6 +27,7 @@ on `Base.metadata` before Alembic autogenerate reads `target_metadata`.
 |-------|---------|
 | `organizations` | Tenant organization and future theming boundary |
 | `users` | Playbook user profile, OAuth subject, organization, role, and FastAPI Users-compatible auth flags |
+| `app_sessions` | Server-side app session records for JWT renewal, inactivity expiry, and logout revocation |
 | `oauth_accounts` | OAuth provider account/token records compatible with FastAPI Users' SQLAlchemy adapter shape |
 | `conversations` | Athlete-owned support conversations |
 | `conversation_messages` | User, assistant, and system messages with safety/topic metadata |
@@ -59,6 +60,7 @@ Current repository coverage:
 |------------|--------|---------|
 | `OrganizationRepository` | `organizations` | Tenant lookup, active organization listing, and organization creation |
 | `UserRepository` | `users` | OAuth subject lookup, org/email lookup, profile updates, role updates, and org-scoped user listing |
+| `AppSessionRepository` | `app_sessions` | App session create, lookup, activity touch/renewal, and revocation |
 | `OAuthAccountRepository` | `oauth_accounts` | OAuth account lookup plus token/account metadata create/update |
 | `AuditLogRepository` | `audit_logs` | Append-only privileged-action audit creation and super-admin query filters |
 | `KBDocumentRepository` | `kb_documents` | Admin KB document metadata creation, status updates, KB-service linking, summary/count mirroring, org-scoped listing, and status counts for maintenance observability |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import jwt
@@ -14,8 +15,12 @@ from structlog.testing import capture_logs
 from app.api.v1.dependencies import get_auth_service
 from app.core.config import Settings
 from app.infrastructure.auth import OAuthIdentity
-from app.models.identity import OAuthAccount, User
-from app.repositories.identity import OrganizationRepository, UserRepository
+from app.models.identity import AppSession, OAuthAccount, User
+from app.repositories.identity import (
+    AppSessionRepository,
+    OrganizationRepository,
+    UserRepository,
+)
 from app.services.auth_service import AuthService
 
 CUSTOM_ACCESS_COOKIE_NAME = "playbook_session"
@@ -243,9 +248,9 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert body["user"]["email"] == oauth_client.email
     assert body["next_route"] == "/profile"
     assert body["access_token"] != oauth_client.access_token
-    assert jwt.decode(body["access_token"], test_settings.SECRET_KEY, algorithms=["HS256"])[
-        "sub"
-    ]
+    decoded_token = jwt.decode(body["access_token"], test_settings.SECRET_KEY, algorithms=["HS256"])
+    assert decoded_token["sub"]
+    assert decoded_token["sid"]
     assert oauth_client.access_token not in callback_response.text
     assert oauth_client.refresh_token not in callback_response.text
     assert oauth_client.subject not in callback_response.text
@@ -269,8 +274,14 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
         select(OAuthAccount).where(OAuthAccount.oauth_name == provider)
     )
     user = await db_session.scalar(select(User).where(User.email == oauth_client.email))
+    app_session = await db_session.scalar(
+        select(AppSession).where(AppSession.user_id == user.id)
+    )
     assert account is not None
     assert user is not None
+    assert app_session is not None
+    assert decoded_token["sid"] == str(app_session.id)
+    assert app_session.revoked_at is None
     assert account.user_id == user.id
     assert account.access_token == oauth_client.access_token
     assert account.refresh_token == oauth_client.refresh_token
@@ -500,7 +511,166 @@ async def test_real_oauth_login_rejects_dev_persona_query(
 
 
 @pytest.mark.asyncio
-async def test_logout_requires_authentication_and_clears_configured_cookie(
+async def test_authenticated_activity_refreshes_near_expiry_session_cookie(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    monkeypatch.setattr(test_settings, "JWT_LIFETIME_SECONDS", 3600)
+    monkeypatch.setattr(test_settings, "JWT_REFRESH_THRESHOLD_SECONDS", 1800)
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-refresh",
+    )
+    user = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-refresh@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="google-refresh-subject",
+        sport_team="Basketball",
+    )
+    original_expiry = datetime.now(UTC) + timedelta(seconds=30)
+    app_session = await AppSessionRepository(db_session).create(
+        user_id=user.id,
+        expires_at=original_expiry,
+    )
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "sid": str(app_session.id),
+            "role": user.role,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int(original_expiry.timestamp()),
+        },
+        test_settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    response = await route_client.client.get(
+        "/api/v1/users/me",
+        headers={"Cookie": f"{CUSTOM_ACCESS_COOKIE_NAME}={token}"},
+    )
+    await db_session.refresh(app_session)
+
+    assert response.status_code == 200
+    assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in response.headers["set-cookie"]
+    refreshed_token = route_client.client.cookies.get(CUSTOM_ACCESS_COOKIE_NAME)
+    assert refreshed_token is not None
+    refreshed_payload = jwt.decode(
+        refreshed_token,
+        test_settings.SECRET_KEY,
+        algorithms=["HS256"],
+    )
+    assert refreshed_payload["sid"] == str(app_session.id)
+    assert refreshed_payload["exp"] > int(original_expiry.timestamp())
+    assert app_session.expires_at > original_expiry
+    assert app_session.last_seen_at is not None
+
+
+@pytest.mark.asyncio
+async def test_expired_session_cookie_is_cleared_with_structured_unauthorized(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-expired",
+    )
+    user = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-expired@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="google-expired-subject",
+        sport_team="Basketball",
+    )
+    expired_at = datetime.now(UTC) - timedelta(seconds=30)
+    app_session = await AppSessionRepository(db_session).create(
+        user_id=user.id,
+        expires_at=expired_at,
+    )
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "sid": str(app_session.id),
+            "role": user.role,
+            "iat": int((expired_at - timedelta(minutes=5)).timestamp()),
+            "exp": int(expired_at.timestamp()),
+        },
+        test_settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    response = await route_client.client.get(
+        "/api/v1/users/me",
+        headers={"Cookie": f"{CUSTOM_ACCESS_COOKIE_NAME}={token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert response.json()["error"]["details"]["reason"] == "session_expired"
+    assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in response.headers["set-cookie"]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_session_refresh_endpoint_renews_activity_without_response_body(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "COOKIE_DOMAIN", "")
+    monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-refresh-endpoint",
+    )
+    user = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="refresh-endpoint@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="google-refresh-endpoint",
+        sport_team="Basketball",
+    )
+    original_expiry = datetime.now(UTC) + timedelta(seconds=20)
+    app_session = await AppSessionRepository(db_session).create(
+        user_id=user.id,
+        expires_at=original_expiry,
+    )
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "sid": str(app_session.id),
+            "role": user.role,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int(original_expiry.timestamp()),
+        },
+        test_settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    response = await route_client.client.post(
+        "/api/v1/auth/session/refresh",
+        headers={"Cookie": f"{CUSTOM_ACCESS_COOKIE_NAME}={token}"},
+    )
+
+    assert response.status_code == 204
+    assert response.text == ""
+    assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_app_session_and_clears_configured_cookie(
     route_client,
     db_session,
     monkeypatch,
@@ -519,16 +689,35 @@ async def test_logout_requires_authentication_and_clears_configured_cookie(
         auth_provider="google",
         provider_subject="google-subject",
     )
+    app_session = await AppSessionRepository(db_session).create(
+        user_id=user.id,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "sid": str(app_session.id),
+            "role": user.role,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int(app_session.expires_at.timestamp()),
+        },
+        test_settings.SECRET_KEY,
+        algorithm="HS256",
+    )
 
     unauthenticated = await route_client.client.post("/api/v1/auth/logout")
-    route_client.authenticate_as(user)
-    route_client.client.cookies.set(CUSTOM_ACCESS_COOKIE_NAME, "session-token")
-    authenticated = await route_client.client.post("/api/v1/auth/logout")
+    authenticated = await route_client.client.post(
+        "/api/v1/auth/logout",
+        headers={"Cookie": f"{CUSTOM_ACCESS_COOKIE_NAME}={token}"},
+    )
+    await db_session.refresh(app_session)
 
-    assert unauthenticated.status_code == 401
-    assert unauthenticated.json()["error"]["code"] == "UNAUTHORIZED"
+    assert unauthenticated.status_code == 200
+    assert unauthenticated.json() == {"status": "ok"}
     assert authenticated.status_code == 200
     assert authenticated.json() == {"status": "ok"}
+    assert app_session.revoked_at is not None
+    assert app_session.revoked_reason == "logout"
     assert f"{CUSTOM_ACCESS_COOKIE_NAME}=" in authenticated.headers["set-cookie"]
     assert "Max-Age=0" in authenticated.headers["set-cookie"]
 
@@ -553,7 +742,21 @@ async def test_current_user_dependency_accepts_configured_cookie_name(
         provider_subject="google-subject",
         sport_team="Basketball",
     )
-    token = jwt.encode({"sub": str(user.id)}, test_settings.SECRET_KEY, algorithm="HS256")
+    app_session = await AppSessionRepository(db_session).create(
+        user_id=user.id,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "sid": str(app_session.id),
+            "role": user.role,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int(app_session.expires_at.timestamp()),
+        },
+        test_settings.SECRET_KEY,
+        algorithm="HS256",
+    )
 
     response = await route_client.client.get(
         "/api/v1/users/me",

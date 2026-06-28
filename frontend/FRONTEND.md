@@ -31,7 +31,7 @@ Set `NEXT_PUBLIC_API_URL` to the FastAPI backend, usually `http://localhost:8000
 | `/chat` | Athlete chat shell with conversation history and sources panel |
 | `/admin` | Admin shell with insights, KB management, and super-admin users |
 
-The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callbacks redirect from the backend to `FRONTEND_URL + next_route` after the session cookie is set. Do not add Auth.js/NextAuth for MVP auth.
+The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callbacks redirect from the backend to `FRONTEND_URL + next_route` after the session cookie is set. Workspace activity calls the backend session-refresh endpoint on a five-minute throttle so active users receive sliding app-session renewal. A global TanStack Query/API-client auth handler clears local UI state and redirects to `/login?reason=session_expired` when the backend returns an expired/revoked 401. Do not add Auth.js/NextAuth for MVP auth.
 
 ## Design System
 
@@ -64,7 +64,7 @@ The visual source of truth is `backstage/design/`, especially `backstage/design/
 
 - Server state belongs in TanStack Query hooks in `src/hooks/`.
 - API calls live in `src/lib/api/endpoints/` and use `apiClient`.
-- `apiClient` sends cookie credentials, preserves multipart `FormData`, parses structured API errors, and handles `204`.
+- `apiClient` sends cookie credentials, preserves multipart `FormData`, parses structured API errors, emits the shared auth-expired event for 401 session failures, and handles `204`.
 - Athlete chat first-send uses `POST /api/v1/conversations`; follow-ups use
   `POST /api/v1/conversations/{conversation_id}/messages`. Both return
   `task_id` stream metadata, and the browser opens the returned SSE

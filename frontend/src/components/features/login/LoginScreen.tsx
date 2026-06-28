@@ -9,6 +9,7 @@ import type { AuthProvider } from '@/src/types/auth'
 
 interface LoginScreenProps {
   navigateAuthorizationUrl?: (url: string) => void
+  sessionExpired?: boolean
 }
 
 const PROVIDER_ORDER = ['microsoft', 'google', 'dev'] as const
@@ -37,7 +38,7 @@ function AuthProviderSkeleton() {
   )
 }
 
-export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
+export function LoginScreen({ navigateAuthorizationUrl, sessionExpired = false }: LoginScreenProps) {
   const { data, isError, isPending } = useAuthProviders()
   const startOAuthLogin = useStartOAuthLogin()
   const navigate = navigateAuthorizationUrl ?? ((url: string) => window.location.assign(url))
@@ -71,6 +72,11 @@ export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
       >
         Log in to continue
       </h1>
+      {sessionExpired && (
+        <p className="pb-auth-copy mt-3 text-fg-2">
+          Your session expired after a period of inactivity. Sign in again to continue.
+        </p>
+      )}
       <div className="mt-8 grid w-full gap-3">
         {showProviderSkeletons &&
           PROVIDER_SKELETON_ORDER.map((provider) => <AuthProviderSkeleton key={provider} />)}

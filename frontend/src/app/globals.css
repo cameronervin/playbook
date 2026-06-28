@@ -474,6 +474,35 @@ textarea:focus-visible,
   min-height: 0;
   overflow-y: auto;
   padding: 28px 0;
+  position: relative;
+}
+
+.pb-chat-jump-latest {
+  align-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  bottom: 16px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg-2);
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  width: 38px;
+  z-index: 2;
+}
+
+.pb-chat-jump-latest:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-brand);
+  color: var(--fg-1);
 }
 
 .pb-chat-empty-title {
@@ -562,7 +591,7 @@ textarea:focus-visible,
   display: flex;
   flex-shrink: 0;
   gap: 12px;
-  height: 60px;
+  height: 64px;
   padding-inline: 18px;
 }
 
@@ -1062,6 +1091,25 @@ textarea:focus-visible,
 
 .pb-think {
   animation: pb-think 1.4s var(--ease-in-out) infinite;
+}
+
+.pb-thinking-shimmer {
+  animation: pb-thinking-shimmer 2.4s linear infinite;
+  background:
+    linear-gradient(
+      90deg,
+      var(--fg-3) 0%,
+      var(--fg-3) 36%,
+      var(--fg-1) 50%,
+      var(--fg-3) 64%,
+      var(--fg-3) 100%
+  );
+  background-clip: text;
+  background-repeat: no-repeat;
+  background-size: 260% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .pb-streaming::after {
@@ -1600,6 +1648,15 @@ textarea:focus-visible,
   }
 }
 
+@keyframes pb-thinking-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
 @keyframes pb-blink {
   0%,
   50% {
@@ -1634,6 +1691,13 @@ textarea:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .pb-thinking-shimmer {
+    animation: none !important;
+    background: none;
+    color: var(--fg-3);
+    -webkit-text-fill-color: currentColor;
+  }
+
   *,
   *::before,
   *::after {

@@ -14,13 +14,14 @@ from app.models.conversations import (
     ConversationMessage,
     MessageCitation,
 )
-from app.models.identity import OAuthAccount, Organization, User
+from app.models.identity import AppSession, OAuthAccount, Organization, User
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
 from app.models.uploads import KBIngestOutbox, UploadRequest
 
 __all__ = [
     "AdminChatMessage",
     "AdminChatSession",
+    "AppSession",
     "AuditLog",
     "Base",
     "Conversation",

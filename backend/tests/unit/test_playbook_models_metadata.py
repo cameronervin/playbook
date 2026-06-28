@@ -8,6 +8,7 @@ from app.models import Base
 EXPECTED_PLAYBOOK_TABLES = {
     "organizations",
     "users",
+    "app_sessions",
     "oauth_accounts",
     "conversations",
     "conversation_messages",
@@ -109,6 +110,15 @@ def test_users_constraints_match_playbook_identity_model() -> None:
     assert ("auth_provider", "provider_subject") in unique_columns
 
 
+def test_app_sessions_constraints_match_session_model() -> None:
+    app_sessions = Base.metadata.tables["app_sessions"]
+
+    assert isinstance(app_sessions.c.id.type, PG_UUID)
+    assert app_sessions.c.user_id.foreign_keys
+    assert app_sessions.c.revoked_at.nullable is True
+    assert app_sessions.c.revoked_reason.nullable is True
+
+
 def test_oauth_accounts_constraints_match_fastapi_users_compatibility() -> None:
     oauth_accounts = Base.metadata.tables["oauth_accounts"]
     unique_columns = {
@@ -166,6 +176,7 @@ def test_jsonb_columns_have_server_defaults() -> None:
 def test_key_foreign_key_delete_behaviors_are_explicit() -> None:
     expected_ondelete = {
         ("users", ("organization_id",)): "CASCADE",
+        ("app_sessions", ("user_id",)): "CASCADE",
         ("oauth_accounts", ("user_id",)): "CASCADE",
         ("conversations", ("organization_id",)): "CASCADE",
         ("conversations", ("athlete_id",)): "CASCADE",
@@ -207,6 +218,9 @@ def test_operational_indexes_are_registered() -> None:
         "ix_users_organization_id",
         "ix_users_role",
         "ix_users_is_superuser",
+        "ix_app_sessions_user_id",
+        "ix_app_sessions_expires_at",
+        "ix_app_sessions_revoked_at",
         "ix_oauth_accounts_user_id",
         "ix_oauth_accounts_provider",
         "ix_conversations_athlete_id",

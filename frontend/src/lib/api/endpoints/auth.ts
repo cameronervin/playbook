@@ -21,6 +21,9 @@ export const startOAuthLogin = (provider: string): Promise<OAuthLoginResponse> =
 export const logout = (): Promise<LogoutResponse> =>
   apiClient<LogoutResponse>(`${AUTH_PATH}/logout`, { method: 'POST' })
 
+export const refreshSession = (): Promise<void> =>
+  apiClient<void>(`${AUTH_PATH}/session/refresh`, { method: 'POST' })
+
 export const getCurrentUser = (): Promise<CurrentUser> =>
   apiClient<CurrentUser>(`${USERS_PATH}/me`)
 

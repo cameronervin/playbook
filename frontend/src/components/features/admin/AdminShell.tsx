@@ -21,6 +21,7 @@ import {
   useUpdateKBDocumentMetadata,
   useUploadKBDocument,
 } from '@/src/hooks/useKBDocuments'
+import { useSessionActivity } from '@/src/hooks/useSessionActivity'
 import { adminChatReply, ANALYTICS_SUMMARY, DASHBOARD_INSIGHT } from '@/src/lib/fixtures/admin'
 import { ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
@@ -53,6 +54,7 @@ export function AdminShell() {
   const uploadDocument = useUploadKBDocument()
   const updateRole = useUpdateUserRole()
   const failedDocsCount = documents.filter((document) => document.processing_status === 'failed').length
+  useSessionActivity({ enabled: Boolean(user) && !isLoading })
 
   useEffect(() => {
     if (!isSuperAdmin && adminTab === 'users') setAdminTab('insights')

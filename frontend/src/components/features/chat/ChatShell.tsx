@@ -27,6 +27,7 @@ import {
   useSubmitConversationMessage,
   useUploadConversationFile,
 } from '@/src/hooks/useConversations'
+import { useSessionActivity } from '@/src/hooks/useSessionActivity'
 import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
 import type {
@@ -77,6 +78,7 @@ export function ChatShell() {
     uploadConversationFile: uploadConversationFileMutation,
   })
   const logout = useLogout()
+  useSessionActivity({ enabled: Boolean(user) && !userLoading })
 
   useEffect(() => {
     if (!user || userLoading) return
@@ -128,7 +130,6 @@ export function ChatShell() {
     clearLocalUploads()
     setActiveConversationId(conversationId)
     setSelectedCitationTitle(null)
-    setSourcesOpen(true)
   }
 
   const appendSubmittedTurn = useCallback(
@@ -234,6 +235,7 @@ export function ChatShell() {
           />
         )}
         <ChatThread
+          conversationId={activeConversationId}
           isLoading={conversationDetailLoading}
           messages={messages}
           onCitationSelect={handleCitationSelect}

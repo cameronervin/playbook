@@ -77,6 +77,16 @@ describe('LoginScreen', () => {
     expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument()
   })
 
+  it('renders a session-expired message when redirected after inactivity', () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <LoginScreen sessionExpired navigateAuthorizationUrl={vi.fn()} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText(/your session expired after a period of inactivity/i)).toBeInTheDocument()
+  })
+
   it('keeps provider logos centered in fixed tile cells', () => {
     renderLogin()
     const microsoftButton = screen.getByRole('button', { name: /continue with microsoft/i })

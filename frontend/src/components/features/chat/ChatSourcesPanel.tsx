@@ -38,9 +38,9 @@ export function ChatSourcesPanel({
 
       <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-3.5">
         {selectedCitation ? <SelectedSource citation={selectedCitation} /> : null}
-        <p className="pb-ui-xs px-1 py-0.5 font-semibold text-fg-3">
-          {selectedCitation ? 'All sources' : 'Grounding documents'}
-        </p>
+        {selectedCitation ? (
+          <p className="pb-ui-xs px-1 py-0.5 font-semibold text-fg-3">All sources</p>
+        ) : null}
         {citations.length > 0 ? (
           citations.map((citation) => (
             <button
@@ -65,7 +65,7 @@ export function ChatSourcesPanel({
           ))
         ) : (
           <p className="pb-chat-meta rounded-md border border-border bg-surface p-3 leading-5 text-fg-3">
-            Sources will appear here after Playbook grounds an answer in department documents.
+            Sources used to inform the Playbook agent&apos;s responses will appear here.
           </p>
         )}
       </div>

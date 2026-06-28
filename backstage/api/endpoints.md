@@ -40,7 +40,8 @@ Example error response:
 | GET | `/auth/providers` | List configured OAuth providers; includes local-only Developer SSO when dev auth is enabled |
 | GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
 | GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session; browser callers receive a 303 redirect to `FRONTEND_URL + next_route` |
-| POST | `/auth/logout` | Clear the current app session cookie |
+| POST | `/auth/session/refresh` | Refresh the current app session on authenticated user activity; returns `204` |
+| POST | `/auth/logout` | Revoke the current app session when present and clear the session cookie |
 | GET | `/users/me` | Return current authenticated user/profile |
 | PATCH | `/users/me/profile` | Complete/update current athlete profile |
 | GET | `/admin/users` | List organization users for super-admin role management |

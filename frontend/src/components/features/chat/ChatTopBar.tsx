@@ -18,7 +18,6 @@ export function ChatTopBar({ sourcesOpen, title, onToggleSources }: ChatTopBarPr
     >
       <div className="min-w-0">
         <h1 className="pb-panel-title truncate">{title}</h1>
-        <p className="pb-chat-meta text-fg-4">Entire knowledge base</p>
       </div>
       <div className="ml-auto">
         <IconButton aria-label="Toggle sources" onClick={onToggleSources}>
