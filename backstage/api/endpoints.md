@@ -104,7 +104,7 @@ environments.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/auth/dev/login?persona={persona}` | Start local fake SSO through the normal OAuth login/callback flow. `persona` defaults to `athlete`; valid values are `athlete`, `new_athlete`, `admin`, `super_admin` |
+| GET | `/auth/dev/login?persona={persona}` | Internal frontend contract for the login-screen Developer SSO role menu. Starts local fake SSO through the normal OAuth login/callback flow. `persona` defaults to `athlete`; valid values are `athlete`, `new_athlete`, `admin`, `super_admin`. For manual browser validation, prefer the login-screen Developer SSO menu. |
 
 ```bash
 curl http://localhost:8000/api/v1/health

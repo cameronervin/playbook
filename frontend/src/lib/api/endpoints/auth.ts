@@ -4,6 +4,7 @@ import type {
   AuthProvidersResponse,
   CurrentUser,
   LogoutResponse,
+  OAuthLoginRequest,
   OAuthLoginResponse,
   UpdateProfileRequest,
   UpdateProfileResponse,
@@ -15,8 +16,15 @@ const USERS_PATH = `/api/${API_VERSION}/users`
 export const getAuthProviders = (): Promise<AuthProvidersResponse> =>
   apiClient<AuthProvidersResponse>(`${AUTH_PATH}/providers`)
 
-export const startOAuthLogin = (provider: string): Promise<OAuthLoginResponse> =>
-  apiClient<OAuthLoginResponse>(`${AUTH_PATH}/${provider}/login`)
+export const startOAuthLogin = ({
+  provider,
+  persona,
+}: OAuthLoginRequest): Promise<OAuthLoginResponse> => {
+  const path = `${AUTH_PATH}/${provider}/login`
+  if (provider !== 'dev' || !persona) return apiClient<OAuthLoginResponse>(path)
+  const query = new URLSearchParams({ persona })
+  return apiClient<OAuthLoginResponse>(`${path}?${query.toString()}`)
+}
 
 export const logout = (): Promise<LogoutResponse> =>
   apiClient<LogoutResponse>(`${AUTH_PATH}/logout`, { method: 'POST' })

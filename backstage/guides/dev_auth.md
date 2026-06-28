@@ -29,20 +29,15 @@ When dev auth is available, `GET /api/v1/auth/providers` also returns:
 }
 ```
 
-The frontend can start the same login flow as Google/Microsoft by calling:
+Use the Developer SSO provider on the login screen. It opens a role menu with
+`Athlete`, `New athlete`, `Admin`, and `Super admin` options, then starts the
+same login flow as Google/Microsoft.
 
-```text
-http://localhost:8000/api/v1/auth/dev/login
-http://localhost:8000/api/v1/auth/dev/login?persona=athlete
-http://localhost:8000/api/v1/auth/dev/login?persona=new_athlete
-http://localhost:8000/api/v1/auth/dev/login?persona=admin
-http://localhost:8000/api/v1/auth/dev/login?persona=super_admin
-```
-
-The dev provider returns an authorization URL pointed at the normal
-`/api/v1/auth/dev/callback` route. The callback validates OAuth state, seeds the
-deterministic local user, creates the normal Playbook JWT cookie, and redirects
-to the matching frontend route:
+The frontend calls the local `/api/v1/auth/dev/login?persona={persona}`
+contract behind that menu. The dev provider returns an authorization URL
+pointed at the normal `/api/v1/auth/dev/callback` route. The callback validates
+OAuth state, seeds the deterministic local user, creates the normal Playbook JWT
+cookie, and redirects to the matching frontend route:
 
 | Persona | Redirect |
 |---------|----------|
@@ -52,7 +47,8 @@ to the matching frontend route:
 | `super_admin` | `/admin` |
 
 Valid fake SSO personas are `athlete`, `new_athlete`, `admin`, and
-`super_admin`. If `persona` is omitted, the backend uses `athlete`.
+`super_admin`. If `persona` is omitted by an API caller, the backend uses
+`athlete`.
 
 The older `/api/v1/dev/session/{persona}` browser shortcut has been removed; use
-Developer SSO for local browser validation.
+the login-screen Developer SSO menu for local browser validation.

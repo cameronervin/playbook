@@ -4,7 +4,6 @@
 
 const SETTINGS_NAV = [
   { id: 'profile', icon: 'user', label: 'Profile' },
-  { id: 'security', icon: 'shield-check', label: 'Security & SSO' },
 ];
 
 function SettingsModal({ section, onSection, settings, onChange, onClose }) {
@@ -17,7 +16,7 @@ function SettingsModal({ section, onSection, settings, onChange, onClose }) {
 
   const patch = (group, key, val) => { onChange(group, key, val); setDirty(true); };
   const active = SETTINGS_NAV.find(s => s.id === section) || SETTINGS_NAV[0];
-  const showSave = section === 'profile';
+  const showSave = true;
 
   return (
     <div onMouseDown={onClose}
@@ -48,8 +47,7 @@ function SettingsModal({ section, onSection, settings, onChange, onClose }) {
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px 26px' }}>
-            {section === 'profile' && <ProfilePane s={settings.profile} patch={(k, v) => patch('profile', k, v)} />}
-            {section === 'security' && <SecurityPane user={settings.profile} />}
+            <ProfilePane s={settings.profile} patch={(k, v) => patch('profile', k, v)} />
           </div>
 
           {showSave && (
@@ -190,73 +188,6 @@ function ProfilePane({ s, patch }) {
         </div>
       </Group>
     </div>
-  );
-}
-
-function SecurityPane({ user }) {
-  const providers = [
-    { name: 'Microsoft', logo: 'ms', sub: user.email, connected: true },
-    { name: 'Google', logo: 'google', sub: 'Not connected', connected: false },
-  ];
-  return (
-    <div>
-      <Group title="Single sign-on" desc="Playbook uses SSO only — there's no password to manage. Your administrator controls which providers are available.">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {providers.map(p => <ProviderRow key={p.name} p={p} />)}
-        </div>
-      </Group>
-      <Group title="Active session">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-          <div style={{ width: 36, height: 36, flex: 'none', borderRadius: 'var(--radius-md)', background: 'var(--surface-hover)', color: 'var(--fg-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="monitor" size={18} /></div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 13.5, color: 'var(--fg-1)' }}>This device · Stillwater, OK</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>Chrome · last active just now</div>
-          </div>
-          <Badge tone="success" dot pulse>Active</Badge>
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <PBButton variant="danger" size="sm" icon="log-out">Sign out of all other sessions</PBButton>
-        </div>
-      </Group>
-    </div>
-  );
-}
-
-function ProviderRow({ p }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 15px', background: 'var(--bg-base)', border: '1px solid ' + (p.connected ? 'var(--border-strong)' : 'var(--border)'), borderRadius: 'var(--radius-md)' }}>
-      <div style={{ width: 34, height: 34, flex: 'none', borderRadius: 'var(--radius-sm)', background: 'var(--surface-raised)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {p.logo === 'ms' ? <MsLogo /> : <GgLogo />}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 13.5, color: 'var(--fg-1)' }}>{p.name}</div>
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--fg-3)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sub}</div>
-      </div>
-      {p.connected
-        ? <Badge tone="success" dot>Connected</Badge>
-        : <PBButton variant="secondary" size="sm">Connect</PBButton>}
-    </div>
-  );
-}
-
-function MsLogo() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 23 23" aria-hidden="true">
-      <rect x="1" y="1" width="10" height="10" fill="#F25022" />
-      <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
-      <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
-      <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
-    </svg>
-  );
-}
-function GgLogo() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
-      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
-      <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
-      <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
-      <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
-    </svg>
   );
 }
 

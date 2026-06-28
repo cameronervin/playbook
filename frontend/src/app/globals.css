@@ -430,11 +430,25 @@ textarea:focus-visible,
 .pb-auth-provider-label {
   align-items: center;
   display: flex;
+  gap: 8px;
   height: 100%;
   justify-content: flex-start;
   min-height: var(--spacing-auth-provider-icon);
   padding: 15px 18px;
   text-align: left;
+}
+
+.pb-auth-provider-chevron {
+  color: var(--fg-3);
+  flex: none;
+  height: 15px;
+  margin-left: auto;
+  width: 15px;
+}
+
+.pb-auth-dev-menu {
+  max-width: calc(100vw - 32px);
+  width: var(--radix-dropdown-menu-trigger-width);
 }
 
 .pb-workspace-chat-rail {

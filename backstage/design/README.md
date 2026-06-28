@@ -288,8 +288,8 @@ and surfaces its first citation. **All replies and KB data are canned fixtures**
 with real retrieval/RAG + streaming.
 
 ### SettingsModal (`source/home/SettingsModal.jsx`)
-Opened from the profile menu. **MVP scope: Profile + Security & SSO only.** (Appearance /
-density live only in the prototype Tweaks — fold into a real settings store or omit.)
+Opened from the profile menu. **MVP scope: Profile only.** (Appearance / density live only
+in the prototype Tweaks — fold into a real settings store or omit.)
 
 ### Baked defaults
 `bg: horizon`, motion on, `density: Comfortable`, `sourcesDefault: true` for conversations

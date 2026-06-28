@@ -10,8 +10,10 @@ import type { AuthProvider } from '@/src/types/auth'
 const authMocks = vi.hoisted(() => ({
   isError: false,
   isPending: false,
-  mutateAsync: vi.fn(async (provider: string) => ({
-    authorization_url: `https://oauth.example/${provider}`,
+  mutateAsync: vi.fn(async (request: { provider: string; persona?: string }) => ({
+    authorization_url: request.persona
+      ? `https://oauth.example/${request.provider}/${request.persona}`
+      : `https://oauth.example/${request.provider}`,
   })),
   providers: [
     { provider: 'google', label: 'Google', enabled: true, login_url: '/api/v1/auth/google/login' },
@@ -133,12 +135,43 @@ describe('LoginScreen', () => {
     ])
     expect(buttons[2]).toHaveClass('pb-auth-provider-button')
     expect(buttons[2].querySelector('.pb-auth-provider-icon')).toBeInTheDocument()
-    expect(screen.getByText('Continue with Developer SSO')).toHaveClass('pb-auth-provider-label')
+    expect(buttons[2].querySelector('.pb-auth-provider-label')).toHaveTextContent('Continue with Developer SSO')
 
     await userEvent.click(screen.getByRole('button', { name: /continue with developer sso/i }))
 
-    expect(authMocks.mutateAsync).toHaveBeenCalledWith('dev')
-    expect(navigateAuthorizationUrl).toHaveBeenCalledWith('https://oauth.example/dev')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Admin' }))
+
+    expect(authMocks.mutateAsync).toHaveBeenCalledWith({ provider: 'dev', persona: 'admin' })
+    expect(navigateAuthorizationUrl).toHaveBeenCalledWith('https://oauth.example/dev/admin')
+  })
+
+  it('shows all Developer SSO personas and starts login for each selected role', async () => {
+    authMocks.providers = [
+      { provider: 'dev', label: 'Developer SSO', enabled: true, login_url: '/api/v1/auth/dev/login' },
+    ]
+    const navigateAuthorizationUrl = renderLogin()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: /continue with developer sso/i }))
+
+    expect(screen.getByRole('menuitem', { name: 'Athlete' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'New athlete' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Admin' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Super admin' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('menuitem', { name: 'Athlete' }))
+    expect(authMocks.mutateAsync).toHaveBeenLastCalledWith({ provider: 'dev', persona: 'athlete' })
+    expect(navigateAuthorizationUrl).toHaveBeenLastCalledWith('https://oauth.example/dev/athlete')
+
+    await user.click(screen.getByRole('button', { name: /continue with developer sso/i }))
+    await user.click(screen.getByRole('menuitem', { name: 'New athlete' }))
+    expect(authMocks.mutateAsync).toHaveBeenLastCalledWith({ provider: 'dev', persona: 'new_athlete' })
+    expect(navigateAuthorizationUrl).toHaveBeenLastCalledWith('https://oauth.example/dev/new_athlete')
+
+    await user.click(screen.getByRole('button', { name: /continue with developer sso/i }))
+    await user.click(screen.getByRole('menuitem', { name: 'Super admin' }))
+    expect(authMocks.mutateAsync).toHaveBeenLastCalledWith({ provider: 'dev', persona: 'super_admin' })
+    expect(navigateAuthorizationUrl).toHaveBeenLastCalledWith('https://oauth.example/dev/super_admin')
   })
 
   it('does not start OAuth when a provider is disabled', async () => {
@@ -173,8 +206,8 @@ describe('LoginScreen', () => {
     renderLogin()
 
     expect(screen.queryByTestId('auth-provider-skeleton')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /continue with microsoft/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue with microsoft/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeDisabled()
   })
 
   it('renders provider errors only when there is no cached provider data', () => {

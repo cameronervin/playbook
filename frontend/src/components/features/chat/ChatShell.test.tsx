@@ -727,7 +727,10 @@ describe('ChatShell', () => {
 
     await userEvent.click(screen.getByRole('menuitem', { name: /settings/i }))
 
-    expect(screen.getByRole('dialog', { name: /settings/i })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: /settings/i })
+
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).queryByRole('tab', { name: /security & sso/i })).not.toBeInTheDocument()
 
     await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))

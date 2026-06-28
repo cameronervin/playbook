@@ -1,4 +1,6 @@
 export type UserRole = 'athlete' | 'admin' | 'super_admin'
+export type AuthProviderName = 'google' | 'microsoft' | 'dev'
+export type DevAuthPersona = 'athlete' | 'new_athlete' | 'admin' | 'super_admin'
 
 export interface CurrentUser {
   id: string
@@ -13,7 +15,7 @@ export interface CurrentUser {
 }
 
 export interface AuthProvider {
-  provider: 'google' | 'microsoft' | 'dev'
+  provider: AuthProviderName
   label: string
   enabled: boolean
   login_url: string
@@ -25,6 +27,11 @@ export interface AuthProvidersResponse {
 
 export interface OAuthLoginResponse {
   authorization_url: string
+}
+
+export interface OAuthLoginRequest {
+  provider: AuthProviderName
+  persona?: DevAuthPersona
 }
 
 export interface UpdateProfileRequest {

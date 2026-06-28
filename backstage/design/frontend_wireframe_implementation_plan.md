@@ -106,7 +106,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 - Preserve key design defaults: horizon background, comfortable density, "Ask PlaybookAI" empty state, grounded citations at the bottom of answers, and sources hidden on an empty new chat but opened after citation click or explicit toggle on grounded conversations.
 - Reuse existing app typography utilities such as `pb-ui-sm`, `pb-ui-xs`, and token-backed Tailwind type-scale classes for chat controls, history, menus, composer text, metadata, and source labels; do not carry over prototype-only arbitrary text sizes like `text-[13.5px]`.
 - Implement composer behavior with Enter-to-send, Shift+Enter newline, disabled/loading states, and recoverable error display.
-- Add settings modal support for MVP sections only: Profile and Security & SSO. Omit prototype-only Appearance/Tweaks controls unless a real settings store is introduced.
+- Add settings modal support for the MVP Profile section only. Omit prototype-only Appearance/Tweaks controls unless a real settings store is introduced.
 - Add tests for empty state, conversation selection, new chat, composer submit, streaming placeholder, citation click opening sources, source-panel toggle, settings modal, and role-gated KB controls.
 
 ## Phase 5: Admin Console
