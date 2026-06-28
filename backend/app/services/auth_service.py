@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import jwt
 import structlog
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import is_profile_complete
 from app.auth.dev_personas import DevAuthPersona
 from app.auth.session import (
+    clear_access_token_cookie,
     clear_oauth_state_cookie,
     cookie_domain,
     create_access_token,
@@ -31,6 +33,7 @@ from app.infrastructure.auth import (
 )
 from app.models.identity import User
 from app.repositories.identity import (
+    AppSessionRepository,
     OAuthAccountRepository,
     OrganizationRepository,
     UserRepository,
@@ -74,6 +77,7 @@ class AuthService:
         org_repo: OrganizationRepository | None = None,
         user_repo: UserRepository | None = None,
         oauth_repo: OAuthAccountRepository | None = None,
+        app_session_repo: AppSessionRepository | None = None,
         provider_registry: OAuthProviderRegistry | None = None,
     ) -> None:
         self.session = session
@@ -81,6 +85,7 @@ class AuthService:
         self.org_repo = org_repo or OrganizationRepository(session)
         self.user_repo = user_repo or UserRepository(session)
         self.oauth_repo = oauth_repo or OAuthAccountRepository(session)
+        self.app_session_repo = app_session_repo or AppSessionRepository(session)
         self.provider_registry = provider_registry or OAuthProviderRegistry(settings)
 
     def providers(self) -> AuthProvidersResponse:
@@ -174,8 +179,18 @@ class AuthService:
             )
 
         user = await self._upsert_user_from_oauth(identity)
+        expires_at = datetime.now(UTC) + timedelta(seconds=self.settings.JWT_LIFETIME_SECONDS)
+        app_session = await self.app_session_repo.create(
+            user_id=user.id,
+            expires_at=expires_at,
+        )
         await self.session.commit()
-        access_token = create_access_token(user, self.settings)
+        access_token = create_access_token(
+            user,
+            self.settings,
+            session_id=app_session.id,
+            expires_at=app_session.expires_at,
+        )
         set_access_token_cookie(response, access_token, self.settings)
         clear_oauth_state_cookie(response, self.settings)
         logger.info(
@@ -200,12 +215,19 @@ class AuthService:
         clear_oauth_state_cookie(redirect, self.settings)
         return redirect
 
-    def logout(self, response: Response) -> None:
-        """Clear the app access token cookie."""
-        response.delete_cookie(
-            self.settings.ACCESS_TOKEN_COOKIE_NAME,
-            domain=cookie_domain(self.settings),
-        )
+    async def logout(self, request: Request, response: Response) -> None:
+        """Revoke the current app session when present and clear its cookie."""
+        if session_id := self._session_id_from_request(request):
+            app_session = await self.app_session_repo.get(session_id)
+            if app_session is not None and app_session.revoked_at is None:
+                await self.app_session_repo.revoke(
+                    app_session,
+                    revoked_at=datetime.now(UTC),
+                    reason="logout",
+                )
+                await self.session.commit()
+                logger.info("auth_session_revoked", session_id=str(app_session.id))
+        clear_access_token_cookie(response, self.settings)
 
     @staticmethod
     def _validate_persona(
@@ -224,6 +246,26 @@ class AuthService:
         if base_url:
             return f"{base_url}/api/v1/auth/{provider}/callback"
         return str(request.base_url).rstrip("/") + f"/api/v1/auth/{provider}/callback"
+
+    def _session_id_from_request(self, request: Request) -> UUID | None:
+        token = request.cookies.get(self.settings.ACCESS_TOKEN_COOKIE_NAME)
+        if not token:
+            authorization = request.headers.get("Authorization", "")
+            scheme, _, credentials = authorization.partition(" ")
+            if scheme.lower() == "bearer" and credentials:
+                token = credentials
+        if not token:
+            return None
+        try:
+            payload = jwt.decode(
+                token,
+                self.settings.SECRET_KEY,
+                algorithms=["HS256"],
+                options={"verify_exp": False},
+            )
+            return UUID(str(payload.get("sid")))
+        except (TypeError, ValueError, jwt.PyJWTError):
+            return None
 
     def _validate_state(
         self,

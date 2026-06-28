@@ -46,7 +46,8 @@ export const useCreateConversation = () => {
         [QUERY_KEYS.conversationDetail, data.conversation.id],
         data.conversation,
       )
-      await queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.conversations] })
+      upsertConversationSummary(queryClient, data.conversation)
+      await markConversationListStale(queryClient)
     },
   })
 }
@@ -55,8 +56,9 @@ export const useSubmitConversationMessage = () => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: submitConversationMessage,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.conversations] })
+    onSuccess: async (_data, variables) => {
+      touchConversationSummary(queryClient, variables.conversationId)
+      await markConversationListStale(queryClient)
     },
   })
 }
@@ -109,13 +111,13 @@ export const useConversationMessageStream = () => {
 
   useEffect(() => stop, [stop])
 
-  const invalidateConversation = useCallback(
+  const reconcileConversation = useCallback(
     (conversationId: string) =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.conversations] }),
         queryClient.invalidateQueries({
           queryKey: [QUERY_KEYS.conversationDetail, conversationId],
         }),
+        markConversationListStale(queryClient),
       ]),
     [queryClient],
   )
@@ -170,7 +172,7 @@ export const useConversationMessageStream = () => {
           status: 'complete',
         }))
         stop()
-        void invalidateConversation(conversationId)
+        void reconcileConversation(conversationId)
       })
 
       stream.addEventListener('error', (event) => {
@@ -186,7 +188,7 @@ export const useConversationMessageStream = () => {
           status: 'failed',
         }))
         stop()
-        void invalidateConversation(conversationId)
+        void reconcileConversation(conversationId)
       })
 
       stream.onerror = () => {
@@ -199,13 +201,56 @@ export const useConversationMessageStream = () => {
           status: 'failed',
         }))
         stop()
-        void invalidateConversation(conversationId)
+        void reconcileConversation(conversationId)
       }
     },
-    [invalidateConversation, queryClient, stop],
+    [reconcileConversation, queryClient, stop],
   )
 
   return { start, stop }
+}
+
+function upsertConversationSummary(
+  queryClient: QueryClient,
+  conversation: ConversationSummary,
+): void {
+  queryClient.setQueryData<ConversationSummary[]>(
+    [QUERY_KEYS.conversations],
+    (conversations) => {
+      if (!conversations) return [conversation]
+      return [
+        conversation,
+        ...conversations.filter((existing) => existing.id !== conversation.id),
+      ]
+    },
+  )
+}
+
+function touchConversationSummary(
+  queryClient: QueryClient,
+  conversationId: string,
+): void {
+  const timestamp = new Date().toISOString()
+  queryClient.setQueryData<ConversationSummary[]>(
+    [QUERY_KEYS.conversations],
+    (conversations) =>
+      conversations?.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              last_message_at: timestamp,
+              updated_at: timestamp,
+            }
+          : conversation,
+      ),
+  )
+}
+
+function markConversationListStale(queryClient: QueryClient): Promise<void> {
+  return queryClient.invalidateQueries({
+    queryKey: [QUERY_KEYS.conversations],
+    refetchType: 'none',
+  })
 }
 
 export function createSubmittedMessages(

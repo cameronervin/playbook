@@ -24,11 +24,12 @@ interface UIState {
   setAdminInsightStatus: (status: DashboardInsightStatus) => void
   addAdminChatMessage: (message: AdminChatMessageFixture) => void
   resetAdminChatMessages: () => void
+  resetSessionState: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
   activeConversationId: null,
-  sourcesOpen: true,
+  sourcesOpen: false,
   selectedCitationTitle: null,
   settingsOpen: false,
   adminTab: 'insights',
@@ -39,7 +40,7 @@ export const useUIStore = create<UIState>((set) => ({
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   toggleSources: () => set((state) => ({ sourcesOpen: !state.sourcesOpen })),
   setSourcesOpen: (open) => set({ sourcesOpen: open }),
-  setSelectedCitationTitle: (title) => set({ selectedCitationTitle: title, sourcesOpen: true }),
+  setSelectedCitationTitle: (title) => set({ selectedCitationTitle: title }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setAdminTab: (tab) => set({ adminTab: tab }),
   setAdminChatOpen: (open) => set({ adminChatOpen: open }),
@@ -48,4 +49,13 @@ export const useUIStore = create<UIState>((set) => ({
   addAdminChatMessage: (message) =>
     set((state) => ({ adminChatMessages: [...state.adminChatMessages, message] })),
   resetAdminChatMessages: () => set({ adminChatMessages: [] }),
+  resetSessionState: () =>
+    set({
+      activeConversationId: null,
+      sourcesOpen: false,
+      selectedCitationTitle: null,
+      settingsOpen: false,
+      adminChatOpen: false,
+      adminChatMessages: [],
+    }),
 }))

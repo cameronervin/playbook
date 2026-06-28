@@ -12,7 +12,13 @@ const superAdminUser: Pick<CurrentUser, 'name' | 'email' | 'role' | 'sport_team'
   sport_team: 'OSU Athletics',
 }
 
-function SettingsHarness({ onOpenChange = vi.fn() }: { onOpenChange?: (open: boolean) => void }) {
+function SettingsHarness({
+  onOpenChange = vi.fn(),
+  user = superAdminUser,
+}: {
+  onOpenChange?: (open: boolean) => void
+  user?: Pick<CurrentUser, 'name' | 'email' | 'role' | 'sport_team'>
+}) {
   const [open, setOpen] = useState(true)
   return (
     <SettingsModal
@@ -21,7 +27,7 @@ function SettingsHarness({ onOpenChange = vi.fn() }: { onOpenChange?: (open: boo
         setOpen(nextOpen)
       }}
       open={open}
-      user={superAdminUser}
+      user={user}
     />
   )
 }
@@ -32,7 +38,6 @@ describe('SettingsModal', () => {
 
     const dialog = screen.getByRole('dialog', { name: /settings/i })
     const profileTab = within(dialog).getByRole('tab', { name: /profile/i })
-    const securityTab = within(dialog).getByRole('tab', { name: /security & sso/i })
     const profileHeading = within(dialog).getByRole('heading', { name: /profile/i })
     const detailsHeading = within(dialog).getByRole('heading', { name: /details/i })
 
@@ -41,7 +46,6 @@ describe('SettingsModal', () => {
     expect(dialog).not.toHaveClass('h-[min(660px,calc(100dvh-32px))]')
     expect(profileTab).toHaveAttribute('aria-selected', 'true')
     expect(profileTab).toHaveClass('pb-settings-nav-item')
-    expect(securityTab).toHaveClass('pb-settings-nav-item')
     expect(profileHeading).toHaveClass('pb-settings-header')
     expect(detailsHeading).toHaveClass('pb-settings-section-title')
     expect(screen.getByLabelText(/full name/i)).toHaveValue('Jordan Mitchell')
@@ -55,6 +59,39 @@ describe('SettingsModal', () => {
     expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
   })
 
+  it('does not render the removed security and SSO pane', () => {
+    render(<SettingsHarness />)
+
+    const dialog = screen.getByRole('dialog', { name: /settings/i })
+
+    expect(within(dialog).queryByRole('tab', { name: /security & sso/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /single sign-on/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/there's no password to manage/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Microsoft')).not.toBeInTheDocument()
+    expect(screen.queryByText('Google')).not.toBeInTheDocument()
+    expect(screen.queryByText('Connected')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not connected')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /connect google/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/this device/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/chrome/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign out of all other sessions/i })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['athlete', 'Athlete'],
+    ['admin', 'Department admin'],
+    ['super_admin', 'Super admin'],
+  ] as const)('removes security and SSO settings for %s users', (role, roleLabel) => {
+    render(<SettingsHarness user={{ ...superAdminUser, role }} />)
+
+    const dialog = screen.getByRole('dialog', { name: /settings/i })
+
+    expect(within(dialog).getByRole('tab', { name: /profile/i })).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/role/i)).toHaveValue(roleLabel)
+    expect(within(dialog).queryByRole('tab', { name: /security & sso/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /single sign-on/i })).not.toBeInTheDocument()
+  })
+
   it('tracks unsaved profile changes and clears the local dirty state on save', async () => {
     render(<SettingsHarness />)
 
@@ -66,28 +103,6 @@ describe('SettingsModal', () => {
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
     expect(screen.getByText(/all changes saved/i)).toBeInTheDocument()
-  })
-
-  it('renders the security and SSO design pane', async () => {
-    render(<SettingsHarness />)
-
-    await userEvent.click(screen.getByRole('tab', { name: /security & sso/i }))
-
-    expect(screen.getByRole('heading', { name: /security & sso/i })).toHaveClass('pb-settings-header')
-    expect(screen.getByRole('heading', { name: /single sign-on/i })).toHaveClass('pb-settings-section-title')
-    expect(screen.getByText(/there's no password to manage/i)).toBeInTheDocument()
-    expect(screen.getByText('Microsoft')).toBeInTheDocument()
-    expect(screen.getByText('Microsoft')).toHaveClass('pb-settings-input')
-    expect(screen.getByText('j.mitchell@okstate.edu')).toHaveClass('pb-settings-meta')
-    expect(screen.getByText('Connected')).toHaveClass('pb-settings-badge')
-    expect(screen.getByText('Google')).toBeInTheDocument()
-    expect(screen.getByText('Not connected')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /connect google/i })).toBeInTheDocument()
-    expect(screen.getByText(/this device · stillwater, ok/i)).toHaveClass('pb-settings-input')
-    expect(screen.getByText(/chrome · last active just now/i)).toHaveClass('pb-settings-meta')
-    expect(screen.getByText('Active')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /sign out of all other sessions/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument()
   })
 
   it('closes through Radix dialog escape handling', async () => {

@@ -1,5 +1,7 @@
 import { API_URL } from '@/src/lib/constants/config'
 
+export const AUTH_EXPIRED_EVENT = 'playbook:auth-expired'
+
 export interface StructuredError {
   code: string
   message: string
@@ -47,6 +49,23 @@ const parseError = async (response: Response): Promise<Partial<StructuredError>>
   }
 }
 
+export function isAuthExpiredError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401 && error.code === 'UNAUTHORIZED'
+}
+
+function emitAuthExpired(error: ApiError): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent(AUTH_EXPIRED_EVENT, {
+      detail: {
+        code: error.code,
+        reason: error.details.reason,
+        status: error.status,
+      },
+    }),
+  )
+}
+
 export async function apiClient<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { json, headers, body, ...rest } = options
   const requestHeaders: Record<string, string> = {}
@@ -69,7 +88,9 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
 
   if (!response.ok) {
     const error = await parseError(response)
-    throw new ApiError(error.message ?? `Request failed: ${response.statusText}`, response.status, error)
+    const apiError = new ApiError(error.message ?? `Request failed: ${response.statusText}`, response.status, error)
+    if (isAuthExpiredError(apiError)) emitAuthExpired(apiError)
+    throw apiError
   }
 
   if (response.status === 204) {

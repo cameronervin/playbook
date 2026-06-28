@@ -40,7 +40,8 @@ Example error response:
 | GET | `/auth/providers` | List configured OAuth providers; includes local-only Developer SSO when dev auth is enabled |
 | GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
 | GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session; browser callers receive a 303 redirect to `FRONTEND_URL + next_route` |
-| POST | `/auth/logout` | Clear the current app session cookie |
+| POST | `/auth/session/refresh` | Refresh the current app session on authenticated user activity; returns `204` |
+| POST | `/auth/logout` | Revoke the current app session when present and clear the session cookie |
 | GET | `/users/me` | Return current authenticated user/profile |
 | PATCH | `/users/me/profile` | Complete/update current athlete profile |
 | GET | `/admin/users` | List organization users for super-admin role management |
@@ -103,7 +104,7 @@ environments.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/auth/dev/login?persona={persona}` | Start local fake SSO through the normal OAuth login/callback flow. `persona` defaults to `athlete`; valid values are `athlete`, `new_athlete`, `admin`, `super_admin` |
+| GET | `/auth/dev/login?persona={persona}` | Internal frontend contract for the login-screen Developer SSO role menu. Starts local fake SSO through the normal OAuth login/callback flow. `persona` defaults to `athlete`; valid values are `athlete`, `new_athlete`, `admin`, `super_admin`. For manual browser validation, prefer the login-screen Developer SSO menu. |
 
 ```bash
 curl http://localhost:8000/api/v1/health

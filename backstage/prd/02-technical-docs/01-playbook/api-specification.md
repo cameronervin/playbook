@@ -15,7 +15,8 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 | GET | `/auth/providers` | List enabled OAuth providers | public |
 | GET | `/auth/{provider}/login` | Start OAuth/OIDC login | public |
 | GET | `/auth/{provider}/callback` | Complete OAuth/OIDC callback | public |
-| POST | `/auth/logout` | End current session | authenticated |
+| POST | `/auth/session/refresh` | Refresh current app session activity | authenticated |
+| POST | `/auth/logout` | End current app session | public/idempotent |
 | GET | `/users/me` | Return current user/profile | authenticated |
 | PATCH | `/users/me/profile` | Complete/update athlete profile | athlete |
 | GET | `/admin/users` | List users for role management | super_admin |

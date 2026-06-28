@@ -181,21 +181,12 @@ Browser OAuth callbacks set the Playbook session cookie and redirect to
 
 For local UI validation without Google/Microsoft OAuth, set
 `DEV_AUTH_ENABLED=true` while `ENVIRONMENT=local` and `DEBUG=true`, then use the
-Developer SSO provider on the login screen or open one of these backend URLs in
-the same browser you use for the frontend:
-
-```text
-http://localhost:8000/api/v1/auth/dev/login
-http://localhost:8000/api/v1/auth/dev/login?persona=athlete
-http://localhost:8000/api/v1/auth/dev/login?persona=new_athlete
-http://localhost:8000/api/v1/auth/dev/login?persona=admin
-http://localhost:8000/api/v1/auth/dev/login?persona=super_admin
-```
-
-Each URL starts the normal OAuth login/callback path, seeds a throwaway local
-user, sets the normal Playbook HttpOnly session cookie, and redirects to
-`/chat`, `/profile`, or `/admin` on the frontend. See [Dev Auth](dev_auth.md)
-for the concise reference.
+Developer SSO provider on the login screen. It opens a role menu for athlete,
+new-athlete, admin, and super-admin browser sessions. Each option starts the
+normal OAuth login/callback path, seeds a throwaway local user, sets the normal
+Playbook HttpOnly session cookie, and redirects to `/chat`, `/profile`, or
+`/admin` on the frontend. See [Dev Auth](dev_auth.md) for the concise
+reference.
 
 Backend pytest runs do not load `backend/.env`. The test harness injects a
 deterministic `Settings(_env_file=None, ...)` object with dev auth disabled, so

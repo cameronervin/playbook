@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
@@ -32,6 +33,7 @@ from app.repositories.conversations import (
     ConversationRepository,
     MessageCitationRepository,
 )
+from app.services.agent_stream_service import AgentStreamService
 
 logger = structlog.get_logger(__name__)
 
@@ -294,6 +296,15 @@ def create_athlete_chat_nodes(
             answer_type = "unsupported"
 
         limited_sources = cited_sources[: context.settings.ATHLETE_CHAT_MAX_CITATIONS]
+        await context.stream_service.publish_progress(
+            task_id,
+            status="streaming_response",
+        )
+        streamed_answer = await _publish_answer_chunks(
+            context.stream_service,
+            task_id=task_id,
+            answer=answer,
+        )
         metadata = {
             **assistant_message.message_metadata,
             "task_id": task_id,
@@ -308,7 +319,7 @@ def create_athlete_chat_nodes(
         await message_repo.update_status_and_content(
             assistant_message,
             status="complete",
-            content=answer,
+            content=streamed_answer,
             safety_outcome=answer_type,
             topic_labels=state.get("topic_labels", []),
             risk_labels=state.get("risk_labels", []),
@@ -332,7 +343,7 @@ def create_athlete_chat_nodes(
             "assistant_message_id": str(assistant_message.id),
             "answer_type": answer_type,
             "citation_count": len(limited_sources),
-            "answer": answer,
+            "answer": streamed_answer,
         }
         return {"completion_result": completion_result}
 
@@ -366,6 +377,26 @@ def _structured_response(result: Any) -> AthleteChatStructuredResponse:
         structured = result.get("structured_response", result)
         return AthleteChatStructuredResponse.model_validate(structured)
     return AthleteChatStructuredResponse.model_validate(result)
+
+
+async def _publish_answer_chunks(
+    stream_service: AgentStreamService,
+    *,
+    task_id: str,
+    answer: str,
+) -> str:
+    """Publish validated answer text as ordered chunks and return exact text."""
+    streamed_parts: list[str] = []
+    for chunk in _answer_chunks(answer):
+        await stream_service.publish_chunk(task_id, content=chunk)
+        streamed_parts.append(chunk)
+    return "".join(streamed_parts)
+
+
+def _answer_chunks(answer: str) -> list[str]:
+    """Split final text into word-like chunks while preserving whitespace."""
+    chunks = [match.group(0) for match in re.finditer(r"\S+\s*", answer)]
+    return chunks or ([answer] if answer else [])
 
 
 def _sources_for_keys(

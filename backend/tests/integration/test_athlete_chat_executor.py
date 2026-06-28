@@ -11,7 +11,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.agents.builders import chains_builder
 from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
 from app.agents.states.athlete_chat_state import AthleteChatStructuredResponse
-from app.agents.states.conversation_title_state import ConversationTitleStructuredResponse
+from app.agents.states.conversation_title_state import (
+    ConversationTitleStructuredResponse,
+)
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.repositories.conversations import (
     ConversationFileRepository,
@@ -477,6 +479,83 @@ async def test_athlete_chat_executor_persists_grounded_answer_and_citations(
 
 
 @pytest.mark.asyncio
+async def test_athlete_chat_executor_streams_validated_answer_chunks_before_complete(
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        chains_builder,
+        "create_athlete_chat_chain",
+        fake_chain_with_tool,
+    )
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-agent-stream-chunks",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-stream-chunks@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-stream-chunks",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    user_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="Can I accept this NIL deal?",
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={
+            "task_id": "task-stream-chunks",
+            "user_message_id": str(user_message.id),
+        },
+    )
+    provider = InMemoryAgentStreamProvider()
+
+    await AthleteChatExecutor(
+        session=db_session,
+        chat_model=object(),
+        knowledgebase_provider=FakeKnowledgebaseProvider(),
+        stream_service=AgentStreamService(provider),
+        settings=test_settings,
+    ).execute(
+        task_id="task-stream-chunks",
+        conversation_id=conversation.id,
+        athlete_user_id=athlete.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant_message.id,
+        organization_id=organization.id,
+        attached_file_ids=[],
+    )
+
+    updated = await ConversationMessageRepository(db_session).get(assistant_message.id)
+    records = [
+        record
+        async for record in provider.iter_events("task-stream-chunks", after_id="0-0")
+    ]
+    chunk_records = [
+        record for record in records if record.event.event_type.value == "chunk"
+    ]
+
+    assert len(chunk_records) > 1
+    assert records[-1].event.event_type.value == "complete"
+    assert records.index(chunk_records[-1]) < len(records) - 1
+    assert updated is not None
+    assert updated.content == "".join(
+        str(record.event.data["content"]) for record in chunk_records
+    )
+
+
+@pytest.mark.asyncio
 async def test_athlete_chat_executor_generates_first_turn_title_before_complete(
     db_session,
     test_settings,
@@ -712,11 +791,13 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
         metadata={"task_id": "task-refusal", "user_message_id": str(user_message.id)},
     )
 
+    provider = InMemoryAgentStreamProvider()
+
     result = await AthleteChatExecutor(
         session=db_session,
         chat_model=object(),
         knowledgebase_provider=FakeKnowledgebaseProvider(),
-        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
+        stream_service=AgentStreamService(provider),
         settings=test_settings,
     ).execute(
         task_id="task-refusal",
@@ -732,6 +813,14 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
     citations = await MessageCitationRepository(db_session).list_by_message(
         assistant_message.id
     )
+    records = [
+        record async for record in provider.iter_events("task-refusal", after_id="0-0")
+    ]
+    chunk_text = "".join(
+        str(record.event.data["content"])
+        for record in records
+        if record.event.event_type.value == "chunk"
+    )
 
     assert result["answer_type"] == "unsupported"
     assert updated is not None
@@ -739,6 +828,8 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
     assert "athletic department" in updated.content
     assert updated.safety_outcome == "unsupported"
     assert citations == []
+    assert "Yes, you can accept it." not in chunk_text
+    assert chunk_text == updated.content
 
 
 @pytest.mark.asyncio
@@ -813,6 +904,9 @@ async def test_athlete_chat_executor_safety_bypass_skips_agent_and_persists_inst
     assert updated.safety_outcome == "emergency_instruction"
     assert updated.message_metadata["kb_zero_hit"] is False
     assert citations == []
+    assert len(
+        [record for record in records if record.event.event_type.value == "chunk"]
+    ) > 1
     assert records[-1].event.event_type == "complete"
 
 

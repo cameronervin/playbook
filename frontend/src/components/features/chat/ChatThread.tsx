@@ -1,11 +1,15 @@
 'use client'
 
-import { AlertTriangle, FileText } from 'lucide-react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, ArrowDown, FileText } from 'lucide-react'
 import { ChatThreadSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { PlaybookMark } from '@/src/components/ui'
 import type { ChatMessage, Citation } from '@/src/types/conversations'
 
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 96
+
 interface ChatThreadProps {
+  conversationId?: string | null
   isLoading?: boolean
   messages: ChatMessage[]
   onCitationSelect: (citation: Citation) => void
@@ -13,15 +17,40 @@ interface ChatThreadProps {
 }
 
 export function ChatThread({
+  conversationId = null,
   isLoading = false,
   messages,
   onCitationSelect,
   pendingMessage = null,
 }: ChatThreadProps) {
+  const scrollSignal = useMemo(
+    () => createScrollSignal(messages, pendingMessage),
+    [messages, pendingMessage],
+  )
+  const {
+    forceFollowLatest,
+    handleScroll,
+    isPinnedToBottom,
+    scrollToLatest,
+    threadRef,
+  } = useChatAutoScroll({ conversationId, scrollSignal })
+  const hasThreadContent = messages.length > 0 || pendingMessage !== null
+
+  useLayoutEffect(() => {
+    if (pendingMessage !== null) {
+      forceFollowLatest('auto')
+    }
+  }, [forceFollowLatest, pendingMessage])
+
   if (isLoading) return <ChatThreadSkeleton />
 
   return (
-    <div className="pb-chat-thread">
+    <div
+      className="pb-chat-thread"
+      data-testid="chat-thread-scroll"
+      onScroll={handleScroll}
+      ref={threadRef}
+    >
       <div className="pb-chat-content flex w-full flex-col gap-6 px-7">
         {messages.length === 0 && !pendingMessage ? (
           <EmptyState />
@@ -46,8 +75,104 @@ export function ChatThread({
           </>
         )}
       </div>
+      {hasThreadContent && !isPinnedToBottom && (
+        <button
+          aria-label="Jump to latest message"
+          className="pb-chat-jump-latest pb-focus-control"
+          onClick={() => scrollToLatest('smooth')}
+          title="Jump to latest message"
+          type="button"
+        >
+          <ArrowDown className="h-4 w-4" />
+        </button>
+      )}
     </div>
   )
+}
+
+interface ChatAutoScrollOptions {
+  conversationId: string | null
+  scrollSignal: string
+}
+
+function useChatAutoScroll({ conversationId, scrollSignal }: ChatAutoScrollOptions) {
+  const threadRef = useRef<HTMLDivElement | null>(null)
+  const isPinnedRef = useRef(true)
+  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
+
+  const setPinnedToBottom = useCallback((isPinned: boolean) => {
+    isPinnedRef.current = isPinned
+    setIsPinnedToBottom(isPinned)
+  }, [])
+
+  const scrollToLatest = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      const thread = threadRef.current
+      if (!thread) return
+
+      const resolvedBehavior = shouldReduceMotion() ? 'auto' : behavior
+      if (resolvedBehavior === 'smooth' && typeof thread.scrollTo === 'function') {
+        thread.scrollTo({ behavior: resolvedBehavior, top: thread.scrollHeight })
+      } else {
+        thread.scrollTop = thread.scrollHeight
+      }
+      setPinnedToBottom(true)
+    },
+    [setPinnedToBottom],
+  )
+
+  const forceFollowLatest = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      isPinnedRef.current = true
+      scrollToLatest(behavior)
+    },
+    [scrollToLatest],
+  )
+
+  const handleScroll = useCallback(() => {
+    const thread = threadRef.current
+    if (!thread) return
+    setPinnedToBottom(isNearBottom(thread))
+  }, [setPinnedToBottom])
+
+  useLayoutEffect(() => {
+    forceFollowLatest('auto')
+  }, [conversationId, forceFollowLatest])
+
+  useLayoutEffect(() => {
+    if (isPinnedRef.current) {
+      scrollToLatest('auto')
+    }
+  }, [scrollSignal, scrollToLatest])
+
+  return {
+    forceFollowLatest,
+    handleScroll,
+    isPinnedToBottom,
+    scrollToLatest,
+    threadRef,
+  }
+}
+
+function createScrollSignal(messages: ChatMessage[], pendingMessage: string | null): string {
+  return [
+    pendingMessage ?? '',
+    ...messages.map((message) => [
+      message.id,
+      message.status,
+      message.content.length,
+      message.citations.length,
+    ].join(':')),
+  ].join('|')
+}
+
+function isNearBottom(element: HTMLElement): boolean {
+  const distanceFromBottom = element.scrollHeight - element.clientHeight - element.scrollTop
+  return distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX
+}
+
+function shouldReduceMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 
 function EmptyState() {
@@ -104,10 +229,8 @@ function AssistantMessage({ message, onCitationSelect }: AssistantMessageProps) 
           </div>
         ) : isThinking ? (
           <div className="pb-ui-sm flex items-center gap-3 py-1 text-fg-3">
-            <span className="animate-pb-pulse text-brand">
-              <PlaybookMark size={22} />
-            </span>
-            <span className="pb-think">Thinking...</span>
+            <PlaybookMark className="shrink-0 text-brand" size={22} />
+            <span className="pb-thinking-shimmer">Thinking...</span>
           </div>
         ) : (
           <>

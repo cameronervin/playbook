@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.session import get_db
-from app.models.identity import OAuthAccount, Organization, User
+from app.models.identity import AppSession, OAuthAccount, Organization, User
 
 
 class OrganizationRepository:
@@ -219,6 +220,68 @@ class UserRepository:
         await self.session.flush()
         await self.session.refresh(user)
         return user
+
+
+class AppSessionRepository:
+    """Data access for server-side application sessions."""
+
+    def __init__(self, session: AsyncSession = Depends(get_db)) -> None:
+        self.session = session
+
+    async def get(self, session_id: UUID) -> AppSession | None:
+        """Return an app session by ID."""
+        result = await self.session.execute(
+            select(AppSession).where(AppSession.id == session_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def create(
+        self,
+        *,
+        user_id: UUID,
+        expires_at: datetime,
+        last_seen_at: datetime | None = None,
+    ) -> AppSession:
+        """Create an app session without committing the transaction."""
+        now = datetime.now(UTC)
+        app_session = AppSession(
+            user_id=user_id,
+            last_seen_at=last_seen_at or now,
+            expires_at=expires_at,
+        )
+        self.session.add(app_session)
+        await self.session.flush()
+        await self.session.refresh(app_session)
+        return app_session
+
+    async def touch(
+        self,
+        app_session: AppSession,
+        *,
+        last_seen_at: datetime,
+        expires_at: datetime | None = None,
+    ) -> AppSession:
+        """Update session activity timestamps without committing."""
+        app_session.last_seen_at = last_seen_at
+        if expires_at is not None:
+            app_session.expires_at = expires_at
+        await self.session.flush()
+        await self.session.refresh(app_session)
+        return app_session
+
+    async def revoke(
+        self,
+        app_session: AppSession,
+        *,
+        revoked_at: datetime,
+        reason: str,
+    ) -> AppSession:
+        """Mark an app session revoked without committing."""
+        app_session.revoked_at = revoked_at
+        app_session.revoked_reason = reason
+        await self.session.flush()
+        await self.session.refresh(app_session)
+        return app_session
 
 
 class OAuthAccountRepository:

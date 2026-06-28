@@ -13,10 +13,16 @@ The scaffold includes FastAPI auth patterns, service-to-service auth for the KB 
 | Area | Target |
 |------|--------|
 | Providers | Google and Microsoft OAuth/OIDC |
-| Sessions | Server-validated session or JWT strategy selected during implementation |
+| Sessions | Short-lived app JWT in an HttpOnly cookie, backed by server-side `app_sessions` rows for sliding renewal and revocation |
 | Passwords | No local password required for MVP |
 | Tokens | OAuth provider tokens are never exposed to frontend app code |
 | Vendor cost | No paid third-party auth vendor required for MVP |
+
+App JWTs include the local user UUID and app session UUID, not provider tokens.
+Authenticated activity refreshes the app session when the JWT is inside the
+configured renewal threshold; expired or revoked sessions return 401 and the
+frontend clears local state before routing to SSO. OAuth/SSO identity remains
+the login bootstrap and is not refreshed on every app-session renewal.
 
 ## Roles
 

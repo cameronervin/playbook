@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import RedirectResponse
 
 from app.api.v1.dependencies import AuthServiceDep, CurrentUserDep
@@ -73,10 +73,18 @@ async def callback(
 
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
+    request: Request,
     response: Response,
-    _user: CurrentUserDep,
     service: AuthServiceDep,
 ) -> LogoutResponse:
     """Clear the app session cookie."""
-    service.logout(response)
+    await service.logout(request, response)
     return LogoutResponse()
+
+
+@router.post("/session/refresh", status_code=status.HTTP_204_NO_CONTENT)
+async def refresh_session(
+    _user: CurrentUserDep,
+) -> Response:
+    """Refresh the current app session on authenticated user activity."""
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

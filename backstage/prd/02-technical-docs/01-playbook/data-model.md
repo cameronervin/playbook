@@ -59,6 +59,25 @@ Implementation note: Phase 1 includes FastAPI Users-compatible auth fields on
 `users`. Playbook `role` remains authoritative; `is_superuser` is synchronized
 from `role = 'super_admin'` only for adapter compatibility.
 
+### `app_sessions`
+```sql
+CREATE TABLE app_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    revoked_at TIMESTAMP WITH TIME ZONE NULL,
+    revoked_reason VARCHAR(80) NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+```
+
+`app_sessions` backs Playbook's HttpOnly app JWT cookie. The JWT carries the
+local user ID and app session ID; protected requests validate both the JWT and
+server-side session row before authorizing access. Activity can extend the app
+session inside the configured renewal threshold, and logout records revocation.
+
 ### `oauth_accounts`
 ```sql
 CREATE TABLE oauth_accounts (
@@ -413,7 +432,8 @@ Checkpoint requirements:
 | Entity | Relationship |
 |--------|--------------|
 | `organizations` | Owns users, conversations, KB documents, dashboard insights, admin chat sessions, audit logs |
-| `users` | Belongs to one organization; owns conversations and admin actions |
+| `users` | Belongs to one organization; owns app sessions, conversations, and admin actions |
+| `app_sessions` | Tracks app-session activity, expiration, and revocation for cookie-backed JWTs |
 | `conversations` | Belongs to one athlete and contains messages/files |
 | `conversation_messages` | Stores user/assistant messages, risk labels, and safety outcomes |
 | `message_citations` | Links assistant messages to KB source records |

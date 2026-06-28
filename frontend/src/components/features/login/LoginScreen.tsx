@@ -1,18 +1,38 @@
 'use client'
 
+import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { useMemo } from 'react'
-import { Code2 } from 'lucide-react'
+import {
+  ChevronDown,
+  Code2,
+  GraduationCap,
+  Shield,
+  ShieldCheck,
+  UserPlus,
+  type LucideIcon,
+} from 'lucide-react'
 import { AuthCard } from '@/src/components/features/auth/AuthLayout'
 import { BrandLockup, GoogleLogo, MicrosoftLogo } from '@/src/components/ui'
 import { useAuthProviders, useStartOAuthLogin } from '@/src/hooks/useAuth'
-import type { AuthProvider } from '@/src/types/auth'
+import type { AuthProvider, DevAuthPersona } from '@/src/types/auth'
 
 interface LoginScreenProps {
   navigateAuthorizationUrl?: (url: string) => void
+  sessionExpired?: boolean
 }
 
 const PROVIDER_ORDER = ['microsoft', 'google', 'dev'] as const
 const PROVIDER_SKELETON_ORDER = ['microsoft', 'google'] as const
+const DEV_AUTH_OPTIONS: Array<{
+  icon: LucideIcon
+  label: string
+  persona: DevAuthPersona
+}> = [
+  { icon: GraduationCap, label: 'Athlete', persona: 'athlete' },
+  { icon: UserPlus, label: 'New athlete', persona: 'new_athlete' },
+  { icon: ShieldCheck, label: 'Admin', persona: 'admin' },
+  { icon: Shield, label: 'Super admin', persona: 'super_admin' },
+]
 
 const providerLogo = {
   microsoft: <MicrosoftLogo />,
@@ -37,7 +57,78 @@ function AuthProviderSkeleton() {
   )
 }
 
-export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
+interface ProviderButtonProps {
+  disabled: boolean
+  onClick: () => void
+  provider: AuthProvider
+}
+
+function ProviderButton({ disabled, onClick, provider }: ProviderButtonProps) {
+  return (
+    <button
+      className="pb-auth-provider-button pb-focus-control"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="pb-auth-provider-icon">
+        {providerLogo[provider.provider]}
+      </span>
+      <span className="pb-auth-provider-label">
+        Continue with {provider.label}
+      </span>
+    </button>
+  )
+}
+
+interface DevProviderMenuProps {
+  disabled: boolean
+  onSelectPersona: (persona: DevAuthPersona) => void
+  provider: AuthProvider
+}
+
+function DevProviderMenu({ disabled, onSelectPersona, provider }: DevProviderMenuProps) {
+  return (
+    <DropdownMenuPrimitive.Root>
+      <DropdownMenuPrimitive.Trigger asChild>
+        <button
+          className="pb-auth-provider-button pb-focus-control"
+          disabled={disabled}
+          type="button"
+        >
+          <span className="pb-auth-provider-icon">
+            {providerLogo.dev}
+          </span>
+          <span className="pb-auth-provider-label">
+            <span>Continue with {provider.label}</span>
+            <ChevronDown aria-hidden="true" className="pb-auth-provider-chevron" strokeWidth={1.8} />
+          </span>
+        </button>
+      </DropdownMenuPrimitive.Trigger>
+      <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content
+          align="end"
+          className="pb-menu-content pb-auth-dev-menu"
+          sideOffset={8}
+        >
+          {DEV_AUTH_OPTIONS.map(({ icon: Icon, label, persona }) => (
+            <DropdownMenuPrimitive.Item
+              className="pb-menu-item pb-focus-item"
+              disabled={disabled}
+              key={persona}
+              onSelect={() => onSelectPersona(persona)}
+            >
+              <Icon aria-hidden="true" className="h-4 w-4 text-fg-3" strokeWidth={1.8} />
+              <span>{label}</span>
+            </DropdownMenuPrimitive.Item>
+          ))}
+        </DropdownMenuPrimitive.Content>
+      </DropdownMenuPrimitive.Portal>
+    </DropdownMenuPrimitive.Root>
+  )
+}
+
+export function LoginScreen({ navigateAuthorizationUrl, sessionExpired = false }: LoginScreenProps) {
   const { data, isError, isPending } = useAuthProviders()
   const startOAuthLogin = useStartOAuthLogin()
   const navigate = navigateAuthorizationUrl ?? ((url: string) => window.location.assign(url))
@@ -54,7 +145,16 @@ export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
 
   const handleProviderClick = async (provider: AuthProvider) => {
     if (!provider.enabled) return
-    const response = await startOAuthLogin.mutateAsync(provider.provider)
+    const response = await startOAuthLogin.mutateAsync({ provider: provider.provider })
+    navigate(response.authorization_url)
+  }
+
+  const handleDevPersonaSelect = async (provider: AuthProvider, persona: DevAuthPersona) => {
+    if (!provider.enabled) return
+    const response = await startOAuthLogin.mutateAsync({
+      provider: provider.provider,
+      persona,
+    })
     navigate(response.authorization_url)
   }
 
@@ -71,26 +171,32 @@ export function LoginScreen({ navigateAuthorizationUrl }: LoginScreenProps) {
       >
         Log in to continue
       </h1>
+      {sessionExpired && (
+        <p className="pb-auth-copy mt-3 text-fg-2">
+          Your session expired after a period of inactivity. Sign in again to continue.
+        </p>
+      )}
       <div className="mt-8 grid w-full gap-3">
         {showProviderSkeletons &&
           PROVIDER_SKELETON_ORDER.map((provider) => <AuthProviderSkeleton key={provider} />)}
         {showProviderError && <p className="pb-auth-copy text-danger">SSO providers are not available right now.</p>}
-        {providers.map((provider) => (
-          <button
-            className="pb-auth-provider-button pb-focus-control"
-            disabled={!provider.enabled || startOAuthLogin.isPending}
-            key={provider.provider}
-            onClick={() => handleProviderClick(provider)}
-            type="button"
-          >
-            <span className="pb-auth-provider-icon">
-              {providerLogo[provider.provider]}
-            </span>
-            <span className="pb-auth-provider-label">
-              Continue with {provider.label}
-            </span>
-          </button>
-        ))}
+        {providers.map((provider) =>
+          provider.provider === 'dev' ? (
+            <DevProviderMenu
+              disabled={!provider.enabled || startOAuthLogin.isPending}
+              key={provider.provider}
+              onSelectPersona={(persona) => void handleDevPersonaSelect(provider, persona)}
+              provider={provider}
+            />
+          ) : (
+            <ProviderButton
+              disabled={!provider.enabled || startOAuthLogin.isPending}
+              key={provider.provider}
+              onClick={() => void handleProviderClick(provider)}
+              provider={provider}
+            />
+          ),
+        )}
       </div>
       <footer className="pb-auth-footer mt-8 w-full border-t border-border pt-6">
         <a className="transition hover:text-fg-1" href="/privacy">Privacy Policy</a>

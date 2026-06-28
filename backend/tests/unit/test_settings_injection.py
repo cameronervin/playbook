@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,7 +15,7 @@ from app.core.config import Settings
 from app.infrastructure.db.session import get_db
 from app.main import create_app
 from app.models.identity import User
-from app.repositories.identity import OrganizationRepository, UserRepository
+from app.repositories.identity import AppSessionRepository, OrganizationRepository, UserRepository
 
 
 APP_ROOT = Path(__file__).resolve().parents[2] / "app"
@@ -79,7 +80,21 @@ async def test_auth_dependency_uses_injected_cookie_and_secret(db_session) -> No
         role="athlete",
         sport_team="Basketball",
     )
-    token = jwt.encode({"sub": str(user.id)}, settings.SECRET_KEY, algorithm="HS256")
+    app_session = await AppSessionRepository(db_session).create(
+        user_id=user.id,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "sid": str(app_session.id),
+            "role": user.role,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int(app_session.expires_at.timestamp()),
+        },
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:

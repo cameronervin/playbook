@@ -40,7 +40,7 @@ from app.infrastructure.knowledgebase import get_kb_provider, is_kb_feature_enab
 from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import cleanup_storage_provider, get_storage_provider
 from app.infrastructure.streaming import cleanup_agent_stream_provider
-from app.middleware import setup_cors, setup_request_context
+from app.middleware import setup_cors, setup_request_context, setup_session_refresh
 from app.observability.agent_trace import verify_tracing_configuration
 
 configure_logging()
@@ -184,6 +184,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     logger.info("Registered global exception handlers")
 
     setup_cors(app, settings)
+    setup_session_refresh(app, settings)
     setup_request_context(app)
 
     app.include_router(auth.router, prefix=API_V1_PREFIX)

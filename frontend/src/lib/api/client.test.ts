@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiClient } from '@/src/lib/api/client'
+import { AUTH_EXPIRED_EVENT, apiClient } from '@/src/lib/api/client'
 
 const originalFetch = global.fetch
 
@@ -71,6 +71,58 @@ describe('apiClient', () => {
       details: { request_id: 'req-1' },
       message: 'Admin role required',
     })
+  })
+
+  it('emits an auth-expired browser event for unauthorized session expiry', async () => {
+    const onAuthExpired = vi.fn()
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Not authenticated',
+            retryable: false,
+            details: { reason: 'session_expired' },
+          },
+        }),
+        { status: 401 },
+      ),
+    )
+
+    await expect(apiClient('/api/v1/users/me')).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    })
+
+    expect(onAuthExpired).toHaveBeenCalledOnce()
+    window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+  })
+
+  it('does not emit auth-expired for non-auth request failures', async () => {
+    const onAuthExpired = vi.fn()
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Admin role required',
+            retryable: false,
+            details: {},
+          },
+        }),
+        { status: 403 },
+      ),
+    )
+
+    await expect(apiClient('/api/v1/admin/users')).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+    })
+
+    expect(onAuthExpired).not.toHaveBeenCalled()
+    window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
   })
 
   it('supports no-content responses', async () => {

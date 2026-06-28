@@ -78,7 +78,6 @@ export function ChatNavRail({
         >
           <Plus className="h-[17px] w-[17px] text-brand" />
           <span className="flex-1">New chat</span>
-          <span className="pb-ui-xs text-fg-4">⌘N</span>
         </button>
       </div>
 

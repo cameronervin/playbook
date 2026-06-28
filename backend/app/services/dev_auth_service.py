@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,11 @@ from app.auth.dev_personas import (
 )
 from app.auth.session import create_access_token
 from app.core.config import Settings
-from app.repositories.identity import OrganizationRepository, UserRepository
+from app.repositories.identity import (
+    AppSessionRepository,
+    OrganizationRepository,
+    UserRepository,
+)
 
 __all__ = [
     "DEV_USER_SPECS",
@@ -50,11 +55,13 @@ class DevAuthService:
         settings: Settings,
         org_repo: OrganizationRepository | None = None,
         user_repo: UserRepository | None = None,
+        app_session_repo: AppSessionRepository | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.org_repo = org_repo or OrganizationRepository(session)
         self.user_repo = user_repo or UserRepository(session)
+        self.app_session_repo = app_session_repo or AppSessionRepository(session)
 
     async def seed_users(self) -> dict[str, SeededPrincipal]:
         """Create or normalize deterministic local-development users."""
@@ -97,13 +104,23 @@ class DevAuthService:
                         sport_team=spec.sport_team,
                     )
 
+            expires_at = datetime.now(UTC) + timedelta(seconds=self.settings.JWT_LIFETIME_SECONDS)
+            app_session = await self.app_session_repo.create(
+                user_id=user.id,
+                expires_at=expires_at,
+            )
             seeded[spec.key] = SeededPrincipal(
                 key=spec.key,
                 email=user.email,
                 role=user.role,  # type: ignore[arg-type]
                 user_id=user.id,
                 organization_id=user.organization_id,
-                token=create_access_token(user, self.settings),
+                token=create_access_token(
+                    user,
+                    self.settings,
+                    session_id=app_session.id,
+                    expires_at=app_session.expires_at,
+                ),
                 next_route=self._next_route(spec.key, user),
             )
 

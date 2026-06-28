@@ -191,7 +191,7 @@ beforeEach(() => {
   chatMocks.uploadConversationFileMutate.mockReset()
   useUIStore.setState({
     activeConversationId: null,
-    sourcesOpen: true,
+    sourcesOpen: false,
     selectedCitationTitle: null,
     settingsOpen: false,
     adminTab: 'insights',
@@ -244,6 +244,20 @@ describe('ChatShell', () => {
     expect(screen.getByRole('button', { name: /nil disclosure window/i })).toBeInTheDocument()
     expect(screen.getByText(/refreshing chats/i)).toBeInTheDocument()
     expect(screen.queryByTestId('chat-history-skeleton-row')).not.toBeInTheDocument()
+  })
+
+  it('does not show the active New chat history row while an existing conversation refreshes', () => {
+    const conversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [conversation]
+    chatMocks.conversationsFetching = true
+    chatMocks.details = new Map([['c1', detail(conversation)]])
+    useUIStore.setState({ activeConversationId: 'c1' })
+
+    renderChat()
+
+    expect(screen.getAllByRole('button', { name: /^new chat$/i })).toHaveLength(1)
+    expect(screen.getByText(/refreshing chats/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /nil disclosure window/i })).toBeInTheDocument()
   })
 
   it('renders the active thread skeleton while conversation detail resolves', () => {
@@ -320,6 +334,47 @@ describe('ChatShell', () => {
     expect(screen.queryByTestId('chat-empty-thread')).not.toBeInTheDocument()
     expect(screen.getByRole('banner', { name: /chat actions/i })).toBeInTheDocument()
     expect(screen.getByText(/athletes disclose nil agreements/i)).toBeInTheDocument()
+  })
+
+  it('keeps sources closed when selecting an old conversation', async () => {
+    const conversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [conversation]
+    chatMocks.details = new Map([
+      [
+        'c1',
+        {
+          ...conversation,
+          messages: [
+            {
+              id: 'm1',
+              conversation_id: 'c1',
+              role: 'assistant',
+              content: 'Athletes disclose NIL agreements within 72 hours.',
+              status: 'complete',
+              safety_outcome: null,
+              topic_labels: [],
+              risk_labels: [],
+              metadata: {},
+              citations: [],
+              created_at: today.toISOString(),
+            },
+          ],
+          files: [],
+        },
+      ],
+    ])
+
+    renderChat()
+
+    await userEvent.click(screen.getByRole('button', { name: /nil disclosure window/i }))
+
+    expect(screen.getByRole('banner', { name: /chat actions/i })).toBeInTheDocument()
+    expect(screen.getByText(/athletes disclose nil agreements/i)).toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: /sources/i })).not.toBeInTheDocument()
+  })
+
+  it('aligns side panel headers with the chat top bar height', () => {
+    expect(globalsCss).toMatch(/\.pb-panel-header\s*{[^}]*height:\s*64px;/s)
   })
 
   it('groups conversation history and filters search results', async () => {
@@ -558,7 +613,7 @@ describe('ChatShell', () => {
     expect(chatMocks.uploadConversationFileMutate).not.toHaveBeenCalled()
   })
 
-  it('opens sources from a citation click and highlights the cited source', async () => {
+  it('selects citations without opening sources until the expand button is clicked', async () => {
     const conversation = summary('c1', 'NIL disclosure window', today)
     chatMocks.conversations = [conversation]
     chatMocks.details = new Map([
@@ -588,6 +643,16 @@ describe('ChatShell', () => {
                   rank: 1,
                   created_at: today.toISOString(),
                 },
+                {
+                  id: 'citation-2',
+                  message_id: 'm1',
+                  document_id: 'doc-2',
+                  chunk_id: 'chunk-2',
+                  source_title: 'Travel policy',
+                  source_metadata: { page: 'p. 8' },
+                  rank: 2,
+                  created_at: today.toISOString(),
+                },
               ],
               created_at: today.toISOString(),
             },
@@ -600,12 +665,56 @@ describe('ChatShell', () => {
 
     renderChat()
 
-    await userEvent.click(screen.getByRole('button', { name: /nil policy handbook/i }))
+    await userEvent.click(screen.getByRole('button', { name: /travel policy/i }))
+
+    expect(screen.queryByRole('complementary', { name: /sources/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /toggle sources/i }))
+    const panel = screen.getByRole('complementary', { name: /sources/i })
+
+    expect(panel).toBeInTheDocument()
+    expect(within(panel).getAllByText('Travel policy')).toHaveLength(2)
+    expect(within(panel).getAllByText('NIL policy handbook')).toHaveLength(1)
+    expect(within(panel).getByText(/selected source/i)).toBeInTheDocument()
+    expect(within(panel).queryByText(/documents used by the playbook agent/i)).not.toBeInTheDocument()
+  })
+
+  it('omits the old sources subtitle in the empty sources panel', async () => {
+    const conversation = summary('c1', 'NIL disclosure window', today)
+    chatMocks.conversations = [conversation]
+    chatMocks.details = new Map([
+      [
+        'c1',
+        {
+          ...conversation,
+          messages: [
+            {
+              id: 'm1',
+              conversation_id: 'c1',
+              role: 'assistant',
+              content: 'Athletes disclose NIL agreements within 72 hours.',
+              status: 'complete',
+              safety_outcome: null,
+              topic_labels: [],
+              risk_labels: [],
+              metadata: {},
+              citations: [],
+              created_at: today.toISOString(),
+            },
+          ],
+          files: [],
+        },
+      ],
+    ])
+    useUIStore.setState({ activeConversationId: 'c1', sourcesOpen: true })
+
+    renderChat()
 
     const panel = screen.getByRole('complementary', { name: /sources/i })
-    expect(panel).toBeInTheDocument()
-    expect(within(panel).getAllByText('NIL policy handbook')).toHaveLength(2)
-    expect(within(panel).getByText(/selected source/i)).toBeInTheDocument()
+
+    expect(within(panel).getByText(/sources used to inform the playbook agent's responses will appear here/i)).toBeInTheDocument()
+    expect(within(panel).queryByText(/documents used by the playbook agent/i)).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/all sources/i)).not.toBeInTheDocument()
   })
 
   it('opens the account menu, settings modal, and logout action', async () => {
@@ -618,7 +727,10 @@ describe('ChatShell', () => {
 
     await userEvent.click(screen.getByRole('menuitem', { name: /settings/i }))
 
-    expect(screen.getByRole('dialog', { name: /settings/i })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: /settings/i })
+
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).queryByRole('tab', { name: /security & sso/i })).not.toBeInTheDocument()
 
     await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))

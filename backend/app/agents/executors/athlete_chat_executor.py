@@ -132,9 +132,6 @@ class AthleteChatExecutor:
                 retryable=True,
             )
 
-        answer = str(completion_result.get("answer", ""))
-        if answer:
-            await self.stream_service.publish_chunk(task_id, content=answer)
         conversation_title = await self._generate_conversation_title(
             task_id=task_id,
             conversation_id=conversation_id,

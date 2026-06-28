@@ -333,6 +333,22 @@ describe('AdminShell', () => {
     expect(adminRouterMocks.push).toHaveBeenCalledWith('/chat')
   })
 
+  it('opens admin settings without security and SSO options', async () => {
+    currentUser.role = 'admin'
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /settings/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /settings/i })
+
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).queryByRole('tab', { name: /security & sso/i })).not.toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: /settings/i })).not.toBeInTheDocument()
+  })
+
   it('renders the Claude design Insights dashboard hierarchy for admins', () => {
     currentUser.role = 'super_admin'
     renderAdmin()

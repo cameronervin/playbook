@@ -4,12 +4,12 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import type { ChangeEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
-import { Check, Lock, LogOut, Mail, Monitor, ShieldCheck, User, X } from 'lucide-react'
-import { Button, GoogleLogo, IconButton, MicrosoftLogo } from '@/src/components/ui'
+import { Check, Lock, Mail, User, X } from 'lucide-react'
+import { Button, IconButton } from '@/src/components/ui'
 import { cn } from '@/src/lib/utils/cn'
 import type { CurrentUser, UserRole } from '@/src/types/auth'
 
-type SettingsSection = 'profile' | 'security'
+type SettingsSection = 'profile'
 
 interface SettingsModalProps {
   open: boolean
@@ -27,7 +27,6 @@ interface ProfileDraft {
 
 const SETTINGS_NAV: Array<{ id: SettingsSection; icon: typeof User; label: string }> = [
   { id: 'profile', icon: User, label: 'Profile' },
-  { id: 'security', icon: ShieldCheck, label: 'Security & SSO' },
 ]
 
 export function SettingsModal({ open, onOpenChange, user }: SettingsModalProps) {
@@ -55,7 +54,7 @@ export function SettingsModal({ open, onOpenChange, user }: SettingsModalProps) 
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-bg-void/70 backdrop-blur-[3px]" />
         <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-32px)] w-[min(880px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border border-border-strong bg-surface-raised shadow-lg outline-none max-md:flex-col">
           <DialogPrimitive.Description className="sr-only">
-            Manage your Playbook profile and single sign-on settings.
+            Manage your Playbook profile settings.
           </DialogPrimitive.Description>
           <TabsPrimitive.Root
             className="flex min-h-0 max-h-[calc(100dvh-32px)] w-full max-md:flex-col"
@@ -95,9 +94,6 @@ export function SettingsModal({ open, onOpenChange, user }: SettingsModalProps) 
               <div className="min-h-0 overflow-y-auto px-6 py-[22px] max-md:px-4">
                 <TabsPrimitive.Content className="m-0 outline-none" forceMount hidden={section !== 'profile'} value="profile">
                   <ProfilePane draft={draft} onPatch={patchDraft} />
-                </TabsPrimitive.Content>
-                <TabsPrimitive.Content className="m-0 outline-none" forceMount hidden={section !== 'security'} value="security">
-                  <SecurityPane email={draft.email} />
                 </TabsPrimitive.Content>
               </div>
 
@@ -176,42 +172,6 @@ function ProfilePane({ draft, onPatch }: ProfilePaneProps) {
   )
 }
 
-interface SecurityPaneProps {
-  email: string
-}
-
-function SecurityPane({ email }: SecurityPaneProps) {
-  return (
-    <div>
-      <Group
-        description="Playbook uses SSO only - there's no password to manage. Your administrator controls which providers are available."
-        title="Single sign-on"
-      >
-        <div className="grid gap-2.5">
-          <ProviderRow connected logo={<MicrosoftLogo />} name="Microsoft" subLabel={email} />
-          <ProviderRow logo={<GoogleLogo />} name="Google" subLabel="Not connected" />
-        </div>
-      </Group>
-      <Group title="Active session">
-        <div className="flex items-center gap-[13px] rounded-md border border-border bg-bg-base px-[15px] py-3.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-hover text-fg-2">
-            <Monitor className="h-[18px] w-[18px]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="pb-settings-input truncate font-semibold text-fg-1">This device · Stillwater, OK</p>
-            <p className="pb-settings-meta mt-0.5 truncate text-fg-3">Chrome · last active just now</p>
-          </div>
-          <StatusBadge>Active</StatusBadge>
-        </div>
-        <Button className="mt-3.5" size="sm" variant="danger">
-          <LogOut className="h-4 w-4" />
-          Sign out of all other sessions
-        </Button>
-      </Group>
-    </div>
-  )
-}
-
 interface GroupProps {
   children: ReactNode
   description?: string
@@ -279,48 +239,6 @@ function SettingsInput({ icon, onChange, readOnly = false, value }: SettingsInpu
         </span>
       )}
     </div>
-  )
-}
-
-interface ProviderRowProps {
-  connected?: boolean
-  logo: ReactNode
-  name: string
-  subLabel: string
-}
-
-function ProviderRow({ connected = false, logo, name, subLabel }: ProviderRowProps) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-[13px] rounded-md border bg-bg-base px-[15px] py-[13px]',
-        connected ? 'border-border-strong' : 'border-border',
-      )}
-    >
-      <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-sm border border-border bg-surface-raised">
-        {logo}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="pb-settings-input truncate font-semibold text-fg-1">{name}</p>
-        <p className="pb-settings-meta mt-px truncate text-fg-3">{subLabel}</p>
-      </div>
-      {connected ? (
-        <StatusBadge>Connected</StatusBadge>
-      ) : (
-        <Button aria-label={`Connect ${name}`} size="sm" variant="secondary">
-          Connect
-        </Button>
-      )}
-    </div>
-  )
-}
-
-function StatusBadge({ children }: { children: ReactNode }) {
-  return (
-    <span className="pb-settings-badge inline-flex shrink-0 items-center gap-2 rounded-pill border border-transparent bg-success-bg px-3 py-1 text-success">
-      <span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />
-      {children}
-    </span>
   )
 }
 
