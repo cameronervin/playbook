@@ -48,9 +48,14 @@ Role storage must support future roles without schema redesign.
 
 1. Conversation owner identity is protected.
 2. Admin analytics shows query text but anonymizes athlete identity.
-3. Analytics payloads should use stable anonymous identifiers where grouping is needed.
+3. Analytics payloads use stable anonymous identifiers where grouping is needed.
+   Backend admin analytics returns `anonymous_user_key` values derived from an
+   HMAC of tenant and athlete ID with `SECRET_KEY`; it must not return athlete
+   names, emails, raw user IDs, provider subjects, teams, or storage keys.
 4. Logs should avoid unnecessary PII and must never include secrets or provider tokens.
-5. Stored conversations are used for athlete history, dashboard insights, and anonymized admin analytics.
+5. Dashboard insights receive only the anonymized analytics snapshot and source
+   message IDs already scoped to the organization/window.
+6. Stored conversations are used for athlete history, dashboard insights, and anonymized admin analytics.
 
 ## Safety Policy
 
@@ -91,6 +96,7 @@ Audit entries include actor, action, target type, target ID, timestamp, and meta
 2. Athlete cannot access admin APIs.
 3. Admin cannot change super-admin roles.
 4. Super admin role changes create audit records.
-5. Admin analytics returns anonymized query owner data.
+5. Admin analytics returns anonymized query owner data and excludes names,
+   emails, raw user IDs, provider subjects, teams, and storage keys.
 6. Emergency and unsupported questions refuse safely.
 7. OAuth tokens are not logged or returned to frontend API responses.

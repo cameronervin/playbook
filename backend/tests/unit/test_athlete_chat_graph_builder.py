@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from app.agents import builders
 from app.agents.builders import chains_builder, graphs_builder
-from app.agents.chains import athlete_chat_chain, conversation_title_chain
+from app.agents.chains import (
+    athlete_chat_chain,
+    conversation_title_chain,
+    dashboard_insights_chain,
+)
 from app.agents.runtime_context import (
     AthleteChatRuntimeContext,
     ConversationTitleRuntimeContext,
+    DashboardInsightsRuntimeContext,
 )
 from app.agents.states.athlete_chat_state import AthleteChatState
 from app.agents.states.conversation_title_state import ConversationTitleState
+from app.agents.states.dashboard_insights_state import DashboardInsightsState
 
 
 class FakeChain:
@@ -66,11 +72,37 @@ def test_create_conversation_title_chain_wires_structured_agent(monkeypatch) -> 
     assert captured_kwargs["tools"] == []
 
 
+def test_create_dashboard_insights_chain_wires_structured_agent(monkeypatch) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    def fake_create_agent(**kwargs: object) -> object:
+        captured_kwargs.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(dashboard_insights_chain, "create_agent", fake_create_agent)
+
+    result = dashboard_insights_chain.create_dashboard_insights_chain(
+        chat_model=object(),
+        tools=[],
+    )
+
+    middleware = captured_kwargs["middleware"]
+    assert result is not None
+    assert captured_kwargs["state_schema"] is DashboardInsightsState
+    assert captured_kwargs["context_schema"] is DashboardInsightsRuntimeContext
+    assert captured_kwargs["tools"] == []
+    assert isinstance(middleware, list)
+    assert len(middleware) == 1
+    assert hasattr(middleware[0], "awrap_model_call")
+
+
 def test_agent_builder_exports_athlete_chat_and_title_without_example_graph() -> None:
     assert "compile_athlete_chat_graph" in builders.__all__
     assert "compile_conversation_title_graph" in builders.__all__
+    assert "compile_dashboard_insights_graph" in builders.__all__
     assert "create_athlete_chat_node_set" in builders.__all__
     assert "create_conversation_title_node_set" in builders.__all__
+    assert "create_dashboard_insights_node_set" in builders.__all__
     assert "build_athlete_chat_graph" not in builders.__all__
     assert "build_conversation_title_graph" not in builders.__all__
     assert "create_all_chains" not in builders.__all__
@@ -140,3 +172,32 @@ def test_compile_conversation_title_graph_uses_title_dependencies(
 
     assert hasattr(graph, "ainvoke")
     assert captured_models == ["title-model"]
+
+
+def test_compile_dashboard_insights_graph_builds_static_dependencies(
+    test_settings,
+    monkeypatch,
+) -> None:
+    dashboard_tool_names: list[str] = []
+
+    def fake_dashboard_chain_factory(**kwargs: object) -> FakeChain:
+        dashboard_tool_names[:] = [tool.name for tool in kwargs.get("tools", [])]
+        return FakeChain()
+
+    monkeypatch.setattr(
+        chains_builder,
+        "create_dashboard_insights_chain",
+        fake_dashboard_chain_factory,
+    )
+
+    graph = graphs_builder.compile_dashboard_insights_graph(
+        chat_model=object(),
+        checkpointer=None,
+        app_settings=test_settings,
+    )
+
+    assert hasattr(graph, "ainvoke")
+    assert dashboard_tool_names == [
+        "inspect_dashboard_metric",
+        "list_anonymized_query_examples",
+    ]

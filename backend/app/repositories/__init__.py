@@ -1,5 +1,10 @@
 """Data-access repositories."""
 
+from app.repositories.analytics import (
+    AdminAnalyticsRepository,
+    DashboardInsightRepository,
+    DashboardInsightRunRepository,
+)
 from app.repositories.audit import AuditLogRepository
 from app.repositories.conversations import (
     ConversationFileRepository,
@@ -14,10 +19,13 @@ from app.repositories.knowledge_base import (
 )
 
 __all__ = [
+    "AdminAnalyticsRepository",
     "AuditLogRepository",
     "ConversationFileRepository",
     "ConversationMessageRepository",
     "ConversationRepository",
+    "DashboardInsightRepository",
+    "DashboardInsightRunRepository",
     "KBDocumentEventRepository",
     "KBDocumentRepository",
     "MessageCitationRepository",

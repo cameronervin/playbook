@@ -21,6 +21,9 @@ class WorkerTaskName(StrEnum):
     DRAIN_KB_INGEST_OUTBOX = "app.workers.tasks.drain_kb_ingest_outbox_task"
     RECONCILE_UPLOAD_REQUESTS = "app.workers.tasks.reconcile_upload_requests_task"
     GENERATE_DASHBOARD_INSIGHTS = "app.workers.tasks.generate_dashboard_insights_task"
+    SCHEDULE_NIGHTLY_DASHBOARD_INSIGHTS = (
+        "app.workers.tasks.schedule_nightly_dashboard_insights_task"
+    )
     PRUNE_CHECKPOINTS = "app.workers.tasks.prune_checkpoints_task"
     HEALTH_CHECK = "app.workers.tasks.worker_health_check"
 
@@ -41,6 +44,9 @@ TASK_ROUTES: dict[str, dict[str, str]] = {
         "queue": BACKEND_MAINTENANCE_QUEUE,
     },
     WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS.value: {
+        "queue": BACKEND_INSIGHTS_QUEUE,
+    },
+    WorkerTaskName.SCHEDULE_NIGHTLY_DASHBOARD_INSIGHTS.value: {
         "queue": BACKEND_INSIGHTS_QUEUE,
     },
     WorkerTaskName.PRUNE_CHECKPOINTS.value: {"queue": BACKEND_MAINTENANCE_QUEUE},

@@ -20,6 +20,8 @@ from app.workers.app import backend_worker, create_worker_app
 from app.workers.dispatcher import (
     AthleteChatTaskDispatcher,
     AthleteChatTaskPayload,
+    DashboardInsightsTaskDispatcher,
+    DashboardInsightsTaskPayload,
     KbIngestOutboxTaskDispatcher,
     UploadRequestReconciliationTaskDispatcher,
 )
@@ -34,9 +36,11 @@ from app.workers.queues import (
 )
 from app.workers.tasks import (
     drain_kb_ingest_outbox_task,
+    generate_dashboard_insights_task,
     reconcile_upload_requests_task,
     run_admin_chat_task,
     run_athlete_chat_task,
+    schedule_nightly_dashboard_insights_task,
     worker_health_check,
 )
 
@@ -91,6 +95,27 @@ def test_create_worker_app_uses_supplied_settings() -> None:
     assert app.conf.task_soft_time_limit == 12
     assert app.conf.task_time_limit == 34
     assert app.conf.task_default_retry_delay == 5
+
+
+def test_create_worker_app_registers_dashboard_insights_beat_schedule() -> None:
+    app = create_worker_app(
+        _settings(
+            DASHBOARD_INSIGHTS_NIGHTLY_HOUR_UTC=4,
+            DASHBOARD_INSIGHTS_NIGHTLY_MINUTE_UTC=30,
+        )
+    )
+
+    entry = app.conf.beat_schedule["nightly-dashboard-insights"]
+
+    assert entry["task"] == WorkerTaskName.SCHEDULE_NIGHTLY_DASHBOARD_INSIGHTS.value
+    assert entry["options"]["queue"] == BACKEND_INSIGHTS_QUEUE
+    assert str(entry["schedule"]) == "<crontab: 30 4 * * * (m/h/dM/MY/d)>"
+
+
+def test_create_worker_app_omits_dashboard_insights_beat_when_disabled() -> None:
+    app = create_worker_app(_settings(DASHBOARD_INSIGHTS_NIGHTLY_ENABLED=False))
+
+    assert app.conf.beat_schedule == {}
 
 
 def test_create_worker_app_separates_worker_log_level_from_app_log_level() -> None:
@@ -185,6 +210,7 @@ def test_backend_worker_registers_and_routes_named_tasks() -> None:
         WorkerTaskName.DRAIN_KB_INGEST_OUTBOX: BACKEND_FILES_QUEUE,
         WorkerTaskName.RECONCILE_UPLOAD_REQUESTS: BACKEND_MAINTENANCE_QUEUE,
         WorkerTaskName.GENERATE_DASHBOARD_INSIGHTS: BACKEND_INSIGHTS_QUEUE,
+        WorkerTaskName.SCHEDULE_NIGHTLY_DASHBOARD_INSIGHTS: BACKEND_INSIGHTS_QUEUE,
         WorkerTaskName.PRUNE_CHECKPOINTS: BACKEND_MAINTENANCE_QUEUE,
         WorkerTaskName.HEALTH_CHECK: BACKEND_MAINTENANCE_QUEUE,
     }
@@ -390,6 +416,35 @@ def test_kb_ingest_outbox_dispatcher_uses_countdown_expiry(monkeypatch) -> None:
         "retry": False,
         "countdown": 45,
         "expires": 105,
+    }
+
+
+def test_dashboard_insights_dispatcher_serializes_payload(monkeypatch) -> None:
+    run_id = uuid4()
+    organization_id = uuid4()
+    dispatched: dict[str, object] = {}
+
+    def fake_apply_async(*, kwargs: dict[str, object]) -> SimpleNamespace:
+        dispatched["kwargs"] = kwargs
+        return SimpleNamespace(id="dashboard-task-id")
+
+    monkeypatch.setattr(
+        generate_dashboard_insights_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    task_id = DashboardInsightsTaskDispatcher().dispatch(
+        payload=DashboardInsightsTaskPayload(
+            run_id=run_id,
+            organization_id=organization_id,
+        )
+    )
+
+    assert task_id == "dashboard-task-id"
+    assert dispatched["kwargs"] == {
+        "run_id": str(run_id),
+        "organization_id": str(organization_id),
     }
 
 
@@ -617,6 +672,69 @@ def test_athlete_chat_task_failure_publishes_agent_error_in_eager_mode(
         AgentStreamEventType.ERROR,
     ]
     assert records[0].event.data["code"] == "agent_failed"
+
+
+def test_dashboard_insights_task_runs_entrypoint_in_eager_mode(monkeypatch) -> None:
+    async def fake_generate(**kwargs: object) -> dict[str, object]:
+        return {
+            "status": "completed",
+            "run_id": kwargs["run_id"],
+            "organization_id": kwargs["organization_id"],
+        }
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "_generate_dashboard_insights",
+        fake_generate,
+        raising=False,
+    )
+    previous_always_eager = backend_worker.conf.task_always_eager
+    previous_eager_propagates = backend_worker.conf.task_eager_propagates
+    backend_worker.conf.task_always_eager = True
+    backend_worker.conf.task_eager_propagates = True
+    try:
+        result = generate_dashboard_insights_task.delay(
+            run_id="00000000-0000-0000-0000-000000000001",
+            organization_id="00000000-0000-0000-0000-000000000002",
+        )
+    finally:
+        backend_worker.conf.task_always_eager = previous_always_eager
+        backend_worker.conf.task_eager_propagates = previous_eager_propagates
+
+    assert result.get(timeout=1) == {
+        "status": "completed",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "organization_id": "00000000-0000-0000-0000-000000000002",
+    }
+
+
+def test_nightly_dashboard_insights_task_runs_entrypoint_in_eager_mode(
+    monkeypatch,
+) -> None:
+    async def fake_schedule() -> dict[str, object]:
+        return {"status": "scheduled", "created": 2, "dispatched": 2}
+
+    monkeypatch.setattr(
+        worker_tasks,
+        "_schedule_nightly_dashboard_insights",
+        fake_schedule,
+        raising=False,
+    )
+    previous_always_eager = backend_worker.conf.task_always_eager
+    previous_eager_propagates = backend_worker.conf.task_eager_propagates
+    backend_worker.conf.task_always_eager = True
+    backend_worker.conf.task_eager_propagates = True
+    try:
+        result = schedule_nightly_dashboard_insights_task.delay()
+    finally:
+        backend_worker.conf.task_always_eager = previous_always_eager
+        backend_worker.conf.task_eager_propagates = previous_eager_propagates
+
+    assert result.get(timeout=1) == {
+        "status": "scheduled",
+        "created": 2,
+        "dispatched": 2,
+    }
 
 
 def test_future_task_stubs_raise_not_implemented_in_eager_mode() -> None:

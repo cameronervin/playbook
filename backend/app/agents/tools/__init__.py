@@ -1,5 +1,12 @@
 """Agent tools: declarative registry + runtime assignment."""
 
+from app.agents.tools.dashboard_insights import (
+    DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE,
+    DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE,
+    DashboardInsightsToolProfile,
+    create_dashboard_insights_metric_tool,
+    create_dashboard_insights_query_examples_tool,
+)
 from app.agents.tools.knowledgebase import (
     ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
     ATHLETE_KB_TOOL_PROFILE,
@@ -29,15 +36,20 @@ __all__ = [
     "WORKFLOW_CHAIN_NAMES",
     "ATHLETE_CONVERSATION_FILE_TOOL_PROFILE",
     "ATHLETE_KB_TOOL_PROFILE",
+    "DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE",
+    "DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE",
     "ToolPromptKey",
     "ToolBuildContext",
     "ToolSpec",
     "ToolWorkflow",
+    "DashboardInsightsToolProfile",
     "KnowledgebaseSource",
     "KnowledgebaseToolProfile",
     "build_prompt_bindings",
     "build_workflow_chain_tool_map",
     "conversation_file_search_context",
+    "create_dashboard_insights_metric_tool",
+    "create_dashboard_insights_query_examples_tool",
     "create_conversation_file_search_tool",
     "create_knowledgebase_search_tool",
     "resolve_active_tools",

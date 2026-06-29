@@ -1,8 +1,9 @@
 # Context Engineering
 
 > How to control what each agent step receives, to reduce token usage, improve
-> focus, and lower cost. Athlete chat currently uses dedicated LangChain
-> middleware that preserves bounded history and appends compact runtime flags.
+> focus, and lower cost. Athlete chat and dashboard insights use dedicated
+> LangChain middleware that preserves bounded inputs and appends compact runtime
+> context.
 > The policy/serializer utilities remain available for future workflows that
 > need declarative context injection.
 
@@ -13,8 +14,8 @@
 │                     Context Engineering Flow                         │
 │                                                                      │
 │  ┌──────────────┐     ┌───────────────────┐     ┌────────────────┐  │
-│  │ Graph State  │────►│ Athlete Middleware │────►│  Guardrails    │  │
-│  │ load_state   │     │ athlete_chat_...py │     │ guardrails/    │  │
+│  │ Graph State  │────►│ Workflow Middleware│────►│  Guardrails    │  │
+│  │ load nodes   │     │ *_middleware.py    │     │ guardrails/    │  │
 │  └──────────────┘     └───────────────────┘     └────────────────┘  │
 │         │                      │                        │            │
 │         │                      ▼                        │            │
@@ -58,7 +59,23 @@ citation metadata. The model gets official shared guidance through
 `search_conversation_files`, and file-level summaries through the manifest for
 orientation only. `save_state` validates/persists citations.
 
-## 2. Conversation-File Scope Preparation
+## 2. Dashboard Insights Middleware
+
+Dashboard insight generation uses `create_dashboard_insights_middleware()` in
+the nested `create_agent(...)` chain. The graph loads a deterministic
+`AdminAnalyticsSnapshot` first; the middleware appends a compact context message
+with:
+
+- run ID, organization ID, window, and source filters;
+- analytics summary counts and bounded anonymized query examples;
+- source message IDs available to the output schema.
+
+It must not inject athlete names, emails, raw athlete IDs, teams, storage keys,
+or arbitrary database rows. The dashboard tools can inspect only
+`DashboardInsightsRuntimeContext.analytics_snapshot`, which is prepared by the
+graph node and already anonymized.
+
+## 3. Conversation-File Scope Preparation
 
 Athlete chat runs `prepare_conversation_file_scope` after deterministic safety
 checks and before model generation. The graph node:
@@ -84,14 +101,14 @@ must not be cited; only retrieved chunk excerpts returned by
 The model never receives whole uploaded documents, storage keys, signed URLs, or
 raw extracted-text artifacts.
 
-## 3. Policy Utilities
+## 4. Policy Utilities
 
 For future workflows, a policy can be the single source of truth for what
 context a step gets. `policies.py` defines `ContextField` and
 `PhaseContextPolicy`; the registry is intentionally empty until another
 workflow needs declarative context injection.
 
-## 4. Serializers
+## 5. Serializers
 
 Serializers turn state objects into text at a chosen level of detail. Use tiers
 to spend tokens only where they matter.
@@ -140,6 +157,10 @@ def get_serializer(field_name: str, tier: str):
   `search_conversation_files`, using private scope prepared deterministically by
   the graph. Citation metadata is captured from registered sources rather than
   injected wholesale.
+- For dashboard insights, `load_run` and `build_snapshot` own the deterministic
+  context load. The chain receives the stable dashboard prompt plus one compact
+  analytics snapshot message, and source IDs in structured output are filtered
+  against IDs present in the snapshot before persistence.
 
 ## Prompt Caching
 
@@ -166,5 +187,6 @@ backend/app/agents/context/
 ├── policies.py       # ContextField, StepContextPolicy, CONTEXT_POLICIES
 ├── serializers.py    # serializers + SERIALIZER_REGISTRY
 └── middleware/
-    └── athlete_chat_middleware.py
+    ├── athlete_chat_middleware.py
+    └── dashboard_insights_middleware.py
 ```

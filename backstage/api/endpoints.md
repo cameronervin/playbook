@@ -62,6 +62,14 @@ Example error response:
 | DELETE | `/admin/kb/documents/{document_id}` | Delete backend document record, original file, and searchable KB vectors |
 | POST | `/kb/webhook` | Receive signed KB-service status callbacks |
 | GET | `/admin/audit-logs` | Query org-scoped audit log records |
+| GET | `/admin/analytics/summary` | Return admin-only query volume, topic, unanswered, and risk summary for an org/window |
+| GET | `/admin/analytics/queries` | Return admin-only anonymized athlete query rows for review and filtering |
+| GET | `/admin/dashboard-insights/current` | Get the latest completed dashboard insight output, optionally scoped to a window |
+| GET | `/admin/dashboard-insights/outputs` | List generated dashboard insight outputs |
+| GET | `/admin/dashboard-insights/outputs/{insight_id}` | Get one generated dashboard insight output |
+| GET | `/admin/dashboard-insights/runs` | List dashboard insight generation runs |
+| POST | `/admin/dashboard-insights/runs` | Start a manual dashboard insight generation run; returns `202` with `run_id` |
+| GET | `/admin/dashboard-insights/runs/{run_id}` | Get a dashboard insight run status and output when complete |
 
 ## Direct Upload Endpoints
 
@@ -120,12 +128,6 @@ For a repeatable local Swagger and curl validation pass, see
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/admin/analytics/summary` | Query volume, topics, unanswered, risk summary |
-| GET | `/admin/analytics/queries` | Anonymized query list |
-| GET | `/admin/dashboard-insights/current` | Get latest completed insight output |
-| GET | `/admin/dashboard-insights/outputs` | List generated insight outputs |
-| GET | `/admin/dashboard-insights/runs` | List dashboard insight runs |
-| POST | `/admin/dashboard-insights/runs` | Start manual insight generation; status is polled by `run_id` |
 | GET | `/admin/chat/sessions` | List current admin chat sessions |
 | POST | `/admin/chat/sessions` | Create an admin chat session |
 | GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |

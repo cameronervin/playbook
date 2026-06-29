@@ -47,10 +47,34 @@ file contents.
 </tools>
 """
 
+DASHBOARD_INSIGHTS_METRIC_PROMPT = """
+<tools>
+- **inspect_dashboard_metric**:
+Use this tool to verify exact dashboard analytics counts before writing summary
+claims, headline values, topic counts, unanswered counts, or risk counts. Do not
+invent metrics that are not present in the snapshot.
+</tools>
+"""
+
+DASHBOARD_INSIGHTS_QUERY_EXAMPLES_PROMPT = """
+<tools>
+- **list_anonymized_query_examples**:
+Use this tool to inspect bounded anonymized query examples for a topic, risk, or
+unanswered gap. Refer only to message IDs and anonymous user keys. Never infer or
+state athlete names, emails, owner IDs, teams, or other identity.
+</tools>
+"""
+
 
 TOOL_PROMPT_REGISTRY: dict[ToolPromptKey, str] = {
     ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"): ATHLETE_KB_PROMPT,
     ToolPromptKey("athlete_chat", "search_conversation_files"): (
         ATHLETE_CONVERSATION_FILE_PROMPT
+    ),
+    ToolPromptKey("dashboard_insights", "inspect_dashboard_metric"): (
+        DASHBOARD_INSIGHTS_METRIC_PROMPT
+    ),
+    ToolPromptKey("dashboard_insights", "list_anonymized_query_examples"): (
+        DASHBOARD_INSIGHTS_QUERY_EXAMPLES_PROMPT
     ),
 }

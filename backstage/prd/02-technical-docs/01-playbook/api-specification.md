@@ -396,6 +396,32 @@ GET /api/v1/admin/analytics/summary?window=7d
 }
 ```
 
+### Analytics Queries
+```json
+GET /api/v1/admin/analytics/queries?window=7d&topic_labels=nil
+{
+  "window_start": "2026-05-27T00:00:00Z",
+  "window_end": "2026-06-03T00:00:00Z",
+  "queries": [
+    {
+      "message_id": "uuid",
+      "anonymous_user_key": "anon_8d7c...",
+      "text": "When do I disclose an NIL deal?",
+      "created_at": "2026-06-01T15:32:00Z",
+      "topic_labels": ["nil"],
+      "risk_labels": ["compliance"],
+      "response_status": "complete",
+      "answer_type": "grounded_answer",
+      "unanswered_reason": null
+    }
+  ]
+}
+```
+
+Analytics query responses are scoped to the current admin's organization and
+must not include athlete names, emails, raw user IDs, provider subjects, teams,
+or storage keys.
+
 ### Current Dashboard Insight
 ```json
 GET /api/v1/admin/dashboard-insights/current?window=7d
@@ -420,6 +446,13 @@ GET /api/v1/admin/dashboard-insights/current?window=7d
 }
 ```
 
+Completed outputs can also be listed or fetched directly:
+
+```json
+GET /api/v1/admin/dashboard-insights/outputs
+GET /api/v1/admin/dashboard-insights/outputs/{insight_id}
+```
+
 ### Manual Dashboard Insight Run
 ```json
 POST /api/v1/admin/dashboard-insights/runs
@@ -439,6 +472,42 @@ Response:
   "status": "pending"
 }
 ```
+
+Poll run status by `run_id`:
+
+```json
+GET /api/v1/admin/dashboard-insights/runs/{run_id}
+{
+  "id": "uuid",
+  "organization_id": "uuid",
+  "requested_by": "uuid",
+  "trigger_type": "manual",
+  "status": "completed",
+  "window_start": "2026-05-27T00:00:00Z",
+  "window_end": "2026-06-03T00:00:00Z",
+  "source_filters": {
+    "topic_labels": ["nil", "compliance"]
+  },
+  "error_message": null,
+  "created_at": "2026-06-03T12:00:00Z",
+  "updated_at": "2026-06-03T12:01:00Z",
+  "output": {
+    "id": "uuid",
+    "run_id": "uuid",
+    "summary": "NIL disclosure timing is the clearest support gap this week.",
+    "headline_cards": [],
+    "topic_breakdown": [],
+    "unanswered_questions": [],
+    "risk_breakdown": [],
+    "recommended_attention_areas": [],
+    "source_message_ids": ["uuid"],
+    "generated_at": "2026-06-03T12:01:00Z"
+  }
+}
+```
+
+Run status is one of `pending`, `processing`, `completed`, or `failed`.
+`trigger_type` is `manual` or `nightly`.
 
 ### Create Admin Chat Session
 ```json

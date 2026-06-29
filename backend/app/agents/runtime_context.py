@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.infrastructure.knowledgebase.providers.base import BaseKnowledgebaseProvider
+from app.schemas.admin_analytics import AdminAnalyticsSnapshot
 from app.services.agent_stream_service import AgentStreamService
 
 
@@ -29,3 +30,12 @@ class ConversationTitleRuntimeContext:
 
     session: AsyncSession
     settings: Settings
+
+
+@dataclass(slots=True)
+class DashboardInsightsRuntimeContext:
+    """Dependencies isolated per dashboard insight generation run."""
+
+    session: AsyncSession
+    settings: Settings
+    analytics_snapshot: AdminAnalyticsSnapshot | None = None

@@ -152,13 +152,26 @@ environment consistently.
 
 Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "healthy"}`.
 
-Optional backend worker for Phase 2+ async jobs. Keep both `backend-files` and
-`backend-maintenance` in the queue list so verified direct uploads dispatch to
-KB-service and scheduled passes reconcile expired direct-upload intents:
+Optional backend worker for Phase 2+ async jobs. Keep `backend-files`,
+`backend-insights`, and `backend-maintenance` in the queue list so verified
+direct uploads dispatch to KB-service, dashboard insight jobs run on their own
+queue, and scheduled passes reconcile expired direct-upload intents:
 
 ```bash
 uv run celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
 ```
+
+Run Celery beat when validating nightly dashboard insight scheduling:
+
+```bash
+uv run celery -A app.workers.app:backend_worker beat --loglevel=info
+```
+
+Nightly dashboard insight cadence is controlled by
+`DASHBOARD_INSIGHTS_NIGHTLY_ENABLED`,
+`DASHBOARD_INSIGHTS_NIGHTLY_HOUR_UTC`,
+`DASHBOARD_INSIGHTS_NIGHTLY_MINUTE_UTC`, and
+`DASHBOARD_INSIGHTS_NIGHTLY_WINDOW_DAYS`.
 
 Backend workers use `CELERY_WORKER_LOG_LEVEL` independently from API
 `LOG_LEVEL`, so local API logs can stay at `DEBUG` while worker logs default to
@@ -306,6 +319,7 @@ KB infrastructure definitions:
 | Infinity reranker | `reranker` | `7997` | enabled with `--profile reranker`, env in `deploy/envs/.env.reranker.local` copied from `deploy/envs/.env.reranker.example` |
 | KB API container | `kb-api` | `8001` | `deploy/compose/base.yml`, `deploy/compose/local.yml` |
 | KB workers | `kb-worker-cpu`, `kb-worker-io` | n/a | enabled with `--profile worker` |
+| Backend async workers | `celery-worker`, `celery-beat` | n/a | enabled with `--profile worker`; beat schedules nightly dashboard insights |
 
 ## 6. Verify End to End
 
@@ -335,7 +349,9 @@ processes are running:
 - MinIO plus `minio-bootstrap`, with browser preflight from
   `http://localhost:3000` allowing direct-upload POST requests.
 - Backend API on `http://localhost:8000`.
-- Backend worker listening on `backend-files` and `backend-maintenance`.
+- Backend worker listening on `backend-files`, `backend-insights`, and
+  `backend-maintenance`; Celery beat running when nightly insight scheduling is
+  being validated.
 - KB-service API on `http://localhost:8001`.
 - KB-service CPU and IO/notify workers.
 - Frontend on `http://localhost:3000`.

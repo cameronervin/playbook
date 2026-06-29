@@ -9,6 +9,10 @@ from app.agents.states.conversation_title_state import (
     ConversationTitleState,
     ConversationTitleStructuredResponse,
 )
+from app.agents.states.dashboard_insights_state import (
+    DashboardInsightsState,
+    DashboardInsightsStructuredResponse,
+)
 
 __all__ = [
     "AthleteChatAnswerType",
@@ -16,4 +20,6 @@ __all__ = [
     "AthleteChatStructuredResponse",
     "ConversationTitleState",
     "ConversationTitleStructuredResponse",
+    "DashboardInsightsState",
+    "DashboardInsightsStructuredResponse",
 ]

@@ -14,6 +14,12 @@ from typing import Literal
 import structlog
 from langchain_core.tools import BaseTool
 
+from app.agents.tools.dashboard_insights import (
+    DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE,
+    DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE,
+    create_dashboard_insights_metric_tool,
+    create_dashboard_insights_query_examples_tool,
+)
 from app.agents.tools.knowledgebase import (
     ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
     ATHLETE_KB_TOOL_PROFILE,
@@ -27,12 +33,14 @@ from app.infrastructure.knowledgebase import (
 
 logger = structlog.get_logger(__name__)
 
-ToolWorkflow = Literal["athlete_chat"]
+ToolWorkflow = Literal["athlete_chat", "dashboard_insights"]
 
 ATHLETE_CHAT_CHAIN_NAMES: tuple[str, ...] = ("athlete_chat",)
+DASHBOARD_INSIGHTS_CHAIN_NAMES: tuple[str, ...] = ("dashboard_insights",)
 
 WORKFLOW_CHAIN_NAMES: dict[ToolWorkflow, tuple[str, ...]] = {
     "athlete_chat": ATHLETE_CHAT_CHAIN_NAMES,
+    "dashboard_insights": DASHBOARD_INSIGHTS_CHAIN_NAMES,
 }
 
 
@@ -75,6 +83,20 @@ def _create_athlete_conversation_file_tool(_context: ToolBuildContext) -> BaseTo
     return create_conversation_file_search_tool(ATHLETE_CONVERSATION_FILE_TOOL_PROFILE)
 
 
+def _always_enabled(_context: ToolBuildContext) -> bool:
+    return True
+
+
+def _create_dashboard_metric_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_dashboard_insights_metric_tool(DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE)
+
+
+def _create_dashboard_query_examples_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_dashboard_insights_query_examples_tool(
+        DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE
+    )
+
+
 TOOL_REGISTRY: tuple[ToolSpec, ...] = (
     ToolSpec(
         tool_name=ATHLETE_KB_TOOL_PROFILE.tool_name,
@@ -96,6 +118,34 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
             ToolPromptKey(
                 "athlete_chat",
                 ATHLETE_CONVERSATION_FILE_TOOL_PROFILE.tool_name,
+            ),
+        ),
+    ),
+    ToolSpec(
+        tool_name=DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE.tool_name,
+        factory=_create_dashboard_metric_tool,
+        enabled_predicate=_always_enabled,
+        workflow_chain_targets={
+            "dashboard_insights": ("dashboard_insights",),
+        },
+        prompt_keys=(
+            ToolPromptKey(
+                "dashboard_insights",
+                DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE.tool_name,
+            ),
+        ),
+    ),
+    ToolSpec(
+        tool_name=DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE.tool_name,
+        factory=_create_dashboard_query_examples_tool,
+        enabled_predicate=_always_enabled,
+        workflow_chain_targets={
+            "dashboard_insights": ("dashboard_insights",),
+        },
+        prompt_keys=(
+            ToolPromptKey(
+                "dashboard_insights",
+                DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE.tool_name,
             ),
         ),
     ),

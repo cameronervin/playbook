@@ -157,6 +157,14 @@ class Settings(BaseSettings):
     CHECKPOINT_RETENTION_DAYS: int = 30
     ATHLETE_CHAT_HISTORY_LIMIT: int = 20
     ATHLETE_CHAT_MAX_CITATIONS: int = 5
+    DASHBOARD_INSIGHTS_CONTEXT_MAX_TOKENS: int = Field(default=4000, ge=1000)
+    DASHBOARD_INSIGHTS_MAX_QUERY_EXAMPLES: int = Field(default=50, ge=1, le=200)
+    DASHBOARD_ANALYTICS_MAX_QUERY_ROWS: int = Field(default=5000, ge=100, le=20000)
+    DASHBOARD_INSIGHTS_MAX_WINDOW_DAYS: int = Field(default=30, ge=1, le=366)
+    DASHBOARD_INSIGHTS_NIGHTLY_ENABLED: bool = True
+    DASHBOARD_INSIGHTS_NIGHTLY_HOUR_UTC: int = Field(default=2, ge=0, le=23)
+    DASHBOARD_INSIGHTS_NIGHTLY_MINUTE_UTC: int = Field(default=15, ge=0, le=59)
+    DASHBOARD_INSIGHTS_NIGHTLY_WINDOW_DAYS: int = Field(default=7, ge=1, le=366)
 
     # --- Observability ---------------------------------------------------------
     TRACING_ENABLED: bool = False

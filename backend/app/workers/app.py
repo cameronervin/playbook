@@ -17,6 +17,7 @@ from typing import Any, TypeVar
 
 import structlog
 from celery import Celery, signals as celery_signals
+from celery.schedules import crontab
 from celery.signals import (
     worker_process_init,
     worker_process_shutdown,
@@ -31,8 +32,10 @@ from app.infrastructure.checkpointer import (
     create_checkpointer_pool,
 )
 from app.workers.queues import (
+    BACKEND_INSIGHTS_QUEUE,
     TASK_QUEUES,
     TASK_ROUTES,
+    WorkerTaskName,
 )
 
 NOISY_WORKER_LOGGER_NAMES = (
@@ -98,6 +101,23 @@ logger = structlog.get_logger(__name__)
 
 _ASYNC_RESULT = TypeVar("_ASYNC_RESULT")
 
+
+def _beat_schedule(app_settings: Settings) -> dict[str, dict[str, Any]]:
+    """Return Celery beat schedule entries for backend periodic jobs."""
+    if not app_settings.DASHBOARD_INSIGHTS_NIGHTLY_ENABLED:
+        return {}
+    return {
+        "nightly-dashboard-insights": {
+            "task": WorkerTaskName.SCHEDULE_NIGHTLY_DASHBOARD_INSIGHTS.value,
+            "schedule": crontab(
+                hour=app_settings.DASHBOARD_INSIGHTS_NIGHTLY_HOUR_UTC,
+                minute=app_settings.DASHBOARD_INSIGHTS_NIGHTLY_MINUTE_UTC,
+            ),
+            "options": {"queue": BACKEND_INSIGHTS_QUEUE},
+        },
+    }
+
+
 def create_worker_app(settings: Settings) -> Celery:
     """Create the configured Celery worker app."""
     worker = Celery(
@@ -109,6 +129,7 @@ def create_worker_app(settings: Settings) -> Celery:
         task_default_queue="backend-default",
         task_queues=TASK_QUEUES,
         task_routes=TASK_ROUTES,
+        beat_schedule=_beat_schedule(settings),
         task_serializer="json",
         result_serializer="json",
         accept_content=["json"],
