@@ -127,6 +127,20 @@ services:
     profiles:
       - worker
 
+  celery-beat:
+    build:
+      context: ../../backend
+      dockerfile: ../deploy/docker/Dockerfile.backend
+    command: celery -A app.workers.app:backend_worker beat --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - worker
+
   # ---------------------------------------------------------------------------
   # KB Service — RAG ingestion & retrieval (docling → OpenAI embeddings →
   # pgvector). The backend talks to it over HTTP via LocalKBProvider

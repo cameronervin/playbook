@@ -1,25 +1,41 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { CornerDownRight, FileText, Send, X, Zap } from 'lucide-react'
 import { WorkspaceSidePanel } from '@/src/components/features/workspace/WorkspaceShell'
 import { AgentAvatar } from '@/src/components/ui'
 import { ADMIN_CHAT_SUGGESTIONS } from '@/src/lib/fixtures/admin'
 import { cn } from '@/src/lib/utils/cn'
-import type { AdminChatMessageFixture, AdminChatReferenceFixture } from '@/src/types/fixtures'
+import type { AdminChatMessage, AdminChatReference } from '@/src/types/adminChat'
 
 interface AdminChatPanelProps {
-  messages: AdminChatMessageFixture[]
+  isBusy?: boolean
+  isError?: boolean
+  isLoading?: boolean
+  messages: AdminChatMessage[]
   onClose: () => void
   onSend: (content: string) => void
 }
 
-export function AdminChatPanel({ messages, onClose, onSend }: AdminChatPanelProps) {
+export function AdminChatPanel({
+  isBusy = false,
+  isError = false,
+  isLoading = false,
+  messages,
+  onClose,
+  onSend,
+}: AdminChatPanelProps) {
   const [draft, setDraft] = useState('')
+  const threadRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!threadRef.current) return
+    threadRef.current.scrollTop = threadRef.current.scrollHeight
+  }, [isBusy, messages])
 
   const submit = (content: string) => {
     const value = content.trim()
-    if (!value) return
+    if (!value || isBusy) return
     onSend(value)
     setDraft('')
   }
@@ -47,8 +63,10 @@ export function AdminChatPanel({ messages, onClose, onSend }: AdminChatPanelProp
           <X className="h-[18px] w-[18px]" />
         </button>
       </header>
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {messages.length === 0 ? (
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4" ref={threadRef}>
+        {isLoading ? (
+          <p className="pb-admin-chat-copy mt-1 text-fg-3">Loading analytics chat...</p>
+        ) : messages.length === 0 ? (
           <div className="mt-1">
             <p className="pb-admin-chat-copy mb-[18px]">
               Ask an AI agent about query patterns, support gaps, risk trends, and more.
@@ -58,6 +76,7 @@ export function AdminChatPanel({ messages, onClose, onSend }: AdminChatPanelProp
               {ADMIN_CHAT_SUGGESTIONS.map((suggestion) => (
                 <button
                   className="pb-admin-chat-suggestion pb-focus-control"
+                  disabled={isBusy}
                   key={suggestion}
                   onClick={() => submit(suggestion)}
                   type="button"
@@ -70,6 +89,19 @@ export function AdminChatPanel({ messages, onClose, onSend }: AdminChatPanelProp
           </div>
         ) : (
           messages.map((message) => <AdminChatMessage key={message.id} message={message} />)
+        )}
+        {isBusy && (
+          <div className="flex items-center gap-3">
+            <AgentAvatar className="h-[30px] w-[30px]">
+              <Zap className="h-[15px] w-[15px]" />
+            </AgentAvatar>
+            <span className="pb-admin-chat-copy pb-think text-fg-3">Thinking...</span>
+          </div>
+        )}
+        {isError && (
+          <p className="pb-dashboard-meta rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-danger">
+            Analytics chat could not complete that request. Try again.
+          </p>
         )}
       </div>
       <form className="shrink-0 border-t border-border p-4" onSubmit={handleSubmit}>
@@ -90,7 +122,7 @@ export function AdminChatPanel({ messages, onClose, onSend }: AdminChatPanelProp
           <button
             aria-label="Send analytics question"
             className="pb-focus-control flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md border border-transparent bg-brand text-fg-on-brand transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-surface-hover disabled:text-fg-4"
-            disabled={!draft.trim()}
+            disabled={isBusy || !draft.trim()}
             type="submit"
           >
             <Send className="h-4 w-4" />
@@ -102,7 +134,7 @@ export function AdminChatPanel({ messages, onClose, onSend }: AdminChatPanelProp
   )
 }
 
-function AdminChatMessage({ message }: { message: AdminChatMessageFixture }) {
+function AdminChatMessage({ message }: { message: AdminChatMessage }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -113,22 +145,32 @@ function AdminChatMessage({ message }: { message: AdminChatMessageFixture }) {
     )
   }
 
+  const failed = message.status === 'failed'
+  const declined = message.answer_type === 'refusal' || message.answer_type === 'unsupported'
+  const content = message.content || getStreamError(message.metadata) || (failed ? 'The analytics response failed. Try again.' : '')
+
   return (
     <div className="flex gap-3">
       <AgentAvatar className="h-[30px] w-[30px]">
         <Zap className="h-[15px] w-[15px]" />
       </AgentAvatar>
       <div className="min-w-0 flex-1">
-        <p className={cn('pb-admin-chat-copy m-0', message.answer_type === 'declined' ? 'text-fg-3' : 'text-fg-2')}>
-          {message.content}
+        <p
+          className={cn(
+            'pb-admin-chat-copy m-0',
+            message.status === 'streaming' && 'pb-streaming',
+            failed ? 'text-danger' : declined ? 'text-fg-3' : 'text-fg-2',
+          )}
+        >
+          {content}
         </p>
-        {message.refs && message.refs.length > 0 && <SourcesDisclosure refs={message.refs} />}
+        {message.references.length > 0 && <SourcesDisclosure refs={message.references} />}
       </div>
     </div>
   )
 }
 
-function SourcesDisclosure({ refs }: { refs: AdminChatReferenceFixture[] }) {
+function SourcesDisclosure({ refs }: { refs: AdminChatReference[] }) {
   return (
     <div className="mt-2.5 flex flex-wrap gap-1.5">
       {refs.map((ref) => (
@@ -145,8 +187,13 @@ function SourcesDisclosure({ refs }: { refs: AdminChatReferenceFixture[] }) {
   )
 }
 
-function formatReferenceType(type: AdminChatReferenceFixture['type']) {
+function formatReferenceType(type: AdminChatReference['type']) {
   if (type === 'dashboard_insight') return 'Insight'
   if (type === 'metric') return 'Metric'
   return 'Query'
+}
+
+function getStreamError(metadata: Record<string, unknown>): string | null {
+  const error = metadata.stream_error
+  return typeof error === 'string' ? error : null
 }

@@ -50,17 +50,11 @@ export const useUpdateKBDocumentMetadata = () => {
   return useMutation({
     mutationFn: ({
       documentId,
-      isOfficial,
       metadata,
     }: {
       documentId: string
-      isOfficial?: boolean
-      metadata?: KBDocumentMetadataUpdateRequest
-    }) =>
-      updateKBDocumentMetadata(documentId, {
-        ...metadata,
-        ...(typeof isOfficial === 'boolean' ? { is_official: isOfficial } : {}),
-      }),
+      metadata: KBDocumentMetadataUpdateRequest
+    }) => updateKBDocumentMetadata(documentId, metadata),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbDocuments] }),
   })
 }

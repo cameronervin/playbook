@@ -17,6 +17,9 @@ from app.services.kb_documents.status_mapping import (
 def test_map_kb_webhook_status_handles_terminal_processing_and_pending() -> None:
     assert map_kb_webhook_status("success", "pipeline") == "ready"
     assert map_kb_webhook_status("completed", None) == "ready"
+    assert map_kb_webhook_status("success", "parse") == "processing"
+    assert map_kb_webhook_status("SUCCESS", "chunk") == "processing"
+    assert map_kb_webhook_status("success", "load_vector") == "processing"
     assert map_kb_webhook_status("failed", "pipeline") == "failed"
     assert map_kb_webhook_status("error", None) == "failed"
     assert map_kb_webhook_status("embedding", None) == "processing"

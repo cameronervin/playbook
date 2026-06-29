@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AdminShell } from '@/src/components/features/admin/AdminShell'
@@ -83,7 +83,26 @@ const updateRoleMutate = vi.hoisted(() => vi.fn())
 const retryDocumentMutate = vi.hoisted(() => vi.fn())
 const deleteDocumentMutate = vi.hoisted(() => vi.fn())
 const updateDocumentMutate = vi.hoisted(() => vi.fn())
+const updateDocumentMutateAsync = vi.hoisted(() => vi.fn())
 const uploadDocumentMutate = vi.hoisted(() => vi.fn())
+const createAdminChatSessionMutateAsync = vi.hoisted(() => vi.fn())
+const submitAdminChatMessageMutateAsync = vi.hoisted(() => vi.fn())
+const startAdminChatStream = vi.hoisted(() => vi.fn())
+const stopAdminChatStream = vi.hoisted(() => vi.fn())
+const adminChatMessages = vi.hoisted(
+  () =>
+    [] as Array<{
+      id: string
+      session_id: string
+      role: 'user' | 'assistant'
+      content: string
+      status: 'complete' | 'streaming' | 'failed'
+      references: Array<{ type: 'metric' | 'dashboard_insight' | 'query'; id: string }>
+      metadata: Record<string, unknown>
+      answer_type: 'analytics_answer' | 'refusal' | 'unsupported' | null
+      created_at: string
+    }>,
+)
 const adminQueryState = vi.hoisted(() => ({
   kbError: false,
   kbFetching: false,
@@ -106,8 +125,6 @@ const kbDocuments = vi.hoisted(() => [
     visibility_policy: { scope: 'all_athletes' },
     metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
     source_date: '2026-03-01',
-    is_official: true,
-    priority: 3,
     kb_service_document_id: 'kb-doc-1',
     created_at: '2026-03-14T12:00:00Z',
     updated_at: '2026-03-14T12:00:00Z',
@@ -125,8 +142,6 @@ const kbDocuments = vi.hoisted(() => [
     visibility_policy: { scope: 'all_athletes' },
     metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
     source_date: null,
-    is_official: false,
-    priority: 3,
     kb_service_document_id: null,
     created_at: '2026-06-03T12:00:00Z',
     updated_at: '2026-06-03T12:00:00Z',
@@ -144,8 +159,6 @@ const kbDocuments = vi.hoisted(() => [
     visibility_policy: { scope: 'all_athletes' },
     metadata_tags: { collection: 'travel', topics: ['Travel'] },
     source_date: '2026-06-01',
-    is_official: true,
-    priority: 1,
     kb_service_document_id: 'kb-doc-3',
     created_at: '2026-06-01T12:00:00Z',
     updated_at: '2026-06-01T12:00:00Z',
@@ -181,6 +194,47 @@ vi.mock('@/src/hooks/useAdmin', () => ({
   useAuditLogs: () => ({ data: new Array(16).fill(null).map((_, index) => ({ id: `audit-${index}` })), isLoading: false }),
 }))
 
+vi.mock('@/src/hooks/useAdminChat', () => ({
+  useAdminChatSessions: () => ({
+    data: [],
+    isError: false,
+    isFetching: false,
+    isLoading: false,
+  }),
+  useAdminChatSessionDetail: (sessionId: string | null) => ({
+    data: sessionId
+      ? {
+          id: sessionId,
+          title: 'Weekly NIL questions',
+          status: 'active',
+          context_window_start: null,
+          context_window_end: null,
+          last_message_at: null,
+          created_at: '2026-06-29T12:00:00Z',
+          updated_at: '2026-06-29T12:00:00Z',
+          messages: adminChatMessages,
+        }
+      : undefined,
+    isError: false,
+    isFetching: false,
+    isLoading: false,
+  }),
+  useCreateAdminChatSession: () => ({
+    mutateAsync: createAdminChatSessionMutateAsync,
+    isError: false,
+    isPending: false,
+  }),
+  useSubmitAdminChatMessage: () => ({
+    mutateAsync: submitAdminChatMessageMutateAsync,
+    isError: false,
+    isPending: false,
+  }),
+  useAdminChatMessageStream: () => ({
+    start: startAdminChatStream,
+    stop: stopAdminChatStream,
+  }),
+}))
+
 vi.mock('@/src/hooks/useKBDocuments', () => ({
   useKBDocuments: () => ({
     data: adminQueryState.kbLoading ? undefined : kbDocuments,
@@ -191,7 +245,11 @@ vi.mock('@/src/hooks/useKBDocuments', () => ({
   useUploadKBDocument: () => ({ mutateAsync: uploadDocumentMutate, isPending: false }),
   useRetryKBDocument: () => ({ mutate: retryDocumentMutate, isPending: false }),
   useDeleteKBDocument: () => ({ mutate: deleteDocumentMutate, isPending: false }),
-  useUpdateKBDocumentMetadata: () => ({ mutate: updateDocumentMutate, isPending: false }),
+  useUpdateKBDocumentMetadata: () => ({
+    mutate: updateDocumentMutate,
+    mutateAsync: updateDocumentMutateAsync,
+    isPending: false,
+  }),
 }))
 
 function renderAdmin() {
@@ -221,8 +279,34 @@ describe('AdminShell', () => {
     retryDocumentMutate.mockClear()
     deleteDocumentMutate.mockClear()
     updateDocumentMutate.mockClear()
+    updateDocumentMutateAsync.mockClear()
+    updateDocumentMutateAsync.mockResolvedValue(kbDocuments[0])
     uploadDocumentMutate.mockClear()
+    createAdminChatSessionMutateAsync.mockClear()
+    submitAdminChatMessageMutateAsync.mockClear()
+    startAdminChatStream.mockClear()
+    stopAdminChatStream.mockClear()
+    adminChatMessages.splice(0, adminChatMessages.length)
     uploadDocumentMutate.mockResolvedValue(kbDocuments[0])
+    createAdminChatSessionMutateAsync.mockResolvedValue({
+      id: 'admin-chat-session-1',
+      title: 'Weekly NIL questions',
+      status: 'active',
+      context_window_start: null,
+      context_window_end: null,
+      last_message_at: null,
+      created_at: '2026-06-29T12:00:00Z',
+      updated_at: '2026-06-29T12:00:00Z',
+    })
+    submitAdminChatMessageMutateAsync.mockResolvedValue({
+      session_id: 'admin-chat-session-1',
+      user_message_id: 'admin-user-message-1',
+      assistant_message_id: 'admin-assistant-message-1',
+      task_id: 'admin-chat-task-1',
+      stream_url:
+        '/api/v1/admin/chat/sessions/admin-chat-session-1/messages/admin-assistant-message-1/stream?task_id=admin-chat-task-1',
+      status: 'streaming',
+    })
     kbDocuments.splice(0, kbDocuments.length, ...[
       {
         id: 'doc-nil-policy',
@@ -237,8 +321,6 @@ describe('AdminShell', () => {
         visibility_policy: { scope: 'all_athletes' },
         metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
         source_date: '2026-03-01',
-        is_official: true,
-        priority: 3,
         kb_service_document_id: 'kb-doc-1',
         created_at: '2026-03-14T12:00:00Z',
         updated_at: '2026-03-14T12:00:00Z',
@@ -256,8 +338,6 @@ describe('AdminShell', () => {
         visibility_policy: { scope: 'all_athletes' },
         metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
         source_date: null,
-        is_official: false,
-        priority: 3,
         kb_service_document_id: null,
         created_at: '2026-06-03T12:00:00Z',
         updated_at: '2026-06-03T12:00:00Z',
@@ -275,8 +355,6 @@ describe('AdminShell', () => {
         visibility_policy: { scope: 'all_athletes' },
         metadata_tags: { collection: 'travel', topics: ['Travel'] },
         source_date: '2026-06-01',
-        is_official: true,
-        priority: 1,
         kb_service_document_id: 'kb-doc-3',
         created_at: '2026-06-01T12:00:00Z',
         updated_at: '2026-06-01T12:00:00Z',
@@ -287,7 +365,6 @@ describe('AdminShell', () => {
       adminChatOpen: false,
       adminTimeWindow: '7d',
       adminInsightStatus: 'completed',
-      adminChatMessages: [],
     })
   })
 
@@ -454,8 +531,6 @@ describe('AdminShell', () => {
       visibility_policy: { scope: 'all_athletes' },
       metadata_tags: { collection: 'travel', topics: ['Travel'] },
       source_date: null,
-      is_official: false,
-      priority: 1,
       kb_service_document_id: null,
       created_at: '2026-06-03T12:00:00Z',
       updated_at: '2026-06-03T12:00:00Z',
@@ -471,7 +546,7 @@ describe('AdminShell', () => {
     expect(screen.getByText('Queued').closest('span')).toHaveClass('text-info')
   })
 
-  it('uploads a KB document with local progress and queued status', async () => {
+  it('uploads a KB document with dialog metadata, local progress, and queued status', async () => {
     currentUser.role = 'super_admin'
     useUIStore.setState({ adminTab: 'kb' })
     uploadDocumentMutate.mockImplementation(async (request) => {
@@ -481,23 +556,57 @@ describe('AdminShell', () => {
     renderAdmin()
 
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Upload document/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.upload(
-      screen.getByLabelText(/upload document file/i),
+      within(dialog).getByLabelText(/Document file/i),
       new File(['hello'], 'athlete-handbook.pdf', { type: 'application/pdf' }),
     )
+    await userEvent.clear(within(dialog).getByLabelText(/Title/i))
+    await userEvent.type(within(dialog).getByLabelText(/Title/i), 'Athlete handbook')
+    await userEvent.clear(within(dialog).getByLabelText(/Metadata tags/i))
+    await userEvent.type(within(dialog).getByLabelText(/Metadata tags/i), 'NIL, Compliance')
+    await userEvent.type(within(dialog).getByLabelText(/Source date/i), '2026-06-29')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
 
     expect(uploadDocumentMutate).toHaveBeenCalledWith(
       expect.objectContaining({
         file: expect.objectContaining({ name: 'athlete-handbook.pdf' }),
-        metadata_tags: expect.objectContaining({ collection: 'compliance' }),
+        metadata_tags: {
+          collection: 'compliance',
+          topics: ['NIL', 'Compliance'],
+        },
         onProgress: expect.any(Function),
+        source_date: '2026-06-29',
+        title: 'Athlete handbook',
       }),
     )
     expect(await screen.findByText('athlete-handbook.pdf')).toBeInTheDocument()
     expect(await screen.findByText('Queued')).toBeInTheDocument()
   })
 
-  it('shows a safe admin upload failure and retries with a fresh intent', async () => {
+  it('blocks invalid upload dialog dates before creating an intent', async () => {
+    currentUser.role = 'admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Upload document/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
+    await userEvent.upload(
+      within(dialog).getByLabelText(/Document file/i),
+      new File(['hello'], 'bad-date.pdf', { type: 'application/pdf' }),
+    )
+    await userEvent.type(within(dialog).getByLabelText(/Source date/i), 'June 29, 2026')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
+
+    expect(within(dialog).getByText(/Use YYYY-MM-DD/i)).toBeInTheDocument()
+    expect(uploadDocumentMutate).not.toHaveBeenCalled()
+  })
+
+  it('shows a safe admin upload failure and retries with the same metadata', async () => {
     currentUser.role = 'super_admin'
     useUIStore.setState({ adminTab: 'kb' })
     uploadDocumentMutate.mockRejectedValueOnce(new Error('File upload failed before Playbook received it.'))
@@ -505,16 +614,33 @@ describe('AdminShell', () => {
     renderAdmin()
 
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Upload document/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.upload(
-      screen.getByLabelText(/upload document file/i),
+      within(dialog).getByLabelText(/Document file/i),
       new File(['hello'], 'retry-me.pdf', { type: 'application/pdf' }),
     )
+    await userEvent.clear(within(dialog).getByLabelText(/Metadata tags/i))
+    await userEvent.type(within(dialog).getByLabelText(/Metadata tags/i), 'Retry, Compliance')
+    await userEvent.type(within(dialog).getByLabelText(/Source date/i), '2026-06-28')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
 
     expect(await screen.findByText('File upload failed before Playbook received it.')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
 
     expect(uploadDocumentMutate).toHaveBeenCalledTimes(2)
+    expect(uploadDocumentMutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata_tags: {
+          collection: 'compliance',
+          topics: ['Retry', 'Compliance'],
+        },
+        source_date: '2026-06-28',
+        title: 'retry-me.pdf',
+      }),
+    )
   })
 
   it('keeps collections visible when there are no documents', () => {
@@ -529,13 +655,22 @@ describe('AdminShell', () => {
     expect(screen.queryByText(/^No documents yet\.$/i)).not.toBeInTheDocument()
   })
 
-  it('shows read-only collection management for department admins', () => {
+  it('lets department admins manage KB documents but not users or local collections', async () => {
     currentUser.role = 'admin'
     useUIStore.setState({ adminTab: 'kb' })
     renderAdmin()
 
-    expect(screen.getByText(/Managed by super admins/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /users & roles/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /New collection/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+
+    expect(screen.getByRole('button', { name: /Upload document/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Retry RECRUITING_DEAD_PERIODS.PDF/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
+
+    expect(screen.getByRole('menuitem', { name: /Delete \/ archive/i })).toBeInTheDocument()
   })
 
   it('opens collection detail and routes document actions through KB mutations', async () => {
@@ -555,15 +690,56 @@ describe('AdminShell', () => {
     expect(retryDocumentMutate).toHaveBeenCalledWith('doc-recruiting')
 
     await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /Mark official/i }))
-    expect(updateDocumentMutate).toHaveBeenCalledWith({ documentId: 'doc-recruiting', isOfficial: true })
-
-    await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /Delete \/ archive/i }))
     expect(deleteDocumentMutate).toHaveBeenCalledWith('doc-recruiting')
 
     await userEvent.click(screen.getByRole('button', { name: /All collections/i }))
     expect(screen.getByRole('heading', { name: 'Knowledge base' })).toBeInTheDocument()
+  })
+
+  it('preserves collection metadata and clears source date when saving metadata', async () => {
+    currentUser.role = 'admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Actions for NIL_POLICY_2025.PDF/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Edit metadata/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /Edit metadata/i })
+    await userEvent.clear(within(dialog).getByLabelText(/Metadata tags/i))
+    await userEvent.type(within(dialog).getByLabelText(/Metadata tags/i), 'Current NIL')
+    await userEvent.clear(within(dialog).getByLabelText(/Source date/i))
+    await userEvent.click(within(dialog).getByRole('button', { name: /Save changes/i }))
+
+    expect(updateDocumentMutateAsync).toHaveBeenCalledWith({
+      documentId: 'doc-nil-policy',
+      metadata: {
+        metadata_tags: {
+          collection: 'compliance',
+          topics: ['Current NIL'],
+        },
+        source_date: null,
+      },
+    })
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Edit metadata/i })).not.toBeInTheDocument(),
+    )
+  })
+
+  it('keeps the metadata drawer open when save fails', async () => {
+    currentUser.role = 'admin'
+    updateDocumentMutateAsync.mockRejectedValueOnce(new Error('Metadata update failed.'))
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Actions for NIL_POLICY_2025.PDF/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Edit metadata/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Save changes/i }))
+
+    expect(await screen.findByText('Metadata update failed.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /Edit metadata/i })).toBeInTheDocument()
   })
 
   it('renders the Claude design Users & roles table and locked current user', async () => {
@@ -684,6 +860,21 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /What are athletes most confused about this week/i }))
 
-    expect(await screen.findByText(/The clearest confusion this week is NIL disclosure timing/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(createAdminChatSessionMutateAsync).toHaveBeenCalledWith({
+        title: 'What are athletes most confused about this week?',
+      }),
+    )
+    expect(submitAdminChatMessageMutateAsync).toHaveBeenCalledWith({
+      sessionId: 'admin-chat-session-1',
+      question: 'What are athletes most confused about this week?',
+      window: '7d',
+    })
+    expect(startAdminChatStream).toHaveBeenCalledWith({
+      assistantMessageId: 'admin-assistant-message-1',
+      sessionId: 'admin-chat-session-1',
+      streamUrl:
+        '/api/v1/admin/chat/sessions/admin-chat-session-1/messages/admin-assistant-message-1/stream?task_id=admin-chat-task-1',
+    })
   })
 })

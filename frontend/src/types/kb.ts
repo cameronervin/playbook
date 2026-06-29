@@ -15,8 +15,6 @@ export interface KBDocument {
   visibility_policy: Record<string, unknown>
   metadata_tags: Record<string, unknown>
   source_date: string | null
-  is_official: boolean
-  priority: number
   kb_service_document_id: string | null
   created_at: string
   updated_at: string
@@ -25,8 +23,6 @@ export interface KBDocument {
 export interface KBDocumentMetadataUpdateRequest {
   metadata_tags?: Record<string, unknown>
   source_date?: string | null
-  is_official?: boolean
-  priority?: number
 }
 
 export interface KBDocumentUploadIntentRequest {

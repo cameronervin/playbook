@@ -29,8 +29,6 @@ const document: KBDocument = {
   visibility_policy: { scope: 'all_athletes' },
   metadata_tags: { collection: 'compliance' },
   source_date: '2026-06-01',
-  is_official: true,
-  priority: 0,
   kb_service_document_id: null,
   created_at: '2026-06-17T12:00:00Z',
   updated_at: '2026-06-17T12:00:00Z',

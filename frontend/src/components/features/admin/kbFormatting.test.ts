@@ -9,11 +9,13 @@ import {
 import type { KBCollectionIcon } from '@/src/types/kb'
 
 function upload(phase: AdminKBLocalUploadRow['phase'], percent = 0): AdminKBLocalUploadRow {
+  const file = new File(['hello'], 'handbook.pdf', { type: 'application/pdf' })
   return {
-    file: new File(['hello'], 'handbook.pdf', { type: 'application/pdf' }),
+    file,
     id: `upload-${phase}`,
     percent,
     phase,
+    request: { file, title: 'handbook.pdf' },
   }
 }
 

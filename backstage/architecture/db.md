@@ -71,6 +71,11 @@ Current repository coverage:
 | `ConversationFileRepository` | `conversation_files` | Conversation-scoped file metadata create/list, extraction-status updates, KB-service linking, summary/count mirroring, and status counts for maintenance observability |
 | `UploadRequestRepository` | `upload_requests` | Direct-upload request create/lookup, completion/failure/expiry status updates, expired pending request locking with `FOR UPDATE SKIP LOCKED`, and next-expiration lookup |
 | `KBIngestOutboxRepository` | `kb_ingest_outbox` | Idempotent ingest enqueue, due-row locking with `FOR UPDATE SKIP LOCKED`, dispatch linkage, retry scheduling, terminal failure updates, and due-backlog counts |
+| `AdminAnalyticsRepository` | `conversations`, `conversation_messages` | Organization-scoped athlete query records for anonymized admin analytics summaries and query review |
+| `DashboardInsightRunRepository` | `dashboard_insight_runs` | Dashboard insight run creation, idempotent scheduled lookup, org-scoped listing, and status updates |
+| `DashboardInsightRepository` | `dashboard_insights`, `dashboard_insight_runs` | Generated dashboard insight output creation, org-scoped lookup, latest output lookup, and listing through run ownership |
+| `AdminChatSessionRepository` | `admin_chat_sessions` | Owner-scoped admin chat session creation, lookup, listing, and activity timestamp updates |
+| `AdminChatMessageRepository` | `admin_chat_messages` | Admin chat message creation, lookup, ordered history, recent completed history, and assistant status/content/reference updates |
 
 Repositories flush and refresh written models so generated IDs and server
 defaults are visible to callers, but they do not commit transactions. Services
@@ -87,8 +92,10 @@ reconciles expired pending upload requests, moves still-pending resources to
 failed, and deletes only storage objects tied to known expired intents. See
 [Direct Upload Flow](direct-upload-flow.md) for the end-to-end lifecycle.
 
-Later phases will add analytics queries, dashboard insight run/output
-repositories, and admin chat repositories.
+Admin chat uses the existing `admin_chat_sessions` and `admin_chat_messages`
+tables; no migration was needed for the side-panel backend slice. Session and
+message metadata carry task binding, selected window, answer type, model, and
+error fields for streamed Celery agent execution.
 
 ## Infrastructure Tables
 

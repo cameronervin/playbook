@@ -23,9 +23,9 @@ def map_kb_webhook_status(raw_status: str, stage: str | None) -> str:
     """Map KB-service status/stage values onto backend document statuses."""
     status = raw_status.lower()
     normalized_stage = (stage or "").lower()
-    if status in _TERMINAL_READY or (
-        normalized_stage == "pipeline" and status == "success"
-    ):
+    if status == "ready":
+        return "ready"
+    if normalized_stage in {"", "pipeline"} and status in _TERMINAL_READY:
         return "ready"
     if status in _TERMINAL_FAILED or (
         normalized_stage == "pipeline" and status == "failed"

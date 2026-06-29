@@ -18,6 +18,16 @@ _ORIGINAL_LOG_RECORD_FACTORY = logging.getLogRecordFactory()
 _FILTER_MARKER = "_playbook_secret_redaction_filter"
 _FACTORY_MARKER = "_playbook_secret_redaction_factory"
 _RICH_TRACEBACK_INSTALLED = False
+_FORMATTER_ARG_LOGGERS = frozenset({"uvicorn.access"})
+_NOISY_SDK_LOGGERS = (
+    "botocore",
+    "boto3",
+    "s3transfer",
+    "httpcore",
+    "httpx",
+    "openai",
+)
+_NOISY_SDK_MIN_LEVEL = logging.INFO
 
 
 class SecretRedactionFilter(logging.Filter):
@@ -34,6 +44,7 @@ def configure_logging(log_level: str = "INFO") -> None:
     _install_log_record_factory()
     install_secret_redaction_filter(logging.getLogger())
     logging.getLogger().setLevel(resolved_level)
+    _configure_safe_library_logger_levels()
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -75,12 +86,16 @@ def _install_log_record_factory() -> None:
 
 def _redact_log_record(record: logging.LogRecord) -> None:
     _redact_exception_args(record)
-    try:
-        record.msg = redact_string(record.getMessage())
-        record.args = ()
-    except (TypeError, ValueError):
+    if _record_requires_formatter_args(record):
         record.msg = redact_secrets(record.msg)
         record.args = redact_secrets(record.args)
+    else:
+        try:
+            record.msg = redact_string(record.getMessage())
+            record.args = ()
+        except (TypeError, ValueError):
+            record.msg = redact_secrets(record.msg)
+            record.args = redact_secrets(record.args)
     record.exc_text = redact_string(record.exc_text) if record.exc_text else None
     record.stack_info = redact_string(record.stack_info) if record.stack_info else None
     for key, value in list(record.__dict__.items()):
@@ -102,6 +117,26 @@ def _redact_exception_args(record: logging.LogRecord) -> None:
 
 def _has_redaction_filter(filters: list[logging.Filter]) -> bool:
     return any(getattr(item, _FILTER_MARKER, False) for item in filters)
+
+
+def _record_requires_formatter_args(record: logging.LogRecord) -> bool:
+    return record.name in _FORMATTER_ARG_LOGGERS
+
+
+def _configure_safe_library_logger_levels() -> None:
+    logger_dict = logging.getLogger().manager.loggerDict
+    logger_names = set(_NOISY_SDK_LOGGERS)
+    for logger_name in logger_dict:
+        if any(
+            logger_name.startswith(f"{sdk_logger}.")
+            for sdk_logger in _NOISY_SDK_LOGGERS
+        ):
+            logger_names.add(logger_name)
+
+    for logger_name in logger_names:
+        sdk_logger = logging.getLogger(logger_name)
+        if sdk_logger.getEffectiveLevel() < _NOISY_SDK_MIN_LEVEL:
+            sdk_logger.setLevel(_NOISY_SDK_MIN_LEVEL)
 
 
 def _resolve_level(log_level: str) -> int:

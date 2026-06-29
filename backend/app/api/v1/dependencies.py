@@ -25,10 +25,13 @@ from app.infrastructure.streaming import (
     get_agent_stream_provider_dependency,
 )
 from app.models.identity import User
+from app.services.admin_analytics import AdminAnalyticsService
+from app.services.admin_chat import AdminChatService
 from app.services.agent_stream_service import AgentStreamService
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
 from app.services.conversations import ConversationService
+from app.services.dashboard_insights import DashboardInsightService
 from app.services.kb_documents import (
     KBDocumentService,
     KBDocumentWebhookService,
@@ -73,6 +76,30 @@ def get_user_admin_service(session: SessionDep) -> UserAdminService:
 def get_audit_service(session: SessionDep) -> AuditLogService:
     """Return audit service dependency."""
     return AuditLogService(session)
+
+
+def get_admin_analytics_service(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> AdminAnalyticsService:
+    """Return admin analytics service dependency."""
+    return AdminAnalyticsService(session, settings=settings)
+
+
+def get_dashboard_insight_service(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> DashboardInsightService:
+    """Return dashboard insight service dependency."""
+    return DashboardInsightService(session, settings=settings)
+
+
+def get_admin_chat_service(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> AdminChatService:
+    """Return admin chat service dependency."""
+    return AdminChatService(session, settings=settings)
 
 
 def get_conversation_service(session: SessionDep) -> ConversationService:
@@ -132,6 +159,18 @@ UserProfileServiceDep = Annotated[
 ]
 UserAdminServiceDep = Annotated[UserAdminService, Depends(get_user_admin_service)]
 AuditLogServiceDep = Annotated[AuditLogService, Depends(get_audit_service)]
+AdminAnalyticsServiceDep = Annotated[
+    AdminAnalyticsService,
+    Depends(get_admin_analytics_service),
+]
+DashboardInsightServiceDep = Annotated[
+    DashboardInsightService,
+    Depends(get_dashboard_insight_service),
+]
+AdminChatServiceDep = Annotated[
+    AdminChatService,
+    Depends(get_admin_chat_service),
+]
 ConversationServiceDep = Annotated[
     ConversationService,
     Depends(get_conversation_service),

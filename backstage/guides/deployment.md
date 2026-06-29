@@ -63,6 +63,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 | DEBUG | true | true | false |
 | LOG_LEVEL | DEBUG | DEBUG | WARNING |
 | CELERY_WORKER_LOG_LEVEL | INFO | INFO | INFO |
+| Dashboard insight schedule | Celery beat with `DASHBOARD_INSIGHTS_NIGHTLY_*` | same | same, one scheduler instance |
 | Replicas | 1 | 1 | 3+ |
 | Volumes | bind mounts (hot reload) | none | none |
 | DB ports | exposed | exposed | internal only |
@@ -81,6 +82,10 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 - **LLM transport**: production should use `LLM_PROVIDER_MODE=litellm` and route
   backend, KB-service, and eval traffic through LiteLLM Proxy. Direct mode is
   reserved for local smoke tests or an explicit break-glass path.
+- **Workers and beat**: run backend Celery workers for
+  `backend-agent,backend-files,backend-insights,backend-maintenance` and run
+  exactly one Celery beat scheduler instance. Beat schedules nightly dashboard
+  insight runs; manual insight runs enqueue directly from the API.
 
 ## LiteLLM Proxy
 

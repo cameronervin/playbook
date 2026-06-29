@@ -27,6 +27,11 @@ tool — nodes give you better retry handling and clearer separation of concerns
 |------|-------------|
 | `search_playbook_knowledgebase` | Athlete chat profile for searching official shared Playbook KB sources before NIL, compliance, recruiting, reporting, or process guidance. |
 | `search_conversation_files` | Athlete chat profile for searching ready uploaded files scoped to the current conversation. |
+| `inspect_dashboard_metric` | Dashboard insights profile for verifying exact counts from the anonymized analytics snapshot before writing insight summaries. |
+| `list_anonymized_query_examples` | Dashboard insights profile for inspecting bounded anonymized query examples already present in the runtime snapshot. |
+| `inspect_admin_metric` | Admin chat profile for verifying exact analytics counts before answering side-panel questions. |
+| `list_anonymized_queries` | Admin chat profile for listing bounded anonymized query examples from the current analytics snapshot. |
+| `list_dashboard_insights` | Admin chat profile for listing completed dashboard insight outputs overlapping the current chat window. |
 
 The reusable implementation lives in `backend/app/agents/tools/knowledgebase.py`
 as a profile-based factory, and active product tools are declared in
@@ -77,6 +82,36 @@ arbitrary file filters. Both athlete tools register returned source keys in the
 same citation registry. Uploaded-file summaries are shown once in the middleware
 manifest for orientation; `search_conversation_files` output does not repeat
 document summaries per chunk and only returned excerpts are evidence.
+
+Dashboard insight tools live in `backend/app/agents/tools/dashboard_insights.py`.
+They do not create repositories or query the database. The deterministic
+`build_snapshot` graph node prepares an `AdminAnalyticsSnapshot` with anonymized
+owner keys and source message IDs, then stores it on
+`DashboardInsightsRuntimeContext`. The tools read only that runtime snapshot:
+
+- `inspect_dashboard_metric` returns exact query volume, top topic,
+  unanswered, and risk counts for the current run window.
+- `list_anonymized_query_examples` returns bounded query examples filtered by
+  topic/risk/unanswered status with `message_id`, `anonymous_user_key`, labels,
+  and text. It must not expose names, emails, raw user IDs, teams, or storage
+  details.
+
+Admin chat tools live in `backend/app/agents/tools/admin_chat.py`. They are
+read-only and inspect only `AdminChatRuntimeContext`, which is built by the
+admin chat graph before model generation:
+
+- `inspect_admin_metric` returns exact query volume, unanswered, top-topic, and
+  risk-count metrics for the selected window.
+- `list_anonymized_queries` returns bounded anonymized query examples filtered
+  by topic/risk/unanswered status with `message_id`, labels, answer type, and
+  text.
+- `list_dashboard_insights` returns completed dashboard insight summaries whose
+  run windows overlap the chat window.
+
+Admin chat references are filtered after model output against allowed
+`metric`, `dashboard_insight`, and anonymized `query` IDs. The tools must never
+expose athlete names, emails, raw user IDs, teams, provider subjects, storage
+keys, or arbitrary database rows.
 
 ## Adding a Tool
 

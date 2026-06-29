@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, LoaderCircle, Lock, Plus } from 'lucide-react'
+import { AlertTriangle, ChevronRight, LoaderCircle, Plus } from 'lucide-react'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { COLLECTION_ICON_COMPONENTS } from '@/src/components/features/admin/kbFormatting'
 import { AdminKBSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
@@ -6,7 +6,7 @@ import { Button } from '@/src/components/ui'
 import type { KBCollectionViewModel } from '@/src/types/kb'
 
 interface AdminKBCollectionGridProps {
-  canManage: boolean
+  canCreateCollection: boolean
   collections: KBCollectionViewModel[]
   isError: boolean
   isFetching: boolean
@@ -16,7 +16,7 @@ interface AdminKBCollectionGridProps {
 }
 
 export function AdminKBCollectionGrid({
-  canManage,
+  canCreateCollection,
   collections,
   isError,
   isFetching,
@@ -29,17 +29,12 @@ export function AdminKBCollectionGrid({
   return (
     <AdminPageScaffold
       actions={
-        canManage ? (
+        canCreateCollection ? (
           <Button className="pb-admin-header-control" onClick={onCreateCollection} size="sm" variant="secondary">
             <Plus size={15} />
             New collection
           </Button>
-        ) : (
-          <span className="pb-admin-kb-lock-note">
-            <Lock size={14} />
-            Managed by super admins
-          </span>
-        )
+        ) : null
       }
       contentClassName="py-7"
       contentMaxWidthClassName="pb-admin-kb-grid-width"

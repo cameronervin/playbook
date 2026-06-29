@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 import app.services.ingestion as ingestion_service
+import app.services.ingestion.service as ingestion_service_module
 import app.workers.tasks as tasks
 from app.schemas.ingest import IngestConversationFileRequest, IngestDocumentRequest
 
@@ -108,14 +109,19 @@ class _RetryConfigRepo:
 
 
 class _RetryLogRepo:
-    def __init__(self) -> None:
+    def __init__(self, existing: object | None = None) -> None:
+        self.existing = existing
         self.created: list[UUID] = []
+        self.reset: list[UUID] = []
 
     async def get_by_document(self, document_id: UUID) -> object | None:
-        return None
+        return self.existing
 
     async def create(self, document_id: UUID) -> None:
         self.created.append(document_id)
+
+    async def reset_for_retry(self, document_id: UUID) -> None:
+        self.reset.append(document_id)
 
 
 class _RetryVectorRepo:
@@ -125,6 +131,36 @@ class _RetryVectorRepo:
     async def delete_document_embeddings(self, document_id: UUID) -> int:
         self.deleted.append(document_id)
         return 4
+
+
+@dataclass
+class _DeleteDocument:
+    id: UUID
+    s3_key: str | None
+
+
+class _DeleteDocumentRepo:
+    def __init__(self, document: _DeleteDocument | None) -> None:
+        self.document = document
+        self.deleted: list[UUID] = []
+
+    async def get(self, document_id: UUID) -> _DeleteDocument | None:
+        if self.document and document_id == self.document.id:
+            return self.document
+        return None
+
+    async def delete(self, document_id: UUID) -> bool:
+        self.deleted.append(document_id)
+        return True
+
+
+class _DeleteVectorRepo:
+    def __init__(self) -> None:
+        self.deleted: list[UUID] = []
+
+    async def delete_document_embeddings(self, document_id: UUID) -> int:
+        self.deleted.append(document_id)
+        return 3
 
 
 @dataclass
@@ -298,6 +334,50 @@ def _conversation_file_request(
         size_bytes=100,
         source_title="Contract",
     )
+
+
+@pytest.mark.asyncio
+async def test_delete_document_removes_embeddings_original_and_staging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document_id = uuid4()
+    service = ingestion_service.IngestionService.__new__(
+        ingestion_service.IngestionService
+    )
+    service._doc_repo = _DeleteDocumentRepo(
+        _DeleteDocument(id=document_id, s3_key="kb/originals/nil.docx")
+    )
+    service._vector_repo = _DeleteVectorRepo()
+    deleted_original_keys: list[str] = []
+    deleted_staging: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        ingestion_service_module,
+        "delete_s3_object",
+        lambda key: deleted_original_keys.append(key),
+    )
+    monkeypatch.setattr(
+        ingestion_service_module,
+        "_delete_pages_staging",
+        lambda doc_id: deleted_staging.append(("pages", doc_id)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ingestion_service_module,
+        "_delete_staging_file",
+        lambda doc_id: deleted_staging.append(("chunks", doc_id)),
+        raising=False,
+    )
+
+    await service.delete_document(document_id)
+
+    assert service._vector_repo.deleted == [document_id]
+    assert service._doc_repo.deleted == [document_id]
+    assert deleted_original_keys == ["kb/originals/nil.docx"]
+    assert deleted_staging == [
+        ("pages", str(document_id)),
+        ("chunks", str(document_id)),
+    ]
 
 
 @pytest.mark.asyncio
@@ -526,3 +606,49 @@ async def test_retry_document_preserves_conversation_file_identity_and_deletes_v
     assert response.conversation_file_id == conversation_file_id
     assert response.task_id == "retry-task-id"
     assert response.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_retry_document_resets_existing_ingestion_log_before_dispatch() -> None:
+    document_id = uuid4()
+    config = _RetryConfig(id=uuid4())
+    document = _RetryDocument(
+        id=document_id,
+        configuration_id=config.id,
+        s3_key="kb/originals/policy.docx",
+        name="policy.docx",
+        metadata_={
+            "source_type": "admin_upload",
+            "organization_id": str(uuid4()),
+            "playbook_document_id": str(uuid4()),
+        },
+    )
+    service = ingestion_service.IngestionService.__new__(
+        ingestion_service.IngestionService
+    )
+    service._doc_repo = _RetryDocumentRepo(document)
+    service._config_repo = _RetryConfigRepo(config)
+    service._log_repo = _RetryLogRepo(existing=object())
+    service._vector_repo = _RetryVectorRepo()
+    dispatched: dict[str, Any] = {}
+
+    async def fake_dispatch_pipeline(
+        document_id: UUID,
+        config: _RetryConfig,
+        s3_key: str,
+        filename: str,
+        metadata: dict[str, Any],
+    ) -> str:
+        dispatched["document_id"] = document_id
+        return "retry-task-id"
+
+    service._dispatch_pipeline = fake_dispatch_pipeline
+
+    response = await service.retry_document(document_id)
+
+    assert service._vector_repo.deleted == [document_id]
+    assert service._doc_repo.status_updates == [(document_id, "pending")]
+    assert service._log_repo.created == []
+    assert service._log_repo.reset == [document_id]
+    assert dispatched["document_id"] == document_id
+    assert response.task_id == "retry-task-id"

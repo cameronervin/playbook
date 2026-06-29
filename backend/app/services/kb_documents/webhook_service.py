@@ -70,7 +70,10 @@ class KBDocumentWebhookService:
     ) -> KBWebhookResponse:
         """Mirror a KB-service webhook into an admin KB document row."""
         document = await self._resolve_admin_document(payload)
-        status = map_kb_webhook_status(payload.status, payload.stage)
+        status = _non_regressing_document_status(
+            current_status=document.processing_status,
+            next_status=map_kb_webhook_status(payload.status, payload.stage),
+        )
         failure_reason = (
             sanitize_failure_reason(payload.error_message)
             if status == "failed"
@@ -144,6 +147,12 @@ class KBDocumentWebhookService:
 
         status = map_kb_webhook_status(payload.status, payload.stage)
         file_status = "extracting" if status == "processing" else status
+        file_status = _non_regressing_file_status(
+            current_status=file.extraction_status,
+            next_status=file_status,
+        )
+        if file_status == "ready" and status == "processing":
+            status = "ready"
         failure_reason = (
             sanitize_failure_reason(payload.error_message)
             if status == "failed"
@@ -210,3 +219,25 @@ class KBDocumentWebhookService:
             return
         if abs(int(time.time()) - timestamp) > 600:
             raise ForbiddenError("Stale KB webhook timestamp")
+
+
+def _non_regressing_document_status(
+    *,
+    current_status: str,
+    next_status: str,
+) -> str:
+    """Keep terminal-ready document rows from regressing on late stage webhooks."""
+    if current_status == "ready" and next_status == "processing":
+        return "ready"
+    return next_status
+
+
+def _non_regressing_file_status(
+    *,
+    current_status: str,
+    next_status: str,
+) -> str:
+    """Keep terminal-ready conversation files from regressing on late stage webhooks."""
+    if current_status == "ready" and next_status == "extracting":
+        return "ready"
+    return next_status

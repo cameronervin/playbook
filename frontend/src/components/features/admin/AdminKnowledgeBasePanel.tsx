@@ -9,27 +9,27 @@ import type { UploadKBDocumentRequest } from '@/src/types/kb'
 import type { KBCollection, KBDocument, KBDocumentMetadataUpdateRequest } from '@/src/types/kb'
 
 interface AdminKnowledgeBasePanelProps {
-  canManage: boolean
+  canCreateCollection: boolean
+  canManageDocuments: boolean
   documents: KBDocument[]
   isError?: boolean
   isFetching?: boolean
   isLoading?: boolean
   onDelete: (id: string) => void
   onRetry: (id: string) => void
-  onToggleOfficial: (id: string, isOfficial: boolean) => void
-  onUpdateMetadata: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => void
+  onUpdateMetadata: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => Promise<KBDocument>
   onUpload: (request: UploadKBDocumentRequest) => Promise<KBDocument>
 }
 
 export function AdminKnowledgeBasePanel({
-  canManage,
+  canCreateCollection,
+  canManageDocuments,
   documents,
   isError = false,
   isFetching = false,
   isLoading = false,
   onDelete,
   onRetry,
-  onToggleOfficial,
   onUpdateMetadata,
   onUpload,
 }: AdminKnowledgeBasePanelProps) {
@@ -58,17 +58,16 @@ export function AdminKnowledgeBasePanel({
     return (
       <>
         <AdminKBCollectionDetail
-          canManage={canManage}
+          canManage={canManageDocuments}
           collection={openCollection}
           onBack={() => setOpenId(null)}
           onDelete={onDelete}
           onEdit={setEditingDocumentId}
           onRetry={onRetry}
-          onToggleOfficial={onToggleOfficial}
           onUpload={onUpload}
         />
         <AdminKBMetadataDrawer
-          canManage={canManage}
+          canManage={canManageDocuments}
           document={editingDocument}
           onClose={() => setEditingDocumentId(null)}
           onDelete={onDelete}
@@ -80,7 +79,7 @@ export function AdminKnowledgeBasePanel({
 
   return (
     <AdminKBCollectionGrid
-      canManage={canManage}
+      canCreateCollection={canCreateCollection}
       collections={collectionViews}
       isError={isError}
       isFetching={isFetching}

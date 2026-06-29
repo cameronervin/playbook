@@ -19,7 +19,7 @@ The scaffold already includes:
 | Athlete chat agent | LangGraph in Celery worker | Athlete message task | Streamed cited answer or refusal |
 | Conversation file context | Parser/retrieval helper | Athlete file upload + message | Conversation-scoped extracted context |
 | Admin analytics dashboard | Deterministic service/query layer | Admin dashboard load | Metrics, anonymized query lists, filters |
-| Dashboard insights agent | LangGraph or LangChain agent | Nightly cron or admin action | Curated dashboard insight cards and summaries |
+| Dashboard insights agent | LangGraph in Celery worker | Nightly beat task or admin action | Curated dashboard insight cards and summaries |
 | Admin chat side panel | LangGraph or LangChain agent in Celery worker | Admin dashboard question task | Streamed analytics-grounded answer |
 | Evaluation harness | pytest + LLM/RAG evals | CI/release validation | Retrieval, answer, and safety scores |
 
@@ -198,6 +198,50 @@ It is a batch/snapshot workflow, not an interactive chat surface.
 }
 ```
 
+Implementation note: the Celery payload carries only `run_id` and
+`organization_id`. The graph loads `dashboard_insight_runs` for the trusted
+window, trigger type, and source filters, then builds an anonymized analytics
+snapshot from stored conversation messages. Manual run APIs write
+`dashboard_insight_run.manual_triggered` audit events before dispatching the
+worker task.
+
+### Flow
+
+1. Admin `POST /api/v1/admin/dashboard-insights/runs` creates a pending run,
+   audits the action, commits, dispatches the Celery generation task, and
+   returns `202` with `run_id`.
+2. Celery beat dispatches `schedule_nightly_dashboard_insights_task` on the UTC
+   schedule from `DASHBOARD_INSIGHTS_NIGHTLY_*`; the service creates one
+   idempotent nightly run per active organization/window.
+3. `DashboardInsightsExecutor` invokes the cached dashboard insights graph with
+   `DashboardInsightsRuntimeContext`.
+4. `load_run` verifies organization scope and marks the run `processing`.
+5. `build_snapshot` constructs `AdminAnalyticsSnapshot` with query volume,
+   top topics, unanswered counts, risk counts, anonymized query rows, and source
+   message IDs.
+6. `generate_insights` invokes the structured chain when data exists; empty
+   windows produce a deterministic no-data output instead of asking the model to
+   improvise.
+7. `save_output` persists `dashboard_insights`, filters source message IDs to
+   IDs present in the snapshot, marks the run `completed`, and commits.
+8. Task-level failures mark the run `failed` with a sanitized error type.
+
+### Context and Tools
+
+The dashboard insights chain uses a stable system prompt plus
+`create_dashboard_insights_middleware()`. The middleware appends only compact
+snapshot context from graph state and never injects athlete identity fields.
+The chain has two read-only tools:
+
+- `inspect_dashboard_metric` verifies exact snapshot counts before the model
+  writes narrative cards or summaries.
+- `list_anonymized_query_examples` returns bounded anonymized examples filtered
+  by topic, risk, or unanswered status.
+
+Both tools read only `DashboardInsightsRuntimeContext.analytics_snapshot`; they
+do not create repositories, choose tenants, query arbitrary rows, or expose raw
+athlete owner identity.
+
 ### Output
 
 ```json
@@ -227,6 +271,9 @@ It is a batch/snapshot workflow, not an interactive chat surface.
 
 The agent persists one `dashboard_insight_runs` row per run and one
 `dashboard_insights` output row when generation completes successfully.
+Admins poll `/api/v1/admin/dashboard-insights/runs/{run_id}` for lifecycle
+status or read completed outputs from `/api/v1/admin/dashboard-insights/current`
+and `/api/v1/admin/dashboard-insights/outputs`.
 
 ## Admin Chat Side Panel
 

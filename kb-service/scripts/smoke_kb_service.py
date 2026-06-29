@@ -52,6 +52,10 @@ RERANK_SMOKE_DOCUMENTS = (
     "Travel reimbursement forms are due after road games.",
     "Equipment checkout happens at the start of each season.",
 )
+SUMMARY_SMOKE_MESSAGES = (
+    {"role": "system", "content": "Reply with exactly ok."},
+    {"role": "user", "content": "LiteLLM summary alias health check."},
+)
 
 
 class SmokeTestError(RuntimeError):
@@ -225,6 +229,47 @@ def _check_litellm_rerank(runtime_settings: Any) -> None:
     _emit("  litellm_rerank=ok")
 
 
+def _litellm_summary_payload(runtime_settings: Any) -> dict[str, Any]:
+    return {
+        "model": getattr(runtime_settings, "LITELLM_SUMMARY_MODEL", "playbook-fast"),
+        "messages": list(SUMMARY_SMOKE_MESSAGES),
+        "temperature": 0,
+        "max_tokens": 8,
+    }
+
+
+def _assert_litellm_summary_response(payload: dict[str, Any]) -> None:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise SmokeTestError("LiteLLM summary response did not include choices")
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise SmokeTestError("LiteLLM summary first choice was not an object")
+    message = first.get("message")
+    if not isinstance(message, dict) or not str(message.get("content") or "").strip():
+        raise SmokeTestError("LiteLLM summary first choice had no message content")
+
+
+def _check_litellm_summary(runtime_settings: Any) -> None:
+    base_url = str(getattr(runtime_settings, "LITELLM_BASE_URL", "") or "").rstrip("/")
+    api_key = str(getattr(runtime_settings, "LITELLM_API_KEY", "") or "")
+    if not base_url:
+        raise SmokeTestError("LITELLM_BASE_URL is required for --check-litellm-summary")
+    if not api_key:
+        raise SmokeTestError("LITELLM_API_KEY is required for --check-litellm-summary")
+    with httpx.Client(base_url=base_url, timeout=HTTP_TIMEOUT_SECONDS) as client:
+        response_payload = _request_json(
+            client,
+            "POST",
+            "/chat/completions",
+            expected_statuses={httpx.codes.OK},
+            headers=_auth_headers(api_key),
+            json=_litellm_summary_payload(runtime_settings),
+        )
+    _assert_litellm_summary_response(response_payload)
+    _emit("  litellm_summary=ok")
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a sanitized end-to-end KB service smoke test."
@@ -262,6 +307,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--check-litellm-rerank",
         action="store_true",
         help="Also smoke LiteLLM /rerank directly through LITELLM_RERANK_MODEL.",
+    )
+    parser.add_argument(
+        "--check-litellm-summary",
+        action="store_true",
+        help=(
+            "Also smoke LiteLLM /chat/completions directly through "
+            "LITELLM_SUMMARY_MODEL."
+        ),
     )
     parser.add_argument(
         "--expect-rerank-fail-open",
@@ -350,6 +403,111 @@ def _delete_document(client: httpx.Client, headers: dict[str, str], document_id:
         return True
 
 
+def _s3_object_exists(key: str, runtime_settings: Any) -> bool:
+    try:
+        _s3_client().head_object(Bucket=runtime_settings.S3_BUCKET_NAME, Key=key)
+    except ClientError as exc:
+        error_code = str((exc.response.get("Error") or {}).get("Code") or "")
+        if error_code in {"404", "NoSuchKey", "NotFound"}:
+            return False
+        raise SmokeTestError(f"S3 cleanup check failed for key {key}") from exc
+    except BotoCoreError as exc:
+        raise SmokeTestError(f"S3 cleanup check failed for key {key}") from exc
+    return True
+
+
+def _assert_s3_object_missing(key: str, runtime_settings: Any) -> None:
+    if _s3_object_exists(key, runtime_settings):
+        raise SmokeTestError(f"cleanup left S3 object behind: {key}")
+
+
+def _assert_document_status_deleted(
+    client: httpx.Client,
+    headers: dict[str, str],
+    document_id: str,
+) -> None:
+    _request_json(
+        client,
+        "GET",
+        f"/api/kb/status/documents/{document_id}",
+        expected_statuses={httpx.codes.NOT_FOUND},
+        headers=headers,
+    )
+
+
+def _assert_search_no_smoke_matches(
+    client: httpx.Client,
+    headers: dict[str, str],
+    *,
+    query: str,
+    organization_id: str,
+    terms: tuple[str, ...],
+    source_types: list[str] | None = None,
+    conversation_id: str | None = None,
+    file_ids: list[str] | None = None,
+) -> None:
+    search_payload: dict[str, Any] = {
+        "query": query,
+        "organization_id": organization_id,
+        "visibility_context": {"role": "athlete"},
+        "limit": 5,
+        "score_threshold": 0.0,
+    }
+    if source_types is not None:
+        search_payload["source_types"] = source_types
+    if conversation_id is not None:
+        search_payload["conversation_id"] = conversation_id
+    if file_ids is not None:
+        search_payload["file_ids"] = file_ids
+
+    search = _request_json(
+        client,
+        "POST",
+        "/api/kb/search",
+        expected_statuses={httpx.codes.OK},
+        headers=headers,
+        json=search_payload,
+    )
+    if _matching_results(search, terms=terms):
+        raise SmokeTestError("post-delete search still returned smoke document text")
+
+
+def _assert_kb_cleanup(
+    client: httpx.Client,
+    headers: dict[str, str],
+    *,
+    document_id: str,
+    object_key: str,
+    runtime_settings: Any,
+    query: str,
+    organization_id: str,
+    terms: tuple[str, ...],
+    source_types: list[str] | None = None,
+    conversation_id: str | None = None,
+    file_ids: list[str] | None = None,
+) -> None:
+    _assert_document_status_deleted(client, headers, document_id)
+    _assert_search_no_smoke_matches(
+        client,
+        headers,
+        query=query,
+        organization_id=organization_id,
+        terms=terms,
+        source_types=source_types,
+        conversation_id=conversation_id,
+        file_ids=file_ids,
+    )
+    _assert_s3_object_missing(object_key, runtime_settings)
+    _assert_s3_object_missing(
+        f"kb/staging/{document_id}/pages.ndjson",
+        runtime_settings,
+    )
+    _assert_s3_object_missing(
+        f"kb/staging/{document_id}/chunks.ndjson",
+        runtime_settings,
+    )
+
+
 def _wait_for_ingest_success(
     client: httpx.Client,
     headers: dict[str, str],
@@ -413,6 +571,8 @@ def _run_smoke(args: argparse.Namespace) -> None:
         _emit(f"  private_object_key={private_s3_key}")
     if args.check_litellm_rerank:
         _check_litellm_rerank(runtime_settings)
+    if args.check_litellm_summary:
+        _check_litellm_summary(runtime_settings)
 
     with tempfile.TemporaryDirectory(prefix="kb-smoke-") as tmp_dir:
         docx_path = Path(tmp_dir) / SMOKE_FILENAME
@@ -616,11 +776,36 @@ def _run_smoke(args: argparse.Namespace) -> None:
                 cleanup_status = "kept"
                 if not args.keep:
                     deleted_doc = _delete_document(client, headers, kb_document_id)
+                    if deleted_doc:
+                        _assert_kb_cleanup(
+                            client,
+                            headers,
+                            document_id=kb_document_id,
+                            object_key=s3_key,
+                            runtime_settings=runtime_settings,
+                            query=args.query,
+                            organization_id=str(organization_id),
+                            terms=MATCH_TERMS,
+                        )
                     deleted_private_doc = (
                         True
                         if private_kb_document_id is None
                         else _delete_document(client, headers, private_kb_document_id)
                     )
+                    if private_kb_document_id is not None and deleted_private_doc:
+                        _assert_kb_cleanup(
+                            client,
+                            headers,
+                            document_id=private_kb_document_id,
+                            object_key=private_s3_key,
+                            runtime_settings=runtime_settings,
+                            query="Does the private contract require approval?",
+                            organization_id=str(organization_id),
+                            terms=PRIVATE_MATCH_TERMS,
+                            source_types=["conversation_file"],
+                            conversation_id=str(private_conversation_id),
+                            file_ids=[str(private_conversation_file_id)],
+                        )
                     deleted_object = (
                         True
                         if deleted_doc
@@ -632,8 +817,10 @@ def _run_smoke(args: argparse.Namespace) -> None:
                         else _delete_smoke_object(private_s3_key, runtime_settings)
                     )
                     cleanup_done = (
-                        (deleted_doc or deleted_object)
-                        and (deleted_private_doc or deleted_private_object)
+                        deleted_doc
+                        and deleted_private_doc
+                        and deleted_object
+                        and deleted_private_object
                     )
                     cleanup_status = (
                         "deleted" if cleanup_done else "delete_failed"

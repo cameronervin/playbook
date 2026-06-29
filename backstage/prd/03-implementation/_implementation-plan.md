@@ -13,7 +13,7 @@ infrastructure, tests, and docs.
 
 ## Current Implementation Snapshot
 
-As of 2026-06-09:
+As of 2026-06-29:
 
 | Area | Status | Notes |
 |------|--------|-------|
@@ -21,6 +21,7 @@ As of 2026-06-09:
 | Backend verification | ☑ | Backend tests passed with `76 passed`; `backend/.venv/bin/ruff check app tests` passed; live Alembic upgrade/downgrade/re-upgrade passed on `playbook_test`. |
 | Frontend | ☑ | Scaffold UI has been replaced by Playbook `/`, `/login`, `/profile`, `/chat`, and `/admin` route shells with neutral department copy. Frontend Vitest passed with `68 passed`; typecheck and ESLint passed. |
 | KB service | ◐ | Ingestion/retrieval implementation exists, including configuration, ingest, status, search, document routes, parser/chunker/embed/vectorstore infrastructure, and workers. It was not locally verified in this shell because no runnable local venv/`uv` path was available. |
+| Admin analytics backend | ◐ | Admin analytics summary/query APIs, anonymized snapshot service, dashboard insight run/output APIs, LangGraph dashboard insight agent, admin chat side-panel backend/API/agent/worker stream path, read-only analytics tools, Celery generation tasks, and nightly beat scheduling are implemented and focused tests pass. Real admin analytics dashboard data integration and eval golden sets remain. |
 | Eval harness | ◐ | Backend eval package, sample dataset, and rubrics exist; MVP golden sets and release gates remain. |
 
 ## Phase Overview
@@ -54,11 +55,11 @@ with [backstage/api/endpoints.md](../../api/endpoints.md):
 | Admin users/audit | `GET /admin/users`, `PATCH /admin/users/{user_id}/role`, `GET /admin/audit-logs` |
 | Conversations | `GET /conversations`, `POST /conversations`, `GET /conversations/{conversation_id}`, `POST /conversations/{conversation_id}/messages`, `GET /conversations/{conversation_id}/messages/{message_id}/stream`, conversation-file direct-upload routes |
 | KB documents | `GET /admin/kb/documents`, `POST /admin/kb/documents`, `GET /admin/kb/documents/{document_id}`, `PATCH /admin/kb/documents/{document_id}/metadata`, `POST /admin/kb/documents/{document_id}/retry`, `DELETE /admin/kb/documents/{document_id}`, `POST /kb/webhook` |
+| Admin analytics/insights | `GET /admin/analytics/summary`, `GET /admin/analytics/queries`, `GET /admin/dashboard-insights/current`, `GET /admin/dashboard-insights/outputs`, `GET /admin/dashboard-insights/outputs/{insight_id}`, `GET /admin/dashboard-insights/runs`, `POST /admin/dashboard-insights/runs`, `GET /admin/dashboard-insights/runs/{run_id}` |
 | Health | `GET /health` |
 
-Remaining planned API surface: conversation file upload, analytics summary/query
-review, dashboard insight runs polled by `run_id`, and admin chat message
-submit/response stream bridged from Valkey Streams/pub-sub by `task_id`.
+Remaining planned API surface: admin chat message submit/response stream bridged
+from Valkey Streams/pub-sub by `task_id`.
 
 ## How Phase Files Work
 

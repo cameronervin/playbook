@@ -1,6 +1,4 @@
 import type {
-  AdminChatMessageFixture,
-  AdminChatReferenceFixture,
   AnalyticsSummaryFixture,
   DashboardInsightFixture,
 } from '@/src/types/fixtures'
@@ -86,75 +84,3 @@ export const ADMIN_CHAT_SUGGESTIONS = [
   'Are recruiting-risk questions increasing?',
   'What support gaps should we address first?',
 ]
-
-interface AdminChatReplyFixture {
-  answer: string
-  refs: AdminChatReferenceFixture[]
-  answer_type: AdminChatMessageFixture['answer_type']
-}
-
-const ADMIN_CHAT_REPLIES: Array<{
-  match: RegExp
-  reply: AdminChatReplyFixture
-}> = [
-  {
-    match: /confus|most asked|top|common/i,
-    reply: {
-      answer:
-        'The clearest confusion this week is NIL disclosure timing - 18 questions touched on when in-kind benefits such as loaned vehicles, free meals, and sponsored posts using school marks must be reported. NIL is the single largest topic at 48 of 128 questions.',
-      refs: [
-        { type: 'metric', id: 'top_topics.nil' },
-        { type: 'dashboard_insight', id: 'run_7c41a9' },
-      ],
-      answer_type: 'analytics_answer',
-    },
-  },
-  {
-    match: /declin|nil.*declin|reject/i,
-    reply: {
-      answer:
-        'NIL accounted for the most declined questions this week. Both NIL-related declines were compensation or contract questions routed to the compliance office rather than answered by Playbook.',
-      refs: [
-        { type: 'query', id: 'q-9d55' },
-        { type: 'query', id: 'q-9471' },
-      ],
-      answer_type: 'analytics_answer',
-    },
-  },
-  {
-    match: /recruit/i,
-    reply: {
-      answer:
-        'Recruiting-risk questions are low in volume but high severity. They cluster around prospect contact near dead periods, including locker-room access before a spring game.',
-      refs: [{ type: 'metric', id: 'risk_counts.recruiting' }],
-      answer_type: 'analytics_answer',
-    },
-  },
-]
-
-export function adminChatReply(text: string): AdminChatReplyFixture {
-  const hit = ADMIN_CHAT_REPLIES.find((reply) => reply.match.test(text))
-  if (hit) return hit.reply
-  if (/name|email|who is|identity|which athlete is/i.test(text)) {
-    return {
-      answer:
-        'I cannot reveal athlete identities. Analytics are anonymized to stable IDs only, but I can break the numbers down by topic, risk, or outcome.',
-      refs: [],
-      answer_type: 'declined',
-    }
-  }
-  if (/upload|delete|change role|promote|generate|run insight|edit/i.test(text)) {
-    return {
-      answer:
-        'I can only read analytics and insights. Use the relevant admin section for document, role, or insight-run actions.',
-      refs: [],
-      answer_type: 'declined',
-    }
-  }
-  return {
-    answer:
-      'Across 128 questions, NIL leads at 48, with 12 unanswered and an 86% grounded-answer rate. Ask me about a topic, risk type, or outcome and I will cite the metric behind it.',
-    refs: [{ type: 'metric', id: 'analytics.summary' }],
-    answer_type: 'analytics_answer',
-  }
-}
