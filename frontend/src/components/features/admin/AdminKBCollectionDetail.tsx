@@ -1,19 +1,19 @@
 'use client'
 
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Upload } from 'lucide-react'
 import { AdminKBDocumentRow } from '@/src/components/features/admin/AdminKBDocumentRow'
 import { AdminKBLocalUploadRowView } from '@/src/components/features/admin/AdminKBLocalUploadRow'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
+import { AdminKBUploadDialog } from '@/src/components/features/admin/AdminKBUploadDialog'
 import {
   COLLECTION_ICON_COMPONENTS,
   getSafeUploadErrorMessage,
+  type AdminKBUploadRetryRequest,
   type AdminKBLocalUploadRow,
 } from '@/src/components/features/admin/kbFormatting'
 import { Button } from '@/src/components/ui'
 import { validateUploadFile } from '@/src/lib/api/uploadValidation'
-import { SUPPORTED_UPLOAD_ACCEPT } from '@/src/lib/constants/uploads'
-import { collectionUploadMetadata } from '@/src/lib/fixtures/kbCollections'
 import type { KBCollectionViewModel, KBDocument, UploadKBDocumentRequest } from '@/src/types/kb'
 
 interface AdminKBCollectionDetailProps {
@@ -35,23 +35,37 @@ export function AdminKBCollectionDetail({
   onRetry,
   onUpload,
 }: AdminKBCollectionDetailProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [localUploads, setLocalUploads] = useState<AdminKBLocalUploadRow[]>([])
   const subtitle = `${collection.documents.length} ${collection.documents.length === 1 ? 'document' : 'documents'} · grounds athlete answers`
   const Icon = COLLECTION_ICON_COMPONENTS[collection.icon]
+  const serverDocumentUploadKeys = useMemo(
+    () => new Set(collection.documents.map((document) => uploadKey(document.filename, document.size_bytes))),
+    [collection.documents],
+  )
 
-  const startUpload = (file: File) => {
-    const id = `${file.name}-${file.lastModified}-${Date.now()}`
+  useEffect(() => {
+    setLocalUploads((current) =>
+      current.filter((upload) => {
+        if (upload.phase !== 'queued') return true
+        return !serverDocumentUploadKeys.has(uploadKey(upload.file.name, upload.file.size))
+      }),
+    )
+  }, [serverDocumentUploadKeys])
+
+  const startUpload = (request: AdminKBUploadRetryRequest) => {
+    const id = `${request.file.name}-${request.file.lastModified}-${Date.now()}`
     try {
-      validateUploadFile(file)
+      validateUploadFile(request.file)
     } catch (error) {
       setLocalUploads((current) => [
         {
           errorMessage: getSafeUploadErrorMessage(error),
-          file,
+          file: request.file,
           id,
           percent: 0,
           phase: 'failed',
+          request,
         },
         ...current,
       ])
@@ -59,12 +73,11 @@ export function AdminKBCollectionDetail({
     }
 
     setLocalUploads((current) => [
-      { file, id, percent: 0, phase: 'requesting' },
+      { file: request.file, id, percent: 0, phase: 'requesting', request },
       ...current,
     ])
     void onUpload({
-      file,
-      metadata_tags: collectionUploadMetadata(collection),
+      ...request,
       onProgress: (progress) => {
         setLocalUploads((current) =>
           current.map((upload) =>
@@ -74,7 +87,6 @@ export function AdminKBCollectionDetail({
           ),
         )
       },
-      title: file.name,
     })
       .then(() => {
         setLocalUploads((current) =>
@@ -98,13 +110,6 @@ export function AdminKBCollectionDetail({
       })
   }
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    startUpload(file)
-    event.target.value = ''
-  }
-
   return (
     <AdminPageScaffold
       actions={
@@ -114,20 +119,10 @@ export function AdminKBCollectionDetail({
             All collections
           </Button>
           {canManage && (
-            <>
-              <input
-                accept={SUPPORTED_UPLOAD_ACCEPT}
-                aria-label="Upload document file"
-                className="sr-only"
-                onChange={handleFileChange}
-                ref={fileInputRef}
-                type="file"
-              />
-              <Button className="pb-admin-header-control" onClick={() => fileInputRef.current?.click()} size="sm">
-                <Upload size={15} />
-                Upload document
-              </Button>
-            </>
+            <Button className="pb-admin-header-control" onClick={() => setUploadDialogOpen(true)} size="sm">
+              <Upload size={15} />
+              Upload document
+            </Button>
           )}
         </>
       }
@@ -147,7 +142,7 @@ export function AdminKBCollectionDetail({
           {localUploads.map((upload) => (
             <AdminKBLocalUploadRowView
               key={upload.id}
-              onRetry={() => startUpload(upload.file)}
+              onRetry={() => startUpload(upload.request)}
               upload={upload}
             />
           ))}
@@ -171,6 +166,16 @@ export function AdminKBCollectionDetail({
           ))}
         </div>
       )}
+      <AdminKBUploadDialog
+        collection={collection}
+        onOpenChange={setUploadDialogOpen}
+        onSubmit={startUpload}
+        open={uploadDialogOpen}
+      />
     </AdminPageScaffold>
   )
+}
+
+function uploadKey(filename: string, sizeBytes: number): string {
+  return `${filename}:${sizeBytes}`
 }

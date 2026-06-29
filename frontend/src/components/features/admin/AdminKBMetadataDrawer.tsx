@@ -4,6 +4,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { FileText, Pencil, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/src/components/ui'
+import { getSafeUploadErrorMessage } from '@/src/components/features/admin/kbFormatting'
 import type { KBDocument, KBDocumentMetadataUpdateRequest } from '@/src/types/kb'
 
 interface AdminKBMetadataDrawerProps {
@@ -11,7 +12,7 @@ interface AdminKBMetadataDrawerProps {
   document: KBDocument | null
   onClose: () => void
   onDelete: (documentId: string) => void
-  onSave: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => void
+  onSave: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => Promise<KBDocument>
 }
 
 export function AdminKBMetadataDrawer({ canManage, document, onClose, onDelete, onSave }: AdminKBMetadataDrawerProps) {
@@ -24,7 +25,7 @@ interface AdminKBMetadataDrawerFormProps {
   document: KBDocument
   onClose: () => void
   onDelete: (documentId: string) => void
-  onSave: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => void
+  onSave: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => Promise<KBDocument>
 }
 
 function AdminKBMetadataDrawerForm({
@@ -36,20 +37,37 @@ function AdminKBMetadataDrawerForm({
 }: AdminKBMetadataDrawerFormProps) {
   const [tags, setTags] = useState(getTags(document).join(', '))
   const [sourceDate, setSourceDate] = useState(document.source_date ?? '')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [dateError, setDateError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextTags = tags
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean)
-    onSave(document.id, {
-      metadata_tags: {
-        ...document.metadata_tags,
-        topics: nextTags,
-      },
-      source_date: sourceDate || null,
-    })
-    onClose()
+    const normalizedDate = sourceDate.trim()
+    if (normalizedDate && !isValidISODate(normalizedDate)) {
+      setDateError('Use YYYY-MM-DD.')
+      return
+    }
+    setDateError(null)
+    setErrorMessage(null)
+    setIsSaving(true)
+    try {
+      await onSave(document.id, {
+        metadata_tags: {
+          ...document.metadata_tags,
+          topics: nextTags,
+        },
+        source_date: normalizedDate || null,
+      })
+      onClose()
+    } catch (error) {
+      setErrorMessage(getSafeUploadErrorMessage(error))
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -82,8 +100,23 @@ function AdminKBMetadataDrawerForm({
             </label>
             <label>
               <span className="pb-admin-kb-field-label block">Source date</span>
-              <input className="pb-admin-kb-input" onChange={(event) => setSourceDate(event.target.value)} value={sourceDate} />
+              <input
+                className="pb-admin-kb-input"
+                inputMode="numeric"
+                onChange={(event) => {
+                  setSourceDate(event.target.value)
+                  if (dateError) setDateError(null)
+                }}
+                placeholder="YYYY-MM-DD"
+                value={sourceDate}
+              />
             </label>
+            {dateError && <p className="pb-ui-xs text-danger">{dateError}</p>}
+            {errorMessage && (
+              <p className="pb-admin-table-text rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-danger">
+                {errorMessage}
+              </p>
+            )}
           </div>
           <div className="pb-admin-kb-drawer-footer">
             {canManage && (
@@ -96,8 +129,8 @@ function AdminKBMetadataDrawerForm({
               <Button onClick={onClose} size="sm" variant="secondary">
                 Cancel
               </Button>
-              <Button onClick={handleSave} size="sm">
-                Save changes
+              <Button disabled={isSaving} onClick={handleSave} size="sm">
+                {isSaving ? 'Saving...' : 'Save changes'}
               </Button>
             </div>
           </div>
@@ -111,4 +144,18 @@ function getTags(document: KBDocument): string[] {
   const topics = document.metadata_tags.topics
   if (!Array.isArray(topics)) return []
   return topics.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+}
+
+function isValidISODate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [yearPart, monthPart, dayPart] = value.split('-')
+  const year = Number(yearPart)
+  const month = Number(monthPart)
+  const day = Number(dayPart)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
 }

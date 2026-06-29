@@ -7,8 +7,14 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { KBCollectionIcon } from '@/src/types/kb'
+import type { UploadKBDocumentRequest } from '@/src/types/kb'
 
 export type AdminKBLocalUploadPhase = 'requesting' | 'uploading' | 'queued' | 'failed'
+
+export type AdminKBUploadRetryRequest = Pick<
+  UploadKBDocumentRequest,
+  'file' | 'metadata_tags' | 'source_date' | 'title'
+>
 
 export interface AdminKBLocalUploadRow {
   errorMessage?: string
@@ -16,6 +22,7 @@ export interface AdminKBLocalUploadRow {
   id: string
   percent: number
   phase: AdminKBLocalUploadPhase
+  request: AdminKBUploadRetryRequest
 }
 
 export const COLLECTION_ICON_COMPONENTS: Record<KBCollectionIcon, LucideIcon> = {

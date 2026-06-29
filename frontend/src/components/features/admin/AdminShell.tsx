@@ -192,14 +192,15 @@ export function AdminShell() {
         )}
         {adminTab === 'kb' && (
           <KBPanel
-            canManage={Boolean(isSuperAdmin)}
+            canCreateCollection={Boolean(isSuperAdmin)}
+            canManageDocuments={Boolean(isAdmin)}
             documents={documents}
             isError={documentsQuery.isError}
             isFetching={documentsQuery.isFetching && !documentsQuery.isLoading}
             isLoading={documentsQuery.isLoading && documents.length === 0}
             onDelete={(id) => deleteDocument.mutate(id)}
             onRetry={(id) => retryDocument.mutate(id)}
-            onUpdateMetadata={(documentId, metadata) => updateDocument.mutate({ documentId, metadata })}
+            onUpdateMetadata={(documentId, metadata) => updateDocument.mutateAsync({ documentId, metadata })}
             onUpload={(request) => uploadDocument.mutateAsync(request)}
           />
         )}
