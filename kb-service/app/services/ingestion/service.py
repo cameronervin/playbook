@@ -65,6 +65,18 @@ _delete_s3_object = delete_s3_object
 _SOURCE_IDENTITY_CONFLICT_DETAIL = SOURCE_IDENTITY_CONFLICT_DETAIL
 
 
+def _delete_pages_staging(document_id: str) -> None:
+    from app.workers.tasks.staging import _delete_pages_staging as delete_pages_staging
+
+    delete_pages_staging(document_id)
+
+
+def _delete_staging_file(document_id: str) -> None:
+    from app.workers.tasks.staging import _delete_staging_file as delete_staging_file
+
+    delete_staging_file(document_id)
+
+
 class IngestionService:
     _IN_PROGRESS_STATUSES = frozenset(
         {"pending", "parsing", "chunking", "embedding", "loading"}
@@ -248,6 +260,8 @@ class IngestionService:
         await self._doc_repo.update_status(document_id, "pending")
         if await self._log_repo.get_by_document(document_id) is None:
             await self._log_repo.create(document_id)
+        else:
+            await self._log_repo.reset_for_retry(document_id)
         task_id = await self._dispatch_pipeline(
             document_id,
             config,
@@ -275,9 +289,12 @@ class IngestionService:
             document_id
         )
         await self._doc_repo.delete(document_id)
+        document_id_text = str(document_id)
 
         if doc and doc.s3_key:
             await asyncio.to_thread(delete_s3_object, doc.s3_key)
+        await asyncio.to_thread(_delete_pages_staging, document_id_text)
+        await asyncio.to_thread(_delete_staging_file, document_id_text)
 
         logger.info(
             "kb_document_deleted",

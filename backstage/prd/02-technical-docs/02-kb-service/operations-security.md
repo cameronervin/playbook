@@ -15,6 +15,11 @@ service MVP.
 - Original file signed URLs are sensitive and should be short-lived.
 - Logs must not include signed URLs, raw document contents, LiteLLM service keys,
   provider API keys, or embedding request bodies.
+- KB-service logging redacts structlog and stdlib records before rendering while
+  preserving formatter args for Uvicorn access logs. Noisy SDK loggers
+  (`botocore`, `boto3`, `s3transfer`, `httpcore`, `httpx`, and `openai`) are
+  forced above DEBUG by default so local `LOG_LEVEL=DEBUG` does not emit prompts,
+  source excerpts, request payloads, or S3 signing details.
 - Metadata should avoid unnecessary PII.
 - Athlete conversation files must never be promoted into the shared KB corpus in MVP.
 
@@ -30,6 +35,12 @@ KB-service reranking also routes through LiteLLM, using the
 reranker only when `KB_SEARCH_STRATEGY=hybrid` and `KB_RERANK_ENABLED=true`;
 semantic search remains the default fallback path.
 
+KB-service source-summary generation routes through the summary/chat alias
+(`LITELLM_SUMMARY_MODEL`, `playbook-fast` by default). Runtime summary failures
+fall back to extractive summaries so ingestion can continue, but local smoke
+preflight should use `scripts/smoke_kb_service.py --check-litellm-summary` when
+validating LiteLLM auth/configuration for that alias.
+
 Direct provider API keys are allowed only for local development, smoke tests, or
 an explicit break-glass path. Production ingestion should not require OpenAI,
 Anthropic, or other provider credentials in KB-service runtime configuration.
@@ -44,6 +55,7 @@ Required structured log events:
 - `kb_embed_started`
 - `kb_embed_batch_completed`
 - `kb_load_vector_completed`
+- `kb_load_vector_skip_deleted_document`
 - `kb_ingest_failed`
 - `kb_search_requested`
 - `kb_search_completed`
@@ -74,6 +86,7 @@ Recommended MVP metrics:
 | Parser crash | Retry within worker policy, then mark failed |
 | Embedding provider outage | Retry with backoff, then mark failed/retryable |
 | Vector count mismatch | Reissue missing chunks or mark failed with diagnostic count |
+| Document deleted mid-pipeline | Delete original/staging objects and embeddings; stale embed/finalizer tasks no-op before reissue |
 | Status webhook failure | Retry webhook delivery; retain local ingestion status |
 
 ## Configuration
@@ -102,4 +115,7 @@ Before enabling KB-backed answers:
 - status webhook signature validation works,
 - ingestion succeeds for PDF/DOCX/PPTX/XLSX smoke files,
 - search returns chunk text and required metadata,
-- deleted/failed/unready documents are excluded from search.
+- deleted/failed/unready documents are excluded from search,
+- delete cleanup removes original files, page/chunk staging files, and vectors,
+- stale delayed worker tasks cannot recreate embeddings after delete,
+- optional LiteLLM summary/rerank preflight passes when those aliases are in scope.

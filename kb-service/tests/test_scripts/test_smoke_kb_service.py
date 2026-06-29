@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import httpx
+from botocore.exceptions import ClientError
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "smoke_kb_service.py"
 
@@ -254,6 +256,129 @@ def test_litellm_rerank_check_rejects_unranked_nil_document() -> None:
         raise AssertionError("expected SmokeTestError")
 
 
+def test_litellm_summary_payload_uses_alias_without_source_excerpts() -> None:
+    smoke = _load_smoke_module()
+    settings = SimpleNamespace(LITELLM_SUMMARY_MODEL="playbook-fast")
+
+    payload = smoke._litellm_summary_payload(settings)
+
+    assert payload["model"] == "playbook-fast"
+    assert payload["max_tokens"] <= 16
+    rendered = repr(payload)
+    assert "source_uri" not in rendered
+    assert "Athletes must disclose NIL deals" not in rendered
+
+
+def test_litellm_summary_check_posts_to_proxy_and_validates_response(
+    monkeypatch,
+) -> None:
+    smoke = _load_smoke_module()
+    settings = SimpleNamespace(
+        LITELLM_BASE_URL="http://litellm:4000/",
+        LITELLM_API_KEY="litellm-key",
+        LITELLM_SUMMARY_MODEL="playbook-fast",
+    )
+    emitted: list[str] = []
+    requests: list[dict] = []
+
+    class FakeClient:
+        def __init__(self, *, base_url: str, timeout: float) -> None:
+            self.base_url = base_url
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+        def request(self, method, path, *, headers=None, json=None):
+            requests.append(
+                {"method": method, "path": path, "headers": headers, "json": json}
+            )
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "ok"}}]},
+            )
+
+    monkeypatch.setattr(smoke.httpx, "Client", FakeClient)
+    monkeypatch.setattr(smoke, "_emit", emitted.append)
+
+    smoke._check_litellm_summary(settings)
+
+    assert requests[0]["method"] == "POST"
+    assert requests[0]["path"] == "/chat/completions"
+    assert requests[0]["headers"] == {"Authorization": "Bearer litellm-key"}
+    assert requests[0]["json"]["model"] == "playbook-fast"
+    assert emitted == ["  litellm_summary=ok"]
+
+
+def test_cleanup_assertion_checks_status_search_and_s3_staging(
+    monkeypatch,
+) -> None:
+    smoke = _load_smoke_module()
+    document_id = str(uuid4())
+    organization_id = uuid4()
+    runtime_settings = SimpleNamespace(S3_BUCKET_NAME="playbook-bucket")
+    requests: list[dict] = []
+    head_keys: list[str] = []
+
+    class FakeClient:
+        def request(self, method, path, *, headers=None, json=None):
+            requests.append(
+                {"method": method, "path": path, "headers": headers, "json": json}
+            )
+            if method == "GET" and path == f"/api/kb/status/documents/{document_id}":
+                return httpx.Response(404, json={"detail": "not found"})
+            if method == "POST" and path == "/api/kb/search":
+                return httpx.Response(200, json={"total": 0, "results": []})
+            return httpx.Response(500, json={"detail": "unexpected"})
+
+    class FakeS3Client:
+        def head_object(self, *, Bucket, Key):
+            head_keys.append(Key)
+            raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
+
+    monkeypatch.setattr(smoke, "_s3_client", lambda: FakeS3Client())
+
+    smoke._assert_kb_cleanup(
+        FakeClient(),
+        {"Authorization": "Bearer kb-secret"},
+        document_id=document_id,
+        object_key="kb-smoke/run/nil.docx",
+        runtime_settings=runtime_settings,
+        query="Do athletes need to disclose NIL deals?",
+        organization_id=str(organization_id),
+        terms=smoke.MATCH_TERMS,
+    )
+
+    assert requests == [
+        {
+            "method": "GET",
+            "path": f"/api/kb/status/documents/{document_id}",
+            "headers": {"Authorization": "Bearer kb-secret"},
+            "json": None,
+        },
+        {
+            "method": "POST",
+            "path": "/api/kb/search",
+            "headers": {"Authorization": "Bearer kb-secret"},
+            "json": {
+                "query": "Do athletes need to disclose NIL deals?",
+                "organization_id": str(organization_id),
+                "visibility_context": {"role": "athlete"},
+                "limit": 5,
+                "score_threshold": 0.0,
+            },
+        },
+    ]
+    assert head_keys == [
+        "kb-smoke/run/nil.docx",
+        f"kb/staging/{document_id}/pages.ndjson",
+        f"kb/staging/{document_id}/chunks.ndjson",
+    ]
+
+
 def test_parse_args_supports_conversation_file_smoke_flag() -> None:
     smoke = _load_smoke_module()
 
@@ -261,10 +386,12 @@ def test_parse_args_supports_conversation_file_smoke_flag() -> None:
         [
             "--include-conversation-file",
             "--check-litellm-rerank",
+            "--check-litellm-summary",
             "--expect-rerank-fail-open",
         ]
     )
 
     assert args.include_conversation_file is True
     assert args.check_litellm_rerank is True
+    assert args.check_litellm_summary is True
     assert args.expect_rerank_fail_open is True

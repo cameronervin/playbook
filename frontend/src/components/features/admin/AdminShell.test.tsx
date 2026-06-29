@@ -106,8 +106,6 @@ const kbDocuments = vi.hoisted(() => [
     visibility_policy: { scope: 'all_athletes' },
     metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
     source_date: '2026-03-01',
-    is_official: true,
-    priority: 3,
     kb_service_document_id: 'kb-doc-1',
     created_at: '2026-03-14T12:00:00Z',
     updated_at: '2026-03-14T12:00:00Z',
@@ -125,8 +123,6 @@ const kbDocuments = vi.hoisted(() => [
     visibility_policy: { scope: 'all_athletes' },
     metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
     source_date: null,
-    is_official: false,
-    priority: 3,
     kb_service_document_id: null,
     created_at: '2026-06-03T12:00:00Z',
     updated_at: '2026-06-03T12:00:00Z',
@@ -144,8 +140,6 @@ const kbDocuments = vi.hoisted(() => [
     visibility_policy: { scope: 'all_athletes' },
     metadata_tags: { collection: 'travel', topics: ['Travel'] },
     source_date: '2026-06-01',
-    is_official: true,
-    priority: 1,
     kb_service_document_id: 'kb-doc-3',
     created_at: '2026-06-01T12:00:00Z',
     updated_at: '2026-06-01T12:00:00Z',
@@ -237,8 +231,6 @@ describe('AdminShell', () => {
         visibility_policy: { scope: 'all_athletes' },
         metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
         source_date: '2026-03-01',
-        is_official: true,
-        priority: 3,
         kb_service_document_id: 'kb-doc-1',
         created_at: '2026-03-14T12:00:00Z',
         updated_at: '2026-03-14T12:00:00Z',
@@ -256,8 +248,6 @@ describe('AdminShell', () => {
         visibility_policy: { scope: 'all_athletes' },
         metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
         source_date: null,
-        is_official: false,
-        priority: 3,
         kb_service_document_id: null,
         created_at: '2026-06-03T12:00:00Z',
         updated_at: '2026-06-03T12:00:00Z',
@@ -275,8 +265,6 @@ describe('AdminShell', () => {
         visibility_policy: { scope: 'all_athletes' },
         metadata_tags: { collection: 'travel', topics: ['Travel'] },
         source_date: '2026-06-01',
-        is_official: true,
-        priority: 1,
         kb_service_document_id: 'kb-doc-3',
         created_at: '2026-06-01T12:00:00Z',
         updated_at: '2026-06-01T12:00:00Z',
@@ -454,8 +442,6 @@ describe('AdminShell', () => {
       visibility_policy: { scope: 'all_athletes' },
       metadata_tags: { collection: 'travel', topics: ['Travel'] },
       source_date: null,
-      is_official: false,
-      priority: 1,
       kb_service_document_id: null,
       created_at: '2026-06-03T12:00:00Z',
       updated_at: '2026-06-03T12:00:00Z',
@@ -553,10 +539,6 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Retry RECRUITING_DEAD_PERIODS.PDF/i }))
     expect(retryDocumentMutate).toHaveBeenCalledWith('doc-recruiting')
-
-    await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /Mark official/i }))
-    expect(updateDocumentMutate).toHaveBeenCalledWith({ documentId: 'doc-recruiting', isOfficial: true })
 
     await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /Delete \/ archive/i }))

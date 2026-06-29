@@ -24,6 +24,23 @@ class IngestionLogRepository:
         await self._session.refresh(log)
         return log
 
+    async def reset_for_retry(self, document_id: uuid.UUID) -> IngestionLog | None:
+        """Clear stale stage state before dispatching a fresh retry pipeline."""
+        log = await self.get_by_document(document_id)
+        if not log:
+            return None
+        log.pipeline_task_id = None
+        for stage in ("parse", "chunk", "summarize", "embed", "load_vector"):
+            setattr(log, f"{stage}_task_id", None)
+            setattr(log, f"{stage}_status", "PENDING")
+        log.parse_result = None
+        log.error_message = None
+        log.retry_count += 1
+        log.updated_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(log)
+        return log
+
     async def set_parse_result(
         self,
         document_id: uuid.UUID,

@@ -15,6 +15,7 @@ from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjec
 from app.models.audit import AuditLog
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
 from app.models.uploads import KBIngestOutbox, UploadRequest
+from app.repositories.knowledge_base import KBDocumentRepository
 from app.repositories.identity import OrganizationRepository, UserRepository
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
@@ -152,7 +153,11 @@ class FakeKnowledgebaseProvider:
         self.retried_document_ids.append(kb_service_document_id)
         return KBDocumentIngestResponse(
             kb_service_document_id=UUID(kb_service_document_id),
-            playbook_document_id=self.ingest_requests[0].playbook_document_id,
+            playbook_document_id=(
+                self.ingest_requests[0].playbook_document_id
+                if self.ingest_requests
+                else None
+            ),
             task_id=f"retry-task-{len(self.retried_document_ids)}",
         )
 
@@ -358,6 +363,123 @@ async def test_kb_upload_rejects_reserved_metadata_keys(
         "retryable": False,
         "details": {"request_id": "req-kb-reserved"},
     }
+
+
+@pytest.mark.asyncio
+async def test_kb_metadata_patch_rejects_reserved_metadata_keys(
+    route_client,
+    db_session,
+) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+    _override_external_providers(route_client)
+    document = await KBDocumentRepository(db_session).create(
+        organization_id=admin.organization_id,
+        uploaded_by=admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        metadata_tags={"topic": "nil"},
+    )
+    await db_session.commit()
+
+    response = await route_client.client.patch(
+        f"/api/v1/admin/kb/documents/{document.id}/metadata",
+        json={"metadata_tags": {"source_type": "policy"}},
+        headers={"X-Request-ID": "req-kb-patch-reserved"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == {
+        "code": "VALIDATION_ERROR",
+        "message": "metadata_tags contains reserved keys: source_type",
+        "retryable": False,
+        "details": {"request_id": "req-kb-patch-reserved"},
+    }
+    await db_session.refresh(document)
+    assert document.metadata_tags == {"topic": "nil"}
+
+
+@pytest.mark.asyncio
+async def test_kb_metadata_patch_preserves_omitted_source_date_and_clears_null(
+    route_client,
+    db_session,
+) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+    _override_external_providers(route_client)
+    document = await KBDocumentRepository(db_session).create(
+        organization_id=admin.organization_id,
+        uploaded_by=admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        metadata_tags={"topic": "nil"},
+        source_date=datetime(2026, 1, 15, tzinfo=UTC).date(),
+    )
+    await db_session.commit()
+
+    preserved = await route_client.client.patch(
+        f"/api/v1/admin/kb/documents/{document.id}/metadata",
+        json={"metadata_tags": {"topic": "compliance"}},
+    )
+    cleared = await route_client.client.patch(
+        f"/api/v1/admin/kb/documents/{document.id}/metadata",
+        json={"source_date": None},
+    )
+
+    assert preserved.status_code == 200
+    assert preserved.json()["source_date"] == "2026-01-15"
+    assert preserved.json()["metadata_tags"] == {"topic": "compliance"}
+    assert cleared.status_code == 200
+    assert cleared.json()["source_date"] is None
+    assert cleared.json()["metadata_tags"] == {"topic": "compliance"}
+
+
+@pytest.mark.asyncio
+async def test_kb_retry_and_delete_call_kb_service_when_document_is_linked(
+    route_client,
+    db_session,
+) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+    storage, kb_provider = _override_external_providers(route_client)
+    document = await KBDocumentRepository(db_session).create(
+        organization_id=admin.organization_id,
+        uploaded_by=admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        processing_status="failed",
+        metadata_tags={"topic": "nil"},
+    )
+    linked_id = uuid4()
+    await KBDocumentRepository(db_session).link_kb_service_document(
+        document,
+        kb_service_document_id=linked_id,
+    )
+    await db_session.commit()
+
+    retry_response = await route_client.client.post(
+        f"/api/v1/admin/kb/documents/{document.id}/retry"
+    )
+    delete_response = await route_client.client.delete(
+        f"/api/v1/admin/kb/documents/{document.id}"
+    )
+
+    assert retry_response.status_code == 200
+    assert retry_response.json()["processing_status"] == "uploaded"
+    assert kb_provider.retried_document_ids == [str(linked_id)]
+    assert delete_response.status_code == 204
+    assert kb_provider.deleted_document_ids == [str(linked_id)]
+    assert storage.deletes == [document.storage_key]
+    assert await db_session.get(KBDocument, document.id) is None
 
 
 @pytest.mark.asyncio

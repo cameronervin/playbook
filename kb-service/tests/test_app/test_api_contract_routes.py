@@ -117,6 +117,25 @@ def test_canonical_kb_routes_require_service_auth() -> None:
     assert client.delete(f"/api/kb/documents/{document_id}").status_code == 401
 
 
+def test_canonical_kb_routes_reject_bad_bearer_token() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kb/configuration/resolve",
+        json={},
+        headers={"Authorization": "Bearer wrong-secret"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_health_routes_allow_unauthenticated_access() -> None:
+    client = TestClient(app)
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/api/kb/health").status_code == 200
+
+
 def test_configuration_resolve_accepts_empty_authenticated_request() -> None:
     client = TestClient(app)
     fake_service = FakeConfigurationService()

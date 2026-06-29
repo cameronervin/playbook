@@ -143,7 +143,6 @@ export function AdminShell() {
             isLoading={documentsQuery.isLoading && documents.length === 0}
             onDelete={(id) => deleteDocument.mutate(id)}
             onRetry={(id) => retryDocument.mutate(id)}
-            onToggleOfficial={(id, isOfficial) => updateDocument.mutate({ documentId: id, isOfficial })}
             onUpdateMetadata={(documentId, metadata) => updateDocument.mutate({ documentId, metadata })}
             onUpload={(request) => uploadDocument.mutateAsync(request)}
           />

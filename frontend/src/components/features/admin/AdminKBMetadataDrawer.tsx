@@ -36,8 +36,6 @@ function AdminKBMetadataDrawerForm({
 }: AdminKBMetadataDrawerFormProps) {
   const [tags, setTags] = useState(getTags(document).join(', '))
   const [sourceDate, setSourceDate] = useState(document.source_date ?? '')
-  const [priority, setPriority] = useState(String(document.priority))
-  const [official, setOfficial] = useState(document.is_official)
 
   const handleSave = () => {
     const nextTags = tags
@@ -45,12 +43,10 @@ function AdminKBMetadataDrawerForm({
       .map((tag) => tag.trim())
       .filter(Boolean)
     onSave(document.id, {
-      is_official: official,
       metadata_tags: {
         ...document.metadata_tags,
         topics: nextTags,
       },
-      priority: Number(priority),
       source_date: sourceDate || null,
     })
     onClose()
@@ -87,18 +83,6 @@ function AdminKBMetadataDrawerForm({
             <label>
               <span className="pb-admin-kb-field-label block">Source date</span>
               <input className="pb-admin-kb-input" onChange={(event) => setSourceDate(event.target.value)} value={sourceDate} />
-            </label>
-            <label>
-              <span className="pb-admin-kb-field-label block">Priority</span>
-              <select className="pb-admin-kb-input" onChange={(event) => setPriority(event.target.value)} value={priority}>
-                <option value="0">Low</option>
-                <option value="1">Normal</option>
-                <option value="3">High</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-3 text-fg-2">
-              <input checked={official} onChange={(event) => setOfficial(event.target.checked)} type="checkbox" />
-              <span className="pb-admin-kb-field-label mb-0">Official source</span>
             </label>
           </div>
           <div className="pb-admin-kb-drawer-footer">

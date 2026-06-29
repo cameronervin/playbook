@@ -10,9 +10,15 @@ from uuid import uuid4
 
 import pytest
 
-from app.repositories.conversations import ConversationFileRepository, ConversationRepository
+from app.repositories.conversations import (
+    ConversationFileRepository,
+    ConversationRepository,
+)
 from app.repositories.identity import OrganizationRepository, UserRepository
-from app.repositories.knowledge_base import KBDocumentEventRepository, KBDocumentRepository
+from app.repositories.knowledge_base import (
+    KBDocumentEventRepository,
+    KBDocumentRepository,
+)
 
 
 async def _document(db_session):
@@ -87,6 +93,60 @@ async def test_kb_webhook_updates_document_status_and_appends_event(
     assert events[-1].event_type == "kb.pipeline.success"
     assert events[-1].event_metadata["task_id"] == "task-1"
     assert events[-1].event_metadata["chunk_count"] == 42
+
+
+@pytest.mark.asyncio
+async def test_kb_webhook_does_not_regress_ready_document_on_late_stage_success(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    monkeypatch.setattr(test_settings, "KB_WEBHOOK_SECRET", "webhook-secret")
+    document = await _document(db_session)
+    kb_service_document_id = uuid4()
+    ready_payload = {
+        "document_id": str(document.id),
+        "kb_service_document_id": str(kb_service_document_id),
+        "source_type": "admin_upload",
+        "playbook_document_id": str(document.id),
+        "stage": "pipeline",
+        "status": "success",
+        "summary": "NIL handbook orientation summary.",
+        "metadata": {"chunk_count": 42},
+    }
+    ready_body, ready_signature = _signed_body(ready_payload, "webhook-secret")
+    late_payload = {
+        **ready_payload,
+        "stage": "load_vector",
+        "status": "SUCCESS",
+        "metadata": {"chunk_count": 42},
+    }
+    late_body, late_signature = _signed_body(late_payload, "webhook-secret")
+
+    ready_response = await route_client.client.post(
+        "/api/v1/kb/webhook",
+        content=ready_body,
+        headers={
+            "Content-Type": "application/json",
+            "X-KB-Signature": ready_signature,
+        },
+    )
+    late_response = await route_client.client.post(
+        "/api/v1/kb/webhook",
+        content=late_body,
+        headers={
+            "Content-Type": "application/json",
+            "X-KB-Signature": late_signature,
+        },
+    )
+
+    assert ready_response.status_code == 200
+    assert late_response.status_code == 200
+    assert late_response.json() == {"status": "ok", "document_status": "ready"}
+    assert document.processing_status == "ready"
+    assert document.summary == "NIL handbook orientation summary."
+    assert document.chunk_count == 42
 
 
 @pytest.mark.asyncio

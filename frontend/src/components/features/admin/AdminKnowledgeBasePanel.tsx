@@ -16,7 +16,6 @@ interface AdminKnowledgeBasePanelProps {
   isLoading?: boolean
   onDelete: (id: string) => void
   onRetry: (id: string) => void
-  onToggleOfficial: (id: string, isOfficial: boolean) => void
   onUpdateMetadata: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => void
   onUpload: (request: UploadKBDocumentRequest) => Promise<KBDocument>
 }
@@ -29,7 +28,6 @@ export function AdminKnowledgeBasePanel({
   isLoading = false,
   onDelete,
   onRetry,
-  onToggleOfficial,
   onUpdateMetadata,
   onUpload,
 }: AdminKnowledgeBasePanelProps) {
@@ -64,7 +62,6 @@ export function AdminKnowledgeBasePanel({
           onDelete={onDelete}
           onEdit={setEditingDocumentId}
           onRetry={onRetry}
-          onToggleOfficial={onToggleOfficial}
           onUpload={onUpload}
         />
         <AdminKBMetadataDrawer

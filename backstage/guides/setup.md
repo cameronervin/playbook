@@ -92,6 +92,30 @@ KB-service has an internal LiteLLM `/rerank` provider. Search remains
 semantic-only while `KB_SEARCH_STRATEGY=semantic`; hybrid reranking requires
 `KB_SEARCH_STRATEGY=hybrid` and `KB_RERANK_ENABLED=true`.
 
+Then smoke the LiteLLM summary/chat alias when validating KB source-summary
+generation:
+
+```bash
+source deploy/envs/.env.litellm.local
+
+curl -s -X POST "http://localhost:4000/chat/completions" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "playbook-fast",
+    "messages": [
+      {"role": "system", "content": "Reply with exactly ok."},
+      {"role": "user", "content": "LiteLLM summary alias health check."}
+    ],
+    "temperature": 0,
+    "max_tokens": 8
+  }'
+```
+
+The KB runtime keeps extractive summary fallback enabled, but this preflight
+detects a bad `playbook-fast` alias or LiteLLM key before ingestion tests rely on
+fallback behavior.
+
 See [Self-Hosted LiteLLM](litellm_self_hosting.md) for key provisioning and
 security notes.
 
@@ -121,6 +145,10 @@ uv run alembic upgrade head
 # Run the dev server (http://localhost:8000)
 uv run uvicorn app.main:app --reload
 ```
+
+If a host shell exports a non-boolean `DEBUG` value, prefix host-run backend
+commands with `DEBUG=true` or `DEBUG=false` so pydantic-settings parses the
+environment consistently.
 
 Verify: `curl http://localhost:8000/api/v1/health` → `{"status": "healthy"}`.
 
@@ -238,10 +266,19 @@ cp ../deploy/envs/.env.kb-service.local .env
 # S3_ENDPOINT_URL=http://localhost:9000
 # CONVERSATION_FILE_MAX_UPLOAD_MB=200
 # APP_WEBHOOK_URL=http://localhost:8000
+# KB_SEARCH_STRATEGY=semantic
+# KB_RERANK_ENABLED=false
+# LOG_LEVEL=INFO
 
 uv run alembic upgrade head
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
+
+KB-service logging redacts structlog and stdlib records before rendering and
+keeps noisy SDK loggers above DEBUG by default. Prefer worker `--loglevel=info`
+for normal local smoke tests; temporarily raising app `LOG_LEVEL=DEBUG` should
+not emit LiteLLM prompts, source excerpts, or S3 signing details from the common
+SDK loggers.
 
 Run the KB ingest workers in separate terminals from `kb-service/`:
 
@@ -280,10 +317,15 @@ KB infrastructure definitions:
    `results`.
 5. Confirm Playbook migrations apply against the local `playbook` database.
 6. From `kb-service/`, run `uv run alembic upgrade head` so the live KB schema
-   matches the current models, then run `uv run python
-   scripts/smoke_kb_service.py` for shared KB ingest/search. Add
-   `--include-conversation-file` to also verify private conversation-file
-   ingest/search isolation.
+   matches the current models. For the Phase 3 semantic retrieval path, run the
+   KB API and workers with `KB_SEARCH_STRATEGY=semantic` and
+   `KB_RERANK_ENABLED=false`, then run `uv run python
+   scripts/smoke_kb_service.py --include-conversation-file` for shared
+   ingest/search, private conversation-file isolation, and post-delete
+   original/staging cleanup assertions. Add `--check-litellm-summary` when
+   validating the `playbook-fast` LiteLLM summary alias. Hybrid rerank can be
+   smoked separately with `--check-litellm-rerank` once the local reranker alias
+   is in scope.
 
 ### Direct Upload Smoke
 
@@ -312,12 +354,31 @@ Then smoke the implemented browser path:
 
    ```bash
    cd kb-service
+   export KB_SEARCH_STRATEGY=semantic
+   export KB_RERANK_ENABLED=false
    uv run python scripts/smoke_kb_service.py --include-conversation-file
    ```
 
-4. If seeded local retrieval data is available, ask a question that should use a
-   ready conversation file and confirm the answer cites that file. If not, keep
-   the Phase 2 grounded citation smoke marked as remaining.
+   Add `--check-litellm-summary` to the smoke command after confirming the
+   LiteLLM `playbook-fast` alias is reachable; leave it off when intentionally
+   validating the extractive fallback path.
+
+4. Run the Phase 3 backend-to-KB smoke. It seeds local admin/athlete tokens,
+   performs a direct KB upload, waits for webhook-mirrored ready status, verifies
+   `LocalKBProvider` search, streams an athlete chat answer, checks persisted
+   citation metadata, proves malformed documents stay out of retrieval, retries
+   the linked document, and deletes the smoke data:
+
+   ```bash
+   cd backend
+   uv run python scripts/phase3_kb_e2e_smoke.py \
+     --backend-url http://localhost:8000 \
+     --kb-url http://localhost:8001 \
+     --timeout-seconds 300
+   ```
+
+5. If seeded local retrieval data is available, ask a question that should use a
+   ready conversation file and confirm the answer cites that file.
 
 ## Common Issues
 

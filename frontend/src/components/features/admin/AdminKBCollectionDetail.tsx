@@ -23,7 +23,6 @@ interface AdminKBCollectionDetailProps {
   onDelete: (id: string) => void
   onEdit: (id: string) => void
   onRetry: (id: string) => void
-  onToggleOfficial: (id: string, isOfficial: boolean) => void
   onUpload: (request: UploadKBDocumentRequest) => Promise<KBDocument>
 }
 
@@ -34,7 +33,6 @@ export function AdminKBCollectionDetail({
   onDelete,
   onEdit,
   onRetry,
-  onToggleOfficial,
   onUpload,
 }: AdminKBCollectionDetailProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -169,7 +167,6 @@ export function AdminKBCollectionDetail({
               onDelete={() => onDelete(document.id)}
               onEdit={() => onEdit(document.id)}
               onRetry={() => onRetry(document.id)}
-              onToggleOfficial={() => onToggleOfficial(document.id, !document.is_official)}
             />
           ))}
         </div>

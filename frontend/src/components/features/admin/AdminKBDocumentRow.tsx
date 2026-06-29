@@ -2,7 +2,7 @@
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import type { ReactNode } from 'react'
-import { AlertTriangle, FileText, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { AlertTriangle, FileText, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { cn } from '@/src/lib/utils/cn'
 import type { KBDocument } from '@/src/types/kb'
 
@@ -12,7 +12,6 @@ interface AdminKBDocumentRowProps {
   onDelete: () => void
   onEdit: () => void
   onRetry: () => void
-  onToggleOfficial: () => void
 }
 
 export function AdminKBDocumentRow({
@@ -21,7 +20,6 @@ export function AdminKBDocumentRow({
   onDelete,
   onEdit,
   onRetry,
-  onToggleOfficial,
 }: AdminKBDocumentRowProps) {
   const failed = document.processing_status === 'failed'
   const pendingUpload = document.processing_status === 'upload_pending'
@@ -39,7 +37,6 @@ export function AdminKBDocumentRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="pb-admin-kb-doc-title">{document.title}</span>
-            {document.is_official && <ShieldCheck aria-label="Official source" className="shrink-0 text-success" size={14} />}
           </div>
           <p className="pb-admin-kb-doc-meta">{formatDocumentMeta(document)}</p>
         </div>
@@ -81,11 +78,9 @@ export function AdminKBDocumentRow({
           canManage={canManage}
           documentTitle={document.title}
           failed={failed}
-          isOfficial={document.is_official}
           onDelete={onDelete}
           onEdit={onEdit}
           onRetry={onRetry}
-          onToggleOfficial={onToggleOfficial}
         />
       </div>
       {failed && document.failure_reason && (
@@ -108,22 +103,18 @@ interface DocumentActionsProps {
   canManage: boolean
   documentTitle: string
   failed: boolean
-  isOfficial: boolean
   onDelete: () => void
   onEdit: () => void
   onRetry: () => void
-  onToggleOfficial: () => void
 }
 
 function DocumentActions({
   canManage,
   documentTitle,
   failed,
-  isOfficial,
   onDelete,
   onEdit,
   onRetry,
-  onToggleOfficial,
 }: DocumentActionsProps) {
   return (
     <DropdownMenuPrimitive.Root>
@@ -136,9 +127,6 @@ function DocumentActions({
         <DropdownMenuPrimitive.Content align="end" className="pb-admin-menu" sideOffset={4}>
           <DropdownMenuItem icon={<Pencil size={16} />} onSelect={onEdit}>
             Edit metadata
-          </DropdownMenuItem>
-          <DropdownMenuItem icon={<ShieldCheck size={16} />} onSelect={onToggleOfficial}>
-            {isOfficial ? 'Remove official flag' : 'Mark official'}
           </DropdownMenuItem>
           {failed && canManage && (
             <DropdownMenuItem icon={<RefreshCw size={16} />} onSelect={onRetry}>
@@ -189,7 +177,6 @@ function getDocumentExtension(document: KBDocument): string {
 
 function formatDocumentMeta(document: KBDocument): string {
   const parts = [formatBytes(document.size_bytes), formatDate(document.created_at), 'Playbook admin']
-  if (document.priority >= 3) parts.push('High priority')
   return parts.filter(Boolean).join(' · ')
 }
 

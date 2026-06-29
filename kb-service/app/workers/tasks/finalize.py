@@ -10,7 +10,11 @@ import structlog
 from app.workers.app import kb_worker
 from app.workers.tasks.notify import _notify
 from app.workers.tasks.progress import get_embed_progress, reset_embed_progress
-from app.workers.tasks.staging import _count_chunks_in_s3, _delete_staging_file
+from app.workers.tasks.staging import (
+    _count_chunks_in_s3,
+    _delete_pages_staging,
+    _delete_staging_file,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -147,6 +151,14 @@ def load_vector_task(
     document_uuid = uuid.UUID(document_id)
     load_start = time.perf_counter()
 
+    def _cleanup_deleted_document_artifacts() -> int:
+        vector_repo = VectorRepository(worker_state.pg_engine)
+        deleted_embeddings = vector_repo.delete_document_embeddings(document_uuid)
+        _delete_pages_staging(document_id)
+        _delete_staging_file(document_id)
+        reset_embed_progress(document_id)
+        return deleted_embeddings
+
     # ---- Early-exit idempotency check ----
     # If a previous load_vector already finalised this doc, ANY subsequent
     # invocation (safety-net countdown, deferred retry, watchdog) should no-op.
@@ -164,6 +176,7 @@ def load_vector_task(
 
     try:
         already_done, doc_status, log_status = run_async(_check_already_finalized())
+        preflight_succeeded = True
     except Exception as exc:
         logger.warning(
             "kb_load_vector_preflight_check_failed", document_id=document_id, error=str(exc)
@@ -171,6 +184,7 @@ def load_vector_task(
         already_done = False
         doc_status = None
         log_status = None
+        preflight_succeeded = False
 
     if already_done:
         logger.info(
@@ -184,6 +198,23 @@ def load_vector_task(
             task_id=self.request.id if self.request else None,
         )
         return {"document_id": document_id, "skipped": True, "reason": "already_finalized"}
+
+    if preflight_succeeded and doc_status is None:
+        deleted_embeddings = _cleanup_deleted_document_artifacts()
+        logger.info(
+            "kb_load_vector_skip_deleted_document",
+            document_id=document_id,
+            deleted_embeddings=deleted_embeddings,
+            defer_attempt=defer_attempt,
+            reissue_attempt=reissue_attempt,
+            expected_total_batches=expected_total_batches,
+            task_id=self.request.id if self.request else None,
+        )
+        return {
+            "document_id": document_id,
+            "skipped": True,
+            "reason": "deleted_document",
+        }
 
     # ---- Smart-defer gate (only the safety-net dispatch path) ----
     # If the safety-net countdown fires WHILE batches are still embedding, defer
@@ -268,6 +299,22 @@ def load_vector_task(
                     "document_id": document_id,
                     "embedding_count": actual_count,
                     "skipped": True,
+                }
+
+            if doc is None:
+                deleted_embeddings = await asyncio.to_thread(
+                    _cleanup_deleted_document_artifacts
+                )
+                logger.info(
+                    "kb_load_vector_skip_deleted_document",
+                    document_id=document_id,
+                    deleted_embeddings=deleted_embeddings,
+                    task_id=self.request.id if self.request else None,
+                )
+                return {
+                    "document_id": document_id,
+                    "skipped": True,
+                    "reason": "deleted_document",
                 }
 
             if doc:

@@ -271,6 +271,26 @@ def embed_batch_task(
             doc_repo = DocumentRepository(session)
             log_repo = IngestionLogRepository(session)
             doc = await doc_repo.get(document_uuid)
+            if doc is None:
+                vector_repo = VectorRepository(worker_state.pg_engine)
+                await asyncio.to_thread(
+                    vector_repo.delete_document_embeddings,
+                    document_uuid,
+                )
+                reset_embed_progress(document_id)
+                logger.info(
+                    "kb_embed_batch_skip_deleted_document",
+                    task_id=self.request.id if self.request else None,
+                    document_id=document_id,
+                    batch_index=batch_index,
+                    reason="document_missing_before_embed",
+                )
+                return {
+                    "document_id": document_id,
+                    "batch_index": batch_index,
+                    "batch_size": len(chunks),
+                    "status": "skipped_deleted_document",
+                }
             if doc:
                 # First-batch wins: flips doc to 'embedding' and stage to STARTED.
                 await doc_repo.update_status(doc.id, "embedding")
@@ -390,9 +410,29 @@ def embed_batch_task(
                     f"Embedding output count mismatch: {len(embeddings)} != {len(texts)}"
                 )
 
+            latest_doc = await doc_repo.get(document_uuid)
             # Write this batch's vectors to pgvector. Idempotent on retry — the
             # global chunk_index range [chunk_start, chunk_end) is cleared first.
             vector_repo = VectorRepository(worker_state.pg_engine)
+            if latest_doc is None:
+                await asyncio.to_thread(
+                    vector_repo.delete_document_embeddings,
+                    document_uuid,
+                )
+                reset_embed_progress(document_id)
+                logger.info(
+                    "kb_embed_batch_skip_deleted_document",
+                    task_id=self.request.id if self.request else None,
+                    document_id=document_id,
+                    batch_index=batch_index,
+                    reason="document_missing_before_vector_insert",
+                )
+                return {
+                    "document_id": document_id,
+                    "batch_index": batch_index,
+                    "batch_size": len(chunks),
+                    "status": "skipped_deleted_document",
+                }
             await asyncio.to_thread(
                 vector_repo.insert_batch_embeddings,
                 configuration_id=config_uuid,

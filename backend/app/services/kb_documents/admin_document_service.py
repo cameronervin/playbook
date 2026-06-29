@@ -31,6 +31,7 @@ from app.services.kb_documents.upload_service import (
     KBDocumentUpload,
     KBDocumentUploadService,
 )
+from app.services.upload_validation import validate_kb_metadata_tags
 from app.workers.dispatcher import (
     KbIngestOutboxTaskDispatcher,
     UploadRequestReconciliationTaskDispatcher,
@@ -164,18 +165,19 @@ class KBDocumentService:
             if document.source_date
             else None,
         }
+        metadata_tags = document.metadata_tags
+        if request.metadata_tags is not None:
+            validate_kb_metadata_tags(request.metadata_tags)
+            metadata_tags = request.metadata_tags
+
+        source_date = document.source_date
+        if "source_date" in request.model_fields_set:
+            source_date = request.source_date
+
         updated = await self.document_repo.update_metadata(
             document,
-            metadata_tags=(
-                request.metadata_tags
-                if request.metadata_tags is not None
-                else document.metadata_tags
-            ),
-            source_date=(
-                request.source_date
-                if request.source_date is not None
-                else document.source_date
-            ),
+            metadata_tags=metadata_tags,
+            source_date=source_date,
         )
         await self.event_repo.create(
             document_id=document.id,
