@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from uuid import UUID
 
 from app.workers.scheduling import expires_for_countdown
@@ -71,6 +72,45 @@ class DashboardInsightsTaskDispatcher:
 
         result = generate_dashboard_insights_task.apply_async(
             kwargs=payload.to_kwargs(),
+        )
+        return str(result.id)
+
+
+@dataclass(frozen=True)
+class AdminChatTaskPayload:
+    """ID-only admin chat task payload safe to send through the broker."""
+
+    session_id: UUID
+    admin_user_id: UUID
+    user_message_id: UUID
+    assistant_message_id: UUID
+    organization_id: UUID
+    window_start: datetime
+    window_end: datetime
+
+    def to_kwargs(self) -> dict[str, str]:
+        """Return JSON-safe task kwargs."""
+        return {
+            "session_id": str(self.session_id),
+            "admin_user_id": str(self.admin_user_id),
+            "user_message_id": str(self.user_message_id),
+            "assistant_message_id": str(self.assistant_message_id),
+            "organization_id": str(self.organization_id),
+            "window_start": self.window_start.isoformat(),
+            "window_end": self.window_end.isoformat(),
+        }
+
+
+class AdminChatTaskDispatcher:
+    """Dispatch admin chat work to the backend Celery worker."""
+
+    def dispatch(self, *, task_id: str, payload: AdminChatTaskPayload) -> str:
+        """Enqueue admin chat work and return the Celery task id."""
+        from app.workers.tasks import run_admin_chat_task  # noqa: PLC0415
+
+        result = run_admin_chat_task.apply_async(
+            kwargs=payload.to_kwargs(),
+            task_id=task_id,
         )
         return str(result.id)
 

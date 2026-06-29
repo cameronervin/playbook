@@ -8,6 +8,7 @@ from uuid import UUID
 import structlog
 from celery.signals import worker_ready
 
+from app.agents.executors.admin_chat_executor import AdminChatExecutor
 from app.agents.executors.athlete_chat_executor import AthleteChatExecutor
 from app.agents.executors.dashboard_insights_executor import DashboardInsightsExecutor
 from app.agents.graph_provider import AgentGraphProvider, AgentGraphProviderCache
@@ -17,6 +18,7 @@ from app.infrastructure.llm import get_llm_provider
 from app.infrastructure.storage import get_storage_provider
 from app.infrastructure.streaming import get_agent_stream_provider
 from app.repositories.analytics import DashboardInsightRunRepository
+from app.services.admin_analytics import resolve_analytics_window
 from app.services.agent_stream_service import AgentStreamService
 from app.services.dashboard_insights import DashboardInsightService
 from app.services.kb_ingest_outbox import KbIngestOutboxService
@@ -342,10 +344,11 @@ def run_admin_chat_task(
     organization_id: str,
     window_start: str | None = None,
     window_end: str | None = None,
-) -> None:
-    """Future admin chat side-panel agent entrypoint."""
-    _raise_scaffold_not_implemented(
-        WorkerTaskName.RUN_ADMIN_CHAT,
+) -> dict[str, Any]:
+    """Execute the admin chat agent for one persisted admin question."""
+    task_id = str(self.request.id)
+    logger.info(
+        "backend_worker_admin_chat_invoked",
         task_id=self.request.id,
         session_id=session_id,
         admin_user_id=admin_user_id,
@@ -354,6 +357,124 @@ def run_admin_chat_task(
         organization_id=organization_id,
         has_window=window_start is not None or window_end is not None,
     )
+    return run_async(
+        _run_admin_chat_agent(
+            task_id=task_id,
+            session_id=session_id,
+            admin_user_id=admin_user_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            organization_id=organization_id,
+            window_start=window_start,
+            window_end=window_end,
+        )
+    )
+
+
+async def _run_admin_chat_agent(
+    *,
+    task_id: str,
+    session_id: str,
+    admin_user_id: str,
+    user_message_id: str,
+    assistant_message_id: str,
+    organization_id: str,
+    window_start: str | None,
+    window_end: str | None,
+) -> dict[str, Any]:
+    stream_service = AgentStreamService(get_agent_stream_provider())
+    settings = get_settings()
+    resolved_window_start = window_start
+    resolved_window_end = window_end
+    if resolved_window_start is None or resolved_window_end is None:
+        start, end = resolve_analytics_window(
+            window=None,
+            window_start=None,
+            window_end=None,
+            settings=settings,
+        )
+        resolved_window_start = start.isoformat()
+        resolved_window_end = end.isoformat()
+    try:
+        checkpointer = await get_worker_checkpointer(settings)
+        async with worker_db_session(settings) as session:
+            llm_provider = get_llm_provider(app_settings=settings)
+            chat_model = llm_provider.get_chat_model()
+            title_model = llm_provider.get_title_model()
+            executor = AdminChatExecutor(
+                session=session,
+                chat_model=chat_model,
+                stream_service=stream_service,
+                settings=settings,
+                checkpointer=checkpointer,
+                graph_provider=_get_agent_graph_provider(
+                    settings=settings,
+                    chat_model=chat_model,
+                    title_model=title_model,
+                    checkpointer=checkpointer,
+                ),
+            )
+            return await executor.execute(
+                task_id=task_id,
+                session_id=UUID(session_id),
+                admin_user_id=UUID(admin_user_id),
+                user_message_id=UUID(user_message_id),
+                assistant_message_id=UUID(assistant_message_id),
+                organization_id=UUID(organization_id),
+                window_start=resolved_window_start,
+                window_end=resolved_window_end,
+            )
+    except Exception as exc:  # noqa: BLE001
+        error_type = type(exc).__name__
+        logger.error(
+            "admin_chat_task_failed",
+            task_id=task_id,
+            session_id=session_id,
+            assistant_message_id=assistant_message_id,
+            error_type=error_type,
+            exc_info=True,
+        )
+        try:
+            async with worker_db_session(settings) as session:
+                executor = AdminChatExecutor(
+                    session=session,
+                    chat_model=object(),  # type: ignore[arg-type]
+                    stream_service=stream_service,
+                    settings=settings,
+                )
+                await executor.mark_failed(
+                    task_id=task_id,
+                    assistant_message_id=UUID(assistant_message_id),
+                    error_type=error_type,
+                )
+        except Exception as mark_exc:  # noqa: BLE001
+            logger.error(
+                "admin_chat_mark_failed_error",
+                task_id=task_id,
+                assistant_message_id=assistant_message_id,
+                error_type=type(mark_exc).__name__,
+                exc_info=True,
+            )
+        await stream_service.publish_error(
+            task_id,
+            message="Admin chat generation failed.",
+            code="agent_failed",
+            metadata={
+                "session_id": session_id,
+                "assistant_message_id": assistant_message_id,
+                "error_type": error_type,
+            },
+        )
+        return {
+            "status": "failed",
+            "code": "agent_failed",
+            "task_id": task_id,
+            "session_id": session_id,
+            "user_message_id": user_message_id,
+            "assistant_message_id": assistant_message_id,
+            "organization_id": organization_id,
+            "error_type": error_type,
+        }
 
 
 @backend_worker.task(

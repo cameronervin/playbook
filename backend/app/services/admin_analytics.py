@@ -117,6 +117,7 @@ class AdminAnalyticsService:
         window_start: datetime,
         window_end: datetime,
         source_filters: dict[str, Any] | None = None,
+        max_queries: int | None = None,
     ) -> AdminAnalyticsSnapshot:
         """Return a bounded anonymized snapshot for dashboard insight generation."""
         records = await self._filtered_records(
@@ -125,8 +126,10 @@ class AdminAnalyticsService:
             window_end=window_end,
             source_filters=source_filters,
         )
-        max_queries = int(
-            getattr(self.settings, "DASHBOARD_INSIGHTS_MAX_QUERY_EXAMPLES", 50)
+        resolved_max_queries = int(
+            max_queries
+            if max_queries is not None
+            else getattr(self.settings, "DASHBOARD_INSIGHTS_MAX_QUERY_EXAMPLES", 50)
         )
         query_responses = [
             _query_response(
@@ -134,7 +137,7 @@ class AdminAnalyticsService:
                 organization_id=organization_id,
                 settings=self.settings,
             )
-            for record in records[:max_queries]
+            for record in records[:resolved_max_queries]
         ]
         return AdminAnalyticsSnapshot(
             summary=_summary_from_records(

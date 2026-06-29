@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1 import (
     admin_analytics,
+    admin_chat,
     admin_users,
     audit,
     auth,
@@ -194,6 +195,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_users.router, prefix=API_V1_PREFIX)
     app.include_router(admin_analytics.router, prefix=API_V1_PREFIX)
     app.include_router(dashboard_insights.router, prefix=API_V1_PREFIX)
+    app.include_router(admin_chat.router, prefix=API_V1_PREFIX)
     app.include_router(audit.router, prefix=API_V1_PREFIX)
     app.include_router(kb_documents.router, prefix=API_V1_PREFIX)
     app.include_router(kb_webhook.router, prefix=API_V1_PREFIX)

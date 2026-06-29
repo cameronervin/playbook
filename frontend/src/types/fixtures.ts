@@ -64,16 +64,3 @@ export interface DashboardInsightFixture {
   risk_breakdown: DashboardRiskBreakdownFixture[]
   recommended_attention_areas: string[]
 }
-
-export interface AdminChatReferenceFixture {
-  type: 'metric' | 'dashboard_insight' | 'query'
-  id: string
-}
-
-export interface AdminChatMessageFixture {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  refs?: AdminChatReferenceFixture[]
-  answer_type?: 'analytics_answer' | 'declined'
-}

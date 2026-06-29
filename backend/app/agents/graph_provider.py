@@ -8,6 +8,7 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from app.agents.builders.graphs_builder import (
+    compile_admin_chat_graph,
     compile_athlete_chat_graph,
     compile_conversation_title_graph,
     compile_dashboard_insights_graph,
@@ -60,6 +61,7 @@ class AgentGraphProvider:
         self._athlete_chat_graph: Any | None = None
         self._conversation_title_graph: Any | None = None
         self._dashboard_insights_graph: Any | None = None
+        self._admin_chat_graph: Any | None = None
 
     def athlete_chat_graph(self) -> Any:
         """Return the cached compiled athlete chat graph."""
@@ -90,6 +92,16 @@ class AgentGraphProvider:
                 app_settings=self.settings,
             )
         return self._dashboard_insights_graph
+
+    def admin_chat_graph(self) -> Any:
+        """Return the cached compiled admin chat graph."""
+        if self._admin_chat_graph is None:
+            self._admin_chat_graph = compile_admin_chat_graph(
+                chat_model=self.chat_model,
+                checkpointer=self.checkpointer,
+                app_settings=self.settings,
+            )
+        return self._admin_chat_graph
 
 
 class AgentGraphProviderCache:

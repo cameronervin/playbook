@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { AdminChatPanel } from '@/src/components/features/admin/AdminChatPanel'
@@ -12,6 +12,13 @@ import { SettingsModal } from '@/src/components/features/common/SettingsModal'
 import { AdminWorkspaceSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { Button } from '@/src/components/ui'
+import {
+  useAdminChatMessageStream,
+  useAdminChatSessionDetail,
+  useAdminChatSessions,
+  useCreateAdminChatSession,
+  useSubmitAdminChatMessage,
+} from '@/src/hooks/useAdminChat'
 import { useAdminUsers, useUpdateUserRole } from '@/src/hooks/useAdmin'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
 import {
@@ -22,12 +29,16 @@ import {
   useUploadKBDocument,
 } from '@/src/hooks/useKBDocuments'
 import { useSessionActivity } from '@/src/hooks/useSessionActivity'
-import { adminChatReply, ANALYTICS_SUMMARY, DASHBOARD_INSIGHT } from '@/src/lib/fixtures/admin'
+import { ANALYTICS_SUMMARY, DASHBOARD_INSIGHT } from '@/src/lib/fixtures/admin'
 import { ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
+import type { AdminChatMessage } from '@/src/types/adminChat'
+
+const EMPTY_ADMIN_CHAT_MESSAGES: AdminChatMessage[] = []
 
 export function AdminShell() {
   const router = useRouter()
+  const [adminChatSessionId, setAdminChatSessionId] = useState<string | null>(null)
   const { data: user, isLoading } = useCurrentUser()
   const logout = useLogout()
   const adminTab = useUIStore((state) => state.adminTab)
@@ -40,8 +51,6 @@ export function AdminShell() {
   const setAdminTimeWindow = useUIStore((state) => state.setAdminTimeWindow)
   const adminInsightStatus = useUIStore((state) => state.adminInsightStatus)
   const setAdminInsightStatus = useUIStore((state) => state.setAdminInsightStatus)
-  const adminChatMessages = useUIStore((state) => state.adminChatMessages)
-  const addAdminChatMessage = useUIStore((state) => state.addAdminChatMessage)
   const isSuperAdmin = user?.role === 'super_admin'
   const isAdmin = user?.role === 'admin' || isSuperAdmin
   const documentsQuery = useKBDocuments()
@@ -53,12 +62,72 @@ export function AdminShell() {
   const updateDocument = useUpdateKBDocumentMetadata()
   const uploadDocument = useUploadKBDocument()
   const updateRole = useUpdateUserRole()
+  const adminChatSessionsQuery = useAdminChatSessions(Boolean(isAdmin) && adminChatOpen)
+  const latestAdminChatSessionId = adminChatSessionsQuery.data?.[0]?.id ?? null
+  const adminChatSessionQuery = useAdminChatSessionDetail(
+    adminChatSessionId,
+    Boolean(isAdmin) && adminChatOpen,
+  )
+  const createAdminChatSession = useCreateAdminChatSession()
+  const submitAdminChatMessage = useSubmitAdminChatMessage()
+  const { start: startAdminChatStream } = useAdminChatMessageStream()
+  const adminChatMessages = adminChatSessionQuery.data?.messages ?? EMPTY_ADMIN_CHAT_MESSAGES
+  const adminChatBusy =
+    createAdminChatSession.isPending ||
+    submitAdminChatMessage.isPending ||
+    adminChatMessages.some((message) => message.status === 'streaming')
+  const adminChatError =
+    adminChatSessionsQuery.isError ||
+    adminChatSessionQuery.isError ||
+    createAdminChatSession.isError ||
+    submitAdminChatMessage.isError
+  const adminChatLoading = Boolean(adminChatSessionId) && adminChatSessionQuery.isLoading && adminChatMessages.length === 0
   const failedDocsCount = documents.filter((document) => document.processing_status === 'failed').length
   useSessionActivity({ enabled: Boolean(user) && !isLoading })
 
   useEffect(() => {
     if (!isSuperAdmin && adminTab === 'users') setAdminTab('insights')
   }, [adminTab, isSuperAdmin, setAdminTab])
+
+  useEffect(() => {
+    if (!adminChatOpen || adminChatSessionId || !latestAdminChatSessionId) return
+    setAdminChatSessionId(latestAdminChatSessionId)
+  }, [adminChatOpen, adminChatSessionId, latestAdminChatSessionId])
+
+  const ensureAdminChatSession = useCallback(
+    async (content: string): Promise<string> => {
+      if (adminChatSessionId) return adminChatSessionId
+      const session = await createAdminChatSession.mutateAsync({
+        title: createAdminChatTitle(content),
+      })
+      setAdminChatSessionId(session.id)
+      return session.id
+    },
+    [adminChatSessionId, createAdminChatSession],
+  )
+
+  const handleSendAdminChatMessage = useCallback(
+    (content: string) => {
+      void (async () => {
+        try {
+          const sessionId = await ensureAdminChatSession(content)
+          const response = await submitAdminChatMessage.mutateAsync({
+            sessionId,
+            question: content,
+            window: adminTimeWindow === 'custom' ? undefined : adminTimeWindow,
+          })
+          startAdminChatStream({
+            assistantMessageId: response.assistant_message_id,
+            sessionId,
+            streamUrl: response.stream_url,
+          })
+        } catch {
+          // Mutation state renders the recoverable panel error.
+        }
+      })()
+    },
+    [adminTimeWindow, ensureAdminChatSession, startAdminChatStream, submitAdminChatMessage],
+  )
 
   if (isLoading) return <AdminWorkspaceSkeleton />
 
@@ -90,19 +159,6 @@ export function AdminShell() {
   const handleGenerate = () => {
     setAdminInsightStatus('processing')
     window.setTimeout(() => setAdminInsightStatus('completed'), 2200)
-  }
-
-  const handleSendAdminChatMessage = (content: string) => {
-    const idBase = Date.now()
-    addAdminChatMessage({ id: `admin-user-${idBase}`, role: 'user', content })
-    const reply = adminChatReply(content)
-    addAdminChatMessage({
-      id: `admin-assistant-${idBase}`,
-      role: 'assistant',
-      content: reply.answer,
-      refs: reply.refs,
-      answer_type: reply.answer_type,
-    })
   }
 
   const leftRail = (
@@ -163,6 +219,9 @@ export function AdminShell() {
 
   const sidePanel = adminChatOpen ? (
     <AdminChatPanel
+      isBusy={adminChatBusy}
+      isError={adminChatError}
+      isLoading={adminChatLoading}
       messages={adminChatMessages}
       onClose={() => setAdminChatOpen(false)}
       onSend={handleSendAdminChatMessage}
@@ -175,4 +234,10 @@ export function AdminShell() {
       <SettingsModal onOpenChange={setSettingsOpen} open={settingsOpen} user={user} />
     </>
   )
+}
+
+function createAdminChatTitle(content: string): string {
+  const trimmed = content.trim()
+  if (!trimmed) return 'Analytics chat'
+  return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AdminShell } from '@/src/components/features/admin/AdminShell'
@@ -84,6 +84,24 @@ const retryDocumentMutate = vi.hoisted(() => vi.fn())
 const deleteDocumentMutate = vi.hoisted(() => vi.fn())
 const updateDocumentMutate = vi.hoisted(() => vi.fn())
 const uploadDocumentMutate = vi.hoisted(() => vi.fn())
+const createAdminChatSessionMutateAsync = vi.hoisted(() => vi.fn())
+const submitAdminChatMessageMutateAsync = vi.hoisted(() => vi.fn())
+const startAdminChatStream = vi.hoisted(() => vi.fn())
+const stopAdminChatStream = vi.hoisted(() => vi.fn())
+const adminChatMessages = vi.hoisted(
+  () =>
+    [] as Array<{
+      id: string
+      session_id: string
+      role: 'user' | 'assistant'
+      content: string
+      status: 'complete' | 'streaming' | 'failed'
+      references: Array<{ type: 'metric' | 'dashboard_insight' | 'query'; id: string }>
+      metadata: Record<string, unknown>
+      answer_type: 'analytics_answer' | 'refusal' | 'unsupported' | null
+      created_at: string
+    }>,
+)
 const adminQueryState = vi.hoisted(() => ({
   kbError: false,
   kbFetching: false,
@@ -175,6 +193,47 @@ vi.mock('@/src/hooks/useAdmin', () => ({
   useAuditLogs: () => ({ data: new Array(16).fill(null).map((_, index) => ({ id: `audit-${index}` })), isLoading: false }),
 }))
 
+vi.mock('@/src/hooks/useAdminChat', () => ({
+  useAdminChatSessions: () => ({
+    data: [],
+    isError: false,
+    isFetching: false,
+    isLoading: false,
+  }),
+  useAdminChatSessionDetail: (sessionId: string | null) => ({
+    data: sessionId
+      ? {
+          id: sessionId,
+          title: 'Weekly NIL questions',
+          status: 'active',
+          context_window_start: null,
+          context_window_end: null,
+          last_message_at: null,
+          created_at: '2026-06-29T12:00:00Z',
+          updated_at: '2026-06-29T12:00:00Z',
+          messages: adminChatMessages,
+        }
+      : undefined,
+    isError: false,
+    isFetching: false,
+    isLoading: false,
+  }),
+  useCreateAdminChatSession: () => ({
+    mutateAsync: createAdminChatSessionMutateAsync,
+    isError: false,
+    isPending: false,
+  }),
+  useSubmitAdminChatMessage: () => ({
+    mutateAsync: submitAdminChatMessageMutateAsync,
+    isError: false,
+    isPending: false,
+  }),
+  useAdminChatMessageStream: () => ({
+    start: startAdminChatStream,
+    stop: stopAdminChatStream,
+  }),
+}))
+
 vi.mock('@/src/hooks/useKBDocuments', () => ({
   useKBDocuments: () => ({
     data: adminQueryState.kbLoading ? undefined : kbDocuments,
@@ -216,7 +275,31 @@ describe('AdminShell', () => {
     deleteDocumentMutate.mockClear()
     updateDocumentMutate.mockClear()
     uploadDocumentMutate.mockClear()
+    createAdminChatSessionMutateAsync.mockClear()
+    submitAdminChatMessageMutateAsync.mockClear()
+    startAdminChatStream.mockClear()
+    stopAdminChatStream.mockClear()
+    adminChatMessages.splice(0, adminChatMessages.length)
     uploadDocumentMutate.mockResolvedValue(kbDocuments[0])
+    createAdminChatSessionMutateAsync.mockResolvedValue({
+      id: 'admin-chat-session-1',
+      title: 'Weekly NIL questions',
+      status: 'active',
+      context_window_start: null,
+      context_window_end: null,
+      last_message_at: null,
+      created_at: '2026-06-29T12:00:00Z',
+      updated_at: '2026-06-29T12:00:00Z',
+    })
+    submitAdminChatMessageMutateAsync.mockResolvedValue({
+      session_id: 'admin-chat-session-1',
+      user_message_id: 'admin-user-message-1',
+      assistant_message_id: 'admin-assistant-message-1',
+      task_id: 'admin-chat-task-1',
+      stream_url:
+        '/api/v1/admin/chat/sessions/admin-chat-session-1/messages/admin-assistant-message-1/stream?task_id=admin-chat-task-1',
+      status: 'streaming',
+    })
     kbDocuments.splice(0, kbDocuments.length, ...[
       {
         id: 'doc-nil-policy',
@@ -275,7 +358,6 @@ describe('AdminShell', () => {
       adminChatOpen: false,
       adminTimeWindow: '7d',
       adminInsightStatus: 'completed',
-      adminChatMessages: [],
     })
   })
 
@@ -666,6 +748,21 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /What are athletes most confused about this week/i }))
 
-    expect(await screen.findByText(/The clearest confusion this week is NIL disclosure timing/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(createAdminChatSessionMutateAsync).toHaveBeenCalledWith({
+        title: 'What are athletes most confused about this week?',
+      }),
+    )
+    expect(submitAdminChatMessageMutateAsync).toHaveBeenCalledWith({
+      sessionId: 'admin-chat-session-1',
+      question: 'What are athletes most confused about this week?',
+      window: '7d',
+    })
+    expect(startAdminChatStream).toHaveBeenCalledWith({
+      assistantMessageId: 'admin-assistant-message-1',
+      sessionId: 'admin-chat-session-1',
+      streamUrl:
+        '/api/v1/admin/chat/sessions/admin-chat-session-1/messages/admin-assistant-message-1/stream?task_id=admin-chat-task-1',
+    })
   })
 })

@@ -318,6 +318,29 @@ class DashboardInsightRepository:
         )
         return result.first()
 
+    async def list_completed_for_window(
+        self,
+        *,
+        organization_id: UUID,
+        window_start: datetime,
+        window_end: datetime,
+        limit: int = 5,
+    ) -> list[DashboardInsight]:
+        """Return completed insight outputs whose run windows overlap a window."""
+        result = await self.session.scalars(
+            select(DashboardInsight)
+            .join(DashboardInsightRun, DashboardInsight.run_id == DashboardInsightRun.id)
+            .where(
+                DashboardInsightRun.organization_id == organization_id,
+                DashboardInsightRun.status == "completed",
+                DashboardInsightRun.window_start < window_end,
+                DashboardInsightRun.window_end > window_start,
+            )
+            .order_by(DashboardInsight.generated_at.desc(), DashboardInsight.id.asc())
+            .limit(limit)
+        )
+        return list(result.all())
+
     async def count_for_run(self, run_id: UUID) -> int:
         """Return number of insight outputs attached to a run."""
         result = await self.session.scalar(

@@ -1,5 +1,11 @@
 """Graph state schemas for agent workflows."""
 
+from app.agents.states.admin_chat_state import (
+    AdminChatAnswerType,
+    AdminChatReference,
+    AdminChatState,
+    AdminChatStructuredResponse,
+)
 from app.agents.states.athlete_chat_state import (
     AthleteChatAnswerType,
     AthleteChatState,
@@ -18,6 +24,10 @@ __all__ = [
     "AthleteChatAnswerType",
     "AthleteChatState",
     "AthleteChatStructuredResponse",
+    "AdminChatAnswerType",
+    "AdminChatReference",
+    "AdminChatState",
+    "AdminChatStructuredResponse",
     "ConversationTitleState",
     "ConversationTitleStructuredResponse",
     "DashboardInsightsState",

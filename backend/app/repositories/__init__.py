@@ -1,5 +1,9 @@
 """Data-access repositories."""
 
+from app.repositories.admin_chat import (
+    AdminChatMessageRepository,
+    AdminChatSessionRepository,
+)
 from app.repositories.analytics import (
     AdminAnalyticsRepository,
     DashboardInsightRepository,
@@ -20,6 +24,8 @@ from app.repositories.knowledge_base import (
 
 __all__ = [
     "AdminAnalyticsRepository",
+    "AdminChatMessageRepository",
+    "AdminChatSessionRepository",
     "AuditLogRepository",
     "ConversationFileRepository",
     "ConversationMessageRepository",

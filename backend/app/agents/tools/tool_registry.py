@@ -14,6 +14,14 @@ from typing import Literal
 import structlog
 from langchain_core.tools import BaseTool
 
+from app.agents.tools.admin_chat import (
+    ADMIN_CHAT_DASHBOARD_INSIGHTS_TOOL_PROFILE,
+    ADMIN_CHAT_METRIC_TOOL_PROFILE,
+    ADMIN_CHAT_QUERY_EXAMPLES_TOOL_PROFILE,
+    create_admin_chat_dashboard_insights_tool,
+    create_admin_chat_metric_tool,
+    create_admin_chat_query_examples_tool,
+)
 from app.agents.tools.dashboard_insights import (
     DASHBOARD_INSIGHTS_METRIC_TOOL_PROFILE,
     DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE,
@@ -33,14 +41,16 @@ from app.infrastructure.knowledgebase import (
 
 logger = structlog.get_logger(__name__)
 
-ToolWorkflow = Literal["athlete_chat", "dashboard_insights"]
+ToolWorkflow = Literal["athlete_chat", "dashboard_insights", "admin_chat"]
 
 ATHLETE_CHAT_CHAIN_NAMES: tuple[str, ...] = ("athlete_chat",)
 DASHBOARD_INSIGHTS_CHAIN_NAMES: tuple[str, ...] = ("dashboard_insights",)
+ADMIN_CHAT_CHAIN_NAMES: tuple[str, ...] = ("admin_chat",)
 
 WORKFLOW_CHAIN_NAMES: dict[ToolWorkflow, tuple[str, ...]] = {
     "athlete_chat": ATHLETE_CHAT_CHAIN_NAMES,
     "dashboard_insights": DASHBOARD_INSIGHTS_CHAIN_NAMES,
+    "admin_chat": ADMIN_CHAT_CHAIN_NAMES,
 }
 
 
@@ -97,6 +107,22 @@ def _create_dashboard_query_examples_tool(_context: ToolBuildContext) -> BaseToo
     )
 
 
+def _create_admin_metric_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_admin_chat_metric_tool(ADMIN_CHAT_METRIC_TOOL_PROFILE)
+
+
+def _create_admin_query_examples_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_admin_chat_query_examples_tool(
+        ADMIN_CHAT_QUERY_EXAMPLES_TOOL_PROFILE
+    )
+
+
+def _create_admin_dashboard_insights_tool(_context: ToolBuildContext) -> BaseTool:
+    return create_admin_chat_dashboard_insights_tool(
+        ADMIN_CHAT_DASHBOARD_INSIGHTS_TOOL_PROFILE
+    )
+
+
 TOOL_REGISTRY: tuple[ToolSpec, ...] = (
     ToolSpec(
         tool_name=ATHLETE_KB_TOOL_PROFILE.tool_name,
@@ -146,6 +172,48 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
             ToolPromptKey(
                 "dashboard_insights",
                 DASHBOARD_INSIGHTS_QUERY_EXAMPLES_TOOL_PROFILE.tool_name,
+            ),
+        ),
+    ),
+    ToolSpec(
+        tool_name=ADMIN_CHAT_METRIC_TOOL_PROFILE.tool_name,
+        factory=_create_admin_metric_tool,
+        enabled_predicate=_always_enabled,
+        workflow_chain_targets={
+            "admin_chat": ("admin_chat",),
+        },
+        prompt_keys=(
+            ToolPromptKey(
+                "admin_chat",
+                ADMIN_CHAT_METRIC_TOOL_PROFILE.tool_name,
+            ),
+        ),
+    ),
+    ToolSpec(
+        tool_name=ADMIN_CHAT_QUERY_EXAMPLES_TOOL_PROFILE.tool_name,
+        factory=_create_admin_query_examples_tool,
+        enabled_predicate=_always_enabled,
+        workflow_chain_targets={
+            "admin_chat": ("admin_chat",),
+        },
+        prompt_keys=(
+            ToolPromptKey(
+                "admin_chat",
+                ADMIN_CHAT_QUERY_EXAMPLES_TOOL_PROFILE.tool_name,
+            ),
+        ),
+    ),
+    ToolSpec(
+        tool_name=ADMIN_CHAT_DASHBOARD_INSIGHTS_TOOL_PROFILE.tool_name,
+        factory=_create_admin_dashboard_insights_tool,
+        enabled_predicate=_always_enabled,
+        workflow_chain_targets={
+            "admin_chat": ("admin_chat",),
+        },
+        prompt_keys=(
+            ToolPromptKey(
+                "admin_chat",
+                ADMIN_CHAT_DASHBOARD_INSIGHTS_TOOL_PROFILE.tool_name,
             ),
         ),
     ),

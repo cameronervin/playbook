@@ -24,6 +24,8 @@ export const QUERY_KEYS = {
   kbDocuments: 'kbDocuments',
   adminUsers: 'adminUsers',
   auditLogs: 'auditLogs',
+  adminChatSessions: 'adminChatSessions',
+  adminChatSessionDetail: 'adminChatSessionDetail',
 } as const
 
 export const UI_DIMENSIONS = {

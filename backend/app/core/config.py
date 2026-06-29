@@ -161,6 +161,11 @@ class Settings(BaseSettings):
     DASHBOARD_INSIGHTS_MAX_QUERY_EXAMPLES: int = Field(default=50, ge=1, le=200)
     DASHBOARD_ANALYTICS_MAX_QUERY_ROWS: int = Field(default=5000, ge=100, le=20000)
     DASHBOARD_INSIGHTS_MAX_WINDOW_DAYS: int = Field(default=30, ge=1, le=366)
+    ADMIN_CHAT_HISTORY_LIMIT: int = Field(default=20, ge=1, le=100)
+    ADMIN_CHAT_CONTEXT_MAX_TOKENS: int = Field(default=4000, ge=1000)
+    ADMIN_CHAT_MAX_QUERY_EXAMPLES: int = Field(default=50, ge=1, le=200)
+    ADMIN_CHAT_MAX_DASHBOARD_INSIGHTS: int = Field(default=5, ge=1, le=20)
+    ADMIN_CHAT_MAX_REFERENCES: int = Field(default=8, ge=1, le=20)
     DASHBOARD_INSIGHTS_NIGHTLY_ENABLED: bool = True
     DASHBOARD_INSIGHTS_NIGHTLY_HOUR_UTC: int = Field(default=2, ge=0, le=23)
     DASHBOARD_INSIGHTS_NIGHTLY_MINUTE_UTC: int = Field(default=15, ge=0, le=59)

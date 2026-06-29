@@ -26,6 +26,7 @@ from app.infrastructure.streaming import (
 )
 from app.models.identity import User
 from app.services.admin_analytics import AdminAnalyticsService
+from app.services.admin_chat import AdminChatService
 from app.services.agent_stream_service import AgentStreamService
 from app.services.audit_service import AuditLogService
 from app.services.auth_service import AuthService
@@ -93,6 +94,14 @@ def get_dashboard_insight_service(
     return DashboardInsightService(session, settings=settings)
 
 
+def get_admin_chat_service(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> AdminChatService:
+    """Return admin chat service dependency."""
+    return AdminChatService(session, settings=settings)
+
+
 def get_conversation_service(session: SessionDep) -> ConversationService:
     """Return conversation service dependency."""
     return ConversationService(session)
@@ -157,6 +166,10 @@ AdminAnalyticsServiceDep = Annotated[
 DashboardInsightServiceDep = Annotated[
     DashboardInsightService,
     Depends(get_dashboard_insight_service),
+]
+AdminChatServiceDep = Annotated[
+    AdminChatService,
+    Depends(get_admin_chat_service),
 ]
 ConversationServiceDep = Annotated[
     ConversationService,

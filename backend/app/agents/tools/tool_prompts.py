@@ -65,6 +65,33 @@ state athlete names, emails, owner IDs, teams, or other identity.
 </tools>
 """
 
+ADMIN_CHAT_METRIC_PROMPT = """
+<tools>
+- **inspect_admin_metric**:
+Use this tool to verify exact analytics counts before answering questions about
+query volume, unanswered count, top topics, or risk counts. Cite
+metric:analytics.summary when using summary metrics.
+</tools>
+"""
+
+ADMIN_CHAT_QUERY_EXAMPLES_PROMPT = """
+<tools>
+- **list_anonymized_queries**:
+Use this tool to inspect bounded anonymized query examples for a topic, risk, or
+unanswered gap. Refer only to anonymized message IDs. Never infer or state
+athlete names, emails, owner IDs, teams, provider subjects, or storage keys.
+</tools>
+"""
+
+ADMIN_CHAT_DASHBOARD_INSIGHTS_PROMPT = """
+<tools>
+- **list_dashboard_insights**:
+Use this tool to inspect completed dashboard insight outputs overlapping the
+current window. Cite dashboard_insight IDs returned by the tool when drawing on
+stored insight summaries.
+</tools>
+"""
+
 
 TOOL_PROMPT_REGISTRY: dict[ToolPromptKey, str] = {
     ToolPromptKey("athlete_chat", "search_playbook_knowledgebase"): ATHLETE_KB_PROMPT,
@@ -76,5 +103,12 @@ TOOL_PROMPT_REGISTRY: dict[ToolPromptKey, str] = {
     ),
     ToolPromptKey("dashboard_insights", "list_anonymized_query_examples"): (
         DASHBOARD_INSIGHTS_QUERY_EXAMPLES_PROMPT
+    ),
+    ToolPromptKey("admin_chat", "inspect_admin_metric"): ADMIN_CHAT_METRIC_PROMPT,
+    ToolPromptKey("admin_chat", "list_anonymized_queries"): (
+        ADMIN_CHAT_QUERY_EXAMPLES_PROMPT
+    ),
+    ToolPromptKey("admin_chat", "list_dashboard_insights"): (
+        ADMIN_CHAT_DASHBOARD_INSIGHTS_PROMPT
     ),
 }

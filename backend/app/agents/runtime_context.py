@@ -39,3 +39,15 @@ class DashboardInsightsRuntimeContext:
     session: AsyncSession
     settings: Settings
     analytics_snapshot: AdminAnalyticsSnapshot | None = None
+
+
+@dataclass(slots=True)
+class AdminChatRuntimeContext:
+    """Dependencies isolated per admin analytics chat response."""
+
+    session: AsyncSession
+    settings: Settings
+    stream_service: AgentStreamService
+    analytics_snapshot: AdminAnalyticsSnapshot | None = None
+    dashboard_insights: list[Any] = field(default_factory=list)
+    allowed_references: list[dict[str, str]] = field(default_factory=list)

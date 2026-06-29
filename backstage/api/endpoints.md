@@ -70,6 +70,36 @@ Example error response:
 | GET | `/admin/dashboard-insights/runs` | List dashboard insight generation runs |
 | POST | `/admin/dashboard-insights/runs` | Start a manual dashboard insight generation run; returns `202` with `run_id` |
 | GET | `/admin/dashboard-insights/runs/{run_id}` | Get a dashboard insight run status and output when complete |
+| GET | `/admin/chat/sessions` | List current admin chat sessions |
+| POST | `/admin/chat/sessions` | Create an owner-scoped admin chat session; returns `201` |
+| GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
+| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question, enqueue the Celery agent task, and return `task_id` stream metadata |
+| GET | `/admin/chat/sessions/{session_id}/messages/{message_id}/stream` | Stream admin chat answer chunks from the Valkey stream/channel for the returned `task_id` |
+
+## Streaming Response Endpoints
+
+Athlete and admin chat streams use Server-Sent Events keyed by `task_id`.
+Message submission routes persist the user message plus a streaming assistant
+placeholder, dispatch a Celery task, and return a `stream_url`. Stream routes
+validate owner/session/message/task binding before reading the task stream.
+
+Event payloads use:
+
+```json
+{
+  "stream_id": "1-0",
+  "task_id": "uuid",
+  "event_type": "chunk",
+  "created_at": "2026-06-29T12:00:00Z",
+  "data": {
+    "content": "partial answer text"
+  }
+}
+```
+
+Admin chat completion data includes `answer_type` (`analytics_answer`,
+`refusal`, or `unsupported`) and filtered `references` of type `metric`,
+`dashboard_insight`, or `query`.
 
 ## Direct Upload Endpoints
 
@@ -121,15 +151,3 @@ curl http://localhost:8000/api/v1/health
 
 For a repeatable local Swagger and curl validation pass, see
 [`phase1_endpoint_smoke.sh`](../../backend/scripts/phase1_endpoint_smoke.sh).
-
-## Remaining Planned Surface
-
-### Admin Analytics and Governance
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/admin/chat/sessions` | List current admin chat sessions |
-| POST | `/admin/chat/sessions` | Create an admin chat session |
-| GET | `/admin/chat/sessions/{session_id}` | Get admin chat session details |
-| POST | `/admin/chat/sessions/{session_id}/messages` | Ask an admin chat question, enqueue the Celery agent task, and return `task_id` stream metadata |
-| GET | `/admin/chat/sessions/{session_id}/messages/{message_id}/stream` | Stream admin chat answer chunks from the Valkey stream/channel for the returned `task_id` |
