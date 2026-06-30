@@ -13,7 +13,7 @@ export type AdminKBLocalUploadPhase = 'requesting' | 'uploading' | 'queued' | 'f
 
 export type AdminKBUploadRetryRequest = Pick<
   UploadKBDocumentRequest,
-  'file' | 'metadata_tags' | 'source_date' | 'title'
+  'collection_id' | 'file' | 'source_date' | 'tag_slugs' | 'title'
 >
 
 export interface AdminKBLocalUploadRow {

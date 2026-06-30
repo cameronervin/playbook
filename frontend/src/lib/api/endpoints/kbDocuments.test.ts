@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  archiveKBMetadataTag,
   completeKBDocumentUpload,
+  createKBCollection,
   createKBDocumentUploadIntent,
+  createKBMetadataTag,
+  listKBCollections,
+  listKBMetadataTags,
+  updateKBMetadataTag,
   uploadKBDocument,
 } from '@/src/lib/api/endpoints/kbDocuments'
 import { apiClient } from '@/src/lib/api/client'
@@ -26,8 +32,10 @@ const document: KBDocument = {
   size_bytes: 12,
   processing_status: 'upload_pending',
   failure_reason: null,
+  collection_id: 'collection-compliance',
+  tag_slugs: ['nil'],
   visibility_policy: { scope: 'all_athletes' },
-  metadata_tags: { collection: 'compliance' },
+  metadata_tags: { collection: 'compliance', tag_slugs: ['nil'], tags: ['NIL'] },
   source_date: '2026-06-01',
   kb_service_document_id: null,
   created_at: '2026-06-17T12:00:00Z',
@@ -55,11 +63,12 @@ describe('kb document upload endpoints', () => {
     vi.mocked(apiClient).mockResolvedValueOnce(intent)
 
     await createKBDocumentUploadIntent({
+      collection_id: 'collection-compliance',
       filename: 'nil-handbook.pdf',
       content_type: 'application/pdf',
       size_bytes: 12,
       title: 'NIL Handbook',
-      metadata_tags: { collection: 'compliance' },
+      tag_slugs: ['nil'],
       source_date: '2026-06-01',
     })
 
@@ -69,8 +78,9 @@ describe('kb document upload endpoints', () => {
         filename: 'nil-handbook.pdf',
         content_type: 'application/pdf',
         size_bytes: 12,
+        collection_id: 'collection-compliance',
+        tag_slugs: ['nil'],
         title: 'NIL Handbook',
-        metadata_tags: { collection: 'compliance' },
         source_date: '2026-06-01',
       },
     })
@@ -93,12 +103,100 @@ describe('kb document upload endpoints', () => {
       .mockResolvedValueOnce(intent)
       .mockResolvedValueOnce({ ...document, processing_status: 'uploaded' })
 
-    await uploadKBDocument({ file, title: 'NIL Handbook', metadata_tags: { collection: 'compliance' } })
+    await uploadKBDocument({
+      collection_id: 'collection-compliance',
+      file,
+      tag_slugs: ['nil'],
+      title: 'NIL Handbook',
+    })
 
     expect(postDirectUpload).toHaveBeenCalledWith(expect.objectContaining({ contract: intent.upload, file }))
+    expect(apiClient).toHaveBeenNthCalledWith(1, '/api/v1/admin/kb/documents', {
+      method: 'POST',
+      json: {
+        filename: 'nil-handbook.pdf',
+        content_type: 'application/pdf',
+        size_bytes: 11,
+        collection_id: 'collection-compliance',
+        tag_slugs: ['nil'],
+        title: 'NIL Handbook',
+      },
+    })
     expect(apiClient).toHaveBeenNthCalledWith(2, '/api/v1/admin/kb/documents/doc-1/upload-complete', {
       method: 'POST',
       json: { upload_request_id: 'upload-request-1' },
+    })
+  })
+
+  it('calls collection and metadata tag catalog endpoints', async () => {
+    vi.mocked(apiClient)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        id: 'collection-new',
+        organization_id: 'org-1',
+        slug: 'team-rules',
+        title: 'Team rules',
+        description: 'Sport-specific team rules.',
+        icon: 'book-open',
+        sort_order: 50,
+        is_active: true,
+        created_at: '2026-06-17T12:00:00Z',
+        updated_at: '2026-06-17T12:00:00Z',
+      })
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        id: 'tag-1',
+        organization_id: 'org-1',
+        slug: 'team-rules',
+        label: 'Team rules',
+        sort_order: 20,
+        is_active: true,
+        created_at: '2026-06-17T12:00:00Z',
+        updated_at: '2026-06-17T12:00:00Z',
+      })
+      .mockResolvedValueOnce({
+        id: 'tag-1',
+        organization_id: 'org-1',
+        slug: 'team-rules',
+        label: 'Team policies',
+        sort_order: 20,
+        is_active: true,
+        created_at: '2026-06-17T12:00:00Z',
+        updated_at: '2026-06-17T12:00:00Z',
+      })
+      .mockResolvedValueOnce(undefined)
+
+    await listKBCollections()
+    await createKBCollection({
+      title: 'Team rules',
+      description: 'Sport-specific team rules.',
+      icon: 'book-open',
+    })
+    await listKBMetadataTags(true)
+    await createKBMetadataTag({ label: 'Team rules' })
+    await updateKBMetadataTag('tag-1', { label: 'Team policies' })
+    await archiveKBMetadataTag('tag-1')
+
+    expect(apiClient).toHaveBeenNthCalledWith(1, '/api/v1/admin/kb/collections')
+    expect(apiClient).toHaveBeenNthCalledWith(2, '/api/v1/admin/kb/collections', {
+      method: 'POST',
+      json: {
+        title: 'Team rules',
+        description: 'Sport-specific team rules.',
+        icon: 'book-open',
+      },
+    })
+    expect(apiClient).toHaveBeenNthCalledWith(3, '/api/v1/admin/kb/metadata-tags?include_archived=true')
+    expect(apiClient).toHaveBeenNthCalledWith(4, '/api/v1/admin/kb/metadata-tags', {
+      method: 'POST',
+      json: { label: 'Team rules' },
+    })
+    expect(apiClient).toHaveBeenNthCalledWith(5, '/api/v1/admin/kb/metadata-tags/tag-1', {
+      method: 'PATCH',
+      json: { label: 'Team policies' },
+    })
+    expect(apiClient).toHaveBeenNthCalledWith(6, '/api/v1/admin/kb/metadata-tags/tag-1', {
+      method: 'DELETE',
     })
   })
 })

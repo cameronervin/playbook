@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, LoaderCircle, Plus } from 'lucide-react'
+import { AlertTriangle, ChevronRight, LoaderCircle, Plus, Tags } from 'lucide-react'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { COLLECTION_ICON_COMPONENTS } from '@/src/components/features/admin/kbFormatting'
 import { AdminKBSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
@@ -7,21 +7,25 @@ import type { KBCollectionViewModel } from '@/src/types/kb'
 
 interface AdminKBCollectionGridProps {
   canCreateCollection: boolean
+  canManageTags: boolean
   collections: KBCollectionViewModel[]
   isError: boolean
   isFetching: boolean
   isLoading: boolean
   onCreateCollection: () => void
+  onManageTags: () => void
   onOpen: (id: string) => void
 }
 
 export function AdminKBCollectionGrid({
   canCreateCollection,
+  canManageTags,
   collections,
   isError,
   isFetching,
   isLoading,
   onCreateCollection,
+  onManageTags,
   onOpen,
 }: AdminKBCollectionGridProps) {
   const totalDocuments = collections.reduce((count, collection) => count + collection.documents.length, 0)
@@ -29,11 +33,21 @@ export function AdminKBCollectionGrid({
   return (
     <AdminPageScaffold
       actions={
-        canCreateCollection ? (
-          <Button className="pb-admin-header-control" onClick={onCreateCollection} size="sm" variant="secondary">
-            <Plus size={15} />
-            New collection
-          </Button>
+        canManageTags || canCreateCollection ? (
+          <>
+          {canManageTags && (
+            <Button className="pb-admin-header-control" onClick={onManageTags} size="sm" variant="secondary">
+              <Tags size={15} />
+              Manage tags
+            </Button>
+          )}
+          {canCreateCollection && (
+            <Button className="pb-admin-header-control" onClick={onCreateCollection} size="sm" variant="secondary">
+              <Plus size={15} />
+              New collection
+            </Button>
+          )}
+          </>
         ) : null
       }
       contentClassName="py-7"
@@ -80,16 +94,16 @@ function CollectionCard({ collection, onOpen }: CollectionCardProps) {
       className="pb-admin-kb-card"
       onClick={onOpen}
       type="button"
-      aria-label={`${collection.name} collection`}
+      aria-label={`${collection.title} collection`}
     >
       <div className="pb-admin-kb-card-header">
         <span className="pb-admin-kb-card-icon" aria-hidden="true">
           <Icon size={19} />
         </span>
-        <span className="pb-admin-kb-card-title">{collection.name}</span>
+        <span className="pb-admin-kb-card-title">{collection.title}</span>
         <ChevronRight className="text-fg-4" size={18} />
       </div>
-      <p className="pb-admin-kb-card-copy">{collection.blurb}</p>
+      <p className="pb-admin-kb-card-copy">{collection.description}</p>
       <div className="pb-admin-kb-card-footer">
         <span className="pb-admin-kb-count">
           {collection.documents.length} {collection.documents.length === 1 ? 'document' : 'documents'}

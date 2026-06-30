@@ -1,6 +1,6 @@
 # Frontend
 
-Playbook’s frontend is a Next.js App Router app: **Next.js 15 + React 19 + Tailwind CSS v4 + TanStack Query + Zustand + Radix primitives**, with strict TypeScript.
+Playbook’s frontend is a Next.js App Router app: **Next.js 15 + React 19 + Tailwind CSS v4 + TanStack Query + Zustand + Radix primitives**, with strict TypeScript. KB upload dropzones use `react-dropzone`.
 
 ## Getting Started
 
@@ -56,8 +56,9 @@ The visual source of truth is `backstage/design/`, especially `backstage/design/
 - `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`.
 - Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.
 - Admin pages share `AdminPageScaffold` for the Claude header, grid layer, toolbar band, content padding, and max-width rhythm across Insights, Knowledge base, and Users & roles.
-- Admin and super-admin users can manage KB documents from the Knowledge base view. Upload uses a dialog-backed direct-upload flow: choose a supported file, review/edit title, tags, and optional `YYYY-MM-DD` source date, then the browser requests a JSON upload intent, posts the file directly to storage, and completes the backend upload.
-- Super-admins additionally see Users & roles and the local New collection affordance. Department admins can upload, retry, edit metadata, and delete documents in existing collections, but do not see Users & roles.
+- Admin and super-admin users can manage KB documents from the Knowledge base view. Upload starts from an inline `pb-admin-kb-upload-panel` with a visible title and centered drag/drop tile powered by `react-dropzone`; selecting a supported file opens the metadata review dialog, where admins edit title, choose preset metadata tags, and optionally set a `YYYY-MM-DD` source date. The browser then requests a JSON upload intent, posts the file directly to storage, and completes the backend upload.
+- KB collections and metadata tag presets are backend resources fetched through TanStack Query. Document upload and metadata update requests send `collection_id` and `tag_slugs`; frontend code must not author arbitrary `metadata_tags` for admin KB documents.
+- Super-admins additionally see Users & roles, New collection, and Manage tags. New collection captures required title, required description, and icon. Manage tags creates, renames, and archives global preset tags. Department admins can upload, retry, edit metadata, and delete documents in existing collections, but do not see Users & roles or catalog-management actions.
 - Super-admin Users & roles uses the design-backed table surface with search, role pills, locked current-user state, and Radix role-change menus wired to the existing admin user mutation.
 - Radix powers accessible dialog, dropdown menu, tabs, tooltip, and switch behavior.
 - Inline SVG is allowed only for the Playbook mark and SSO provider logos; use `lucide-react` for normal icons.

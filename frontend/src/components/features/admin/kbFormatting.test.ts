@@ -15,7 +15,7 @@ function upload(phase: AdminKBLocalUploadRow['phase'], percent = 0): AdminKBLoca
     id: `upload-${phase}`,
     percent,
     phase,
-    request: { file, title: 'handbook.pdf' },
+    request: { collection_id: 'collection-compliance', file, title: 'handbook.pdf' },
   }
 }
 

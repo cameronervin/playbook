@@ -17,8 +17,11 @@ from app.infrastructure.storage.provider import StorageProvider
 from app.models.identity import User
 from app.models.knowledge_base import KBDocument
 from app.repositories.knowledge_base import (
+    KBCollectionRepository,
     KBDocumentEventRepository,
     KBDocumentRepository,
+    KBDocumentTagRepository,
+    KBMetadataTagRepository,
 )
 from app.repositories.uploads import KBIngestOutboxRepository, UploadRequestRepository
 from app.schemas.kb_documents import (
@@ -30,11 +33,11 @@ from app.schemas.knowledgebase import KBDocumentIngestRequest
 from app.schemas.uploads import DirectUploadContract, UploadCompleteRequest
 from app.services.audit_service import AuditLogService
 from app.services.direct_uploads import DirectUploadSourceRef, DirectUploadWorkflow
+from app.services.kb_documents.catalog import KBCatalogService
 from app.services.kb_documents.mappers import kb_document_to_response
 from app.services.upload_validation import (
     file_size_bytes,
     validate_kb_content_type,
-    validate_kb_metadata_tags,
 )
 from app.workers.dispatcher import (
     KbIngestOutboxTaskDispatcher,
@@ -54,6 +57,8 @@ class KBDocumentUpload:
     title: str | None = None
     metadata_tags: dict[str, Any] | None = None
     source_date: date | None = None
+    collection_id: UUID | None = None
+    tag_slugs: list[str] | None = None
 
 
 class KBDocumentUploadService:
@@ -67,6 +72,9 @@ class KBDocumentUploadService:
         kb_provider: BaseKnowledgebaseProvider,
         document_repo: KBDocumentRepository,
         event_repo: KBDocumentEventRepository,
+        collection_repo: KBCollectionRepository,
+        tag_repo: KBMetadataTagRepository,
+        document_tag_repo: KBDocumentTagRepository,
         upload_request_repo: UploadRequestRepository,
         outbox_repo: KBIngestOutboxRepository,
         outbox_dispatcher: KbIngestOutboxTaskDispatcher,
@@ -78,6 +86,14 @@ class KBDocumentUploadService:
         self.kb_provider = kb_provider
         self.document_repo = document_repo
         self.event_repo = event_repo
+        self.catalog_service = KBCatalogService(
+            session,
+            collection_repo=collection_repo,
+            tag_repo=tag_repo,
+            document_tag_repo=document_tag_repo,
+            audit_service=audit_service,
+        )
+        self.document_tag_repo = document_tag_repo
         self.upload_request_repo = upload_request_repo
         self.upload_workflow = DirectUploadWorkflow(
             storage=storage,
@@ -99,6 +115,13 @@ class KBDocumentUploadService:
         size_bytes = file_size_bytes(upload.file)
         storage_key = kb_original_file_key(actor.organization_id, upload.filename)
         await self.storage.upload_file(storage_key, upload.file, upload.content_type)
+        if upload.collection_id is None:
+            raise NotFoundError("KB collection", "")
+        resolved_metadata = await self.catalog_service.resolve_document_metadata(
+            organization_id=actor.organization_id,
+            collection_id=upload.collection_id,
+            tag_slugs=upload.tag_slugs or [],
+        )
 
         document = await self.document_repo.create(
             organization_id=actor.organization_id,
@@ -108,11 +131,13 @@ class KBDocumentUploadService:
             content_type=upload.content_type,
             size_bytes=size_bytes,
             storage_key=storage_key,
-            metadata_tags=upload.metadata_tags or {},
+            collection_id=resolved_metadata.collection.id,
+            metadata_tags=resolved_metadata.metadata_tags,
             source_date=upload.source_date,
             is_official=True,
             priority=0,
         )
+        await self.document_tag_repo.replace_tags(document, resolved_metadata.tags)
         await self.event_repo.create(
             document_id=document.id,
             event_type="document.uploaded",
@@ -177,7 +202,11 @@ class KBDocumentUploadService:
     ) -> KBDocumentUploadRequestResponse:
         """Create a direct-upload request for an admin KB document."""
         validate_kb_content_type(request.filename, request.content_type)
-        validate_kb_metadata_tags(request.metadata_tags)
+        resolved_metadata = await self.catalog_service.resolve_document_metadata(
+            organization_id=actor.organization_id,
+            collection_id=request.collection_id,
+            tag_slugs=request.tag_slugs,
+        )
 
         document_id = uuid4()
         storage_key = kb_original_file_key(
@@ -207,11 +236,13 @@ class KBDocumentUploadService:
             size_bytes=request.size_bytes,
             storage_key=storage_key,
             processing_status="upload_pending",
-            metadata_tags=request.metadata_tags,
+            collection_id=resolved_metadata.collection.id,
+            metadata_tags=resolved_metadata.metadata_tags,
             source_date=request.source_date,
             is_official=True,
             priority=0,
         )
+        await self.document_tag_repo.replace_tags(document, resolved_metadata.tags)
         await self.event_repo.create(
             document_id=document.id,
             event_type="document.upload_requested",

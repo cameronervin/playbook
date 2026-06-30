@@ -20,6 +20,7 @@ from app.api.v1 import (
     conversations,
     dashboard_insights,
     health,
+    kb_catalog,
     kb_documents,
     kb_webhook,
     users,
@@ -197,6 +198,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     app.include_router(dashboard_insights.router, prefix=API_V1_PREFIX)
     app.include_router(admin_chat.router, prefix=API_V1_PREFIX)
     app.include_router(audit.router, prefix=API_V1_PREFIX)
+    app.include_router(kb_catalog.router, prefix=API_V1_PREFIX)
     app.include_router(kb_documents.router, prefix=API_V1_PREFIX)
     app.include_router(kb_webhook.router, prefix=API_V1_PREFIX)
     app.include_router(conversations.router, prefix=API_V1_PREFIX)

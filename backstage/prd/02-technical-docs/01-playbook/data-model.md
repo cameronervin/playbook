@@ -192,12 +192,55 @@ after authorizing the athlete; browser callers never choose the source type.
 status webhook data. Summaries are internal orientation metadata in this phase;
 athlete responses expose status and chunk count, not summary text.
 
+### `kb_collections`
+```sql
+CREATE TABLE kb_collections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    slug VARCHAR(120) NOT NULL,
+    title VARCHAR(120) NOT NULL,
+    description TEXT NOT NULL,
+    icon VARCHAR(40) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    UNIQUE (organization_id, slug)
+);
+```
+
+KB collections are organization-owned admin surfaces. Super admins can create
+new collections with a title, description, and icon. Default collections are
+seeded for each organization by migration and by catalog service fallback for
+new organizations.
+
+### `kb_metadata_tags`
+```sql
+CREATE TABLE kb_metadata_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    slug VARCHAR(120) NOT NULL,
+    label VARCHAR(120) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    UNIQUE (organization_id, slug)
+);
+```
+
+Metadata tags are global organization presets managed by super admins. Slugs are
+generated from the initial label and remain immutable; labels can be renamed.
+Deleting a tag archives it so existing document assignments remain visible and
+removable, while future suggestions hide the archived tag.
+
 ### `kb_documents`
 ```sql
 CREATE TABLE kb_documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     uploaded_by UUID NOT NULL REFERENCES users(id),
+    collection_id UUID NULL REFERENCES kb_collections(id) ON DELETE SET NULL,
     title VARCHAR(500) NOT NULL,
     filename VARCHAR(500) NOT NULL,
     content_type VARCHAR(120) NOT NULL,
@@ -228,6 +271,26 @@ Processing statuses:
 `summary` and `chunk_count` mirror safe terminal KB-service webhook data for
 admin uploads. They are retained for status/debug/context use and are not
 currently exposed through admin document responses.
+
+`metadata_tags` is backend-composed compatibility metadata for KB-service
+ingestion/search/citation behavior. Admin UI contracts use `collection_id` and
+metadata tag slugs; the backend composes collection title, collection slug,
+tag labels, and tag slugs into `metadata_tags`. Unknown legacy metadata can be
+preserved for historical citation/search continuity.
+
+### `kb_document_tags`
+```sql
+CREATE TABLE kb_document_tags (
+    document_id UUID NOT NULL REFERENCES kb_documents(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES kb_metadata_tags(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    PRIMARY KEY (document_id, tag_id)
+);
+```
+
+`kb_document_tags` stores the managed preset tag assignments for each admin KB
+document. Existing archived tags can remain assigned until an admin removes them
+from the document.
 
 ### `kb_document_events`
 ```sql
@@ -431,14 +494,17 @@ Checkpoint requirements:
 
 | Entity | Relationship |
 |--------|--------------|
-| `organizations` | Owns users, conversations, KB documents, dashboard insights, admin chat sessions, audit logs |
+| `organizations` | Owns users, conversations, KB collections, metadata tag presets, KB documents, dashboard insights, admin chat sessions, audit logs |
 | `users` | Belongs to one organization; owns app sessions, conversations, and admin actions |
 | `app_sessions` | Tracks app-session activity, expiration, and revocation for cookie-backed JWTs |
 | `conversations` | Belongs to one athlete and contains messages/files |
 | `conversation_messages` | Stores user/assistant messages, risk labels, and safety outcomes |
 | `message_citations` | Links assistant messages to KB source records |
 | `conversation_files` | Stores original-file metadata, KB-service document linkage, mirrored status, internal summary, and chunk count for athlete uploads |
-| `kb_documents` | Represents admin-uploaded searchable department documents with mirrored KB-service status, internal summary, and chunk count |
+| `kb_collections` | Stores organization KB collection titles, descriptions, icons, slugs, and active state |
+| `kb_metadata_tags` | Stores organization-managed preset metadata tags with immutable slugs and editable labels |
+| `kb_documents` | Represents admin-uploaded searchable department documents with collection ownership, mirrored KB-service status, internal summary, and chunk count |
+| `kb_document_tags` | Links KB documents to managed metadata tag presets |
 | `upload_requests` | Stores backend-owned direct-upload intent lifecycle metadata for admin documents and conversation files |
 | `kb_ingest_outbox` | Stores durable, retryable KB-service ingest handoff rows for verified uploads |
 | `dashboard_insight_runs` | Tracks nightly/manual dashboard insights agent lifecycle |
@@ -453,7 +519,11 @@ Checkpoint requirements:
 - `organization_id` enables future multi-college support.
 - `visibility_policy` enables future sport/team/audience document access.
 - `role` can evolve into normalized role assignments if coach/compliance/NIL personas are added.
+- `kb_collections`, `kb_metadata_tags`, and `kb_document_tags` are the managed
+  admin catalog for document organization and search consistency.
 - `metadata_tags` and `source_date` support deterministic retrieval conflict handling.
+  `metadata_tags` is composed by the backend for KB-service compatibility rather
+  than authored directly by admin clients.
 - `is_official` and `priority` remain internal compatibility columns for MVP;
   admin-uploaded shared KB documents are treated as official and priority is not
   a user-facing ranking control.

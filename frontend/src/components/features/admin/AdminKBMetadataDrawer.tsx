@@ -3,26 +3,46 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { FileText, Pencil, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
+import { AdminKBTagSelector } from '@/src/components/features/admin/AdminKBTagSelector'
 import { Button } from '@/src/components/ui'
 import { getSafeUploadErrorMessage } from '@/src/components/features/admin/kbFormatting'
-import type { KBDocument, KBDocumentMetadataUpdateRequest } from '@/src/types/kb'
+import type { KBDocument, KBDocumentMetadataUpdateRequest, KBMetadataTag } from '@/src/types/kb'
 
 interface AdminKBMetadataDrawerProps {
   canManage: boolean
   document: KBDocument | null
+  metadataTags: KBMetadataTag[]
   onClose: () => void
   onDelete: (documentId: string) => void
   onSave: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => Promise<KBDocument>
 }
 
-export function AdminKBMetadataDrawer({ canManage, document, onClose, onDelete, onSave }: AdminKBMetadataDrawerProps) {
+export function AdminKBMetadataDrawer({
+  canManage,
+  document,
+  metadataTags,
+  onClose,
+  onDelete,
+  onSave,
+}: AdminKBMetadataDrawerProps) {
   if (!document) return null
-  return <AdminKBMetadataDrawerForm canManage={canManage} document={document} onClose={onClose} onDelete={onDelete} onSave={onSave} />
+  return (
+    <AdminKBMetadataDrawerForm
+      canManage={canManage}
+      document={document}
+      key={document.id}
+      metadataTags={metadataTags}
+      onClose={onClose}
+      onDelete={onDelete}
+      onSave={onSave}
+    />
+  )
 }
 
 interface AdminKBMetadataDrawerFormProps {
   canManage: boolean
   document: KBDocument
+  metadataTags: KBMetadataTag[]
   onClose: () => void
   onDelete: (documentId: string) => void
   onSave: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => Promise<KBDocument>
@@ -31,21 +51,18 @@ interface AdminKBMetadataDrawerFormProps {
 function AdminKBMetadataDrawerForm({
   canManage,
   document,
+  metadataTags,
   onClose,
   onDelete,
   onSave,
 }: AdminKBMetadataDrawerFormProps) {
-  const [tags, setTags] = useState(getTags(document).join(', '))
+  const [selectedTagSlugs, setSelectedTagSlugs] = useState(getSelectedTagSlugs(document))
   const [sourceDate, setSourceDate] = useState(document.source_date ?? '')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [dateError, setDateError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   const handleSave = async () => {
-    const nextTags = tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
     const normalizedDate = sourceDate.trim()
     if (normalizedDate && !isValidISODate(normalizedDate)) {
       setDateError('Use YYYY-MM-DD.')
@@ -56,11 +73,8 @@ function AdminKBMetadataDrawerForm({
     setIsSaving(true)
     try {
       await onSave(document.id, {
-        metadata_tags: {
-          ...document.metadata_tags,
-          topics: nextTags,
-        },
         source_date: normalizedDate || null,
+        tag_slugs: selectedTagSlugs,
       })
       onClose()
     } catch (error) {
@@ -94,10 +108,12 @@ function AdminKBMetadataDrawerForm({
               </span>
               <span className="min-w-0 truncate">{document.title}</span>
             </div>
-            <label>
-              <span className="pb-admin-kb-field-label block">Metadata tags</span>
-              <input className="pb-admin-kb-input" onChange={(event) => setTags(event.target.value)} value={tags} />
-            </label>
+            <AdminKBTagSelector
+              disabled={!canManage}
+              onChange={setSelectedTagSlugs}
+              selectedSlugs={selectedTagSlugs}
+              tags={metadataTags}
+            />
             <label>
               <span className="pb-admin-kb-field-label block">Source date</span>
               <input
@@ -140,10 +156,11 @@ function AdminKBMetadataDrawerForm({
   )
 }
 
-function getTags(document: KBDocument): string[] {
-  const topics = document.metadata_tags.topics
-  if (!Array.isArray(topics)) return []
-  return topics.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+function getSelectedTagSlugs(document: KBDocument): string[] {
+  if (document.tag_slugs.length > 0) return document.tag_slugs
+  const legacySlugs = document.metadata_tags.tag_slugs
+  if (!Array.isArray(legacySlugs)) return []
+  return legacySlugs.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
 }
 
 function isValidISODate(value: string): boolean {

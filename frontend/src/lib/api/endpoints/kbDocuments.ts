@@ -4,13 +4,55 @@ import { validateUploadFile } from '@/src/lib/api/uploadValidation'
 import { API_VERSION } from '@/src/lib/constants/config'
 import type {
   KBDocument,
+  KBCollection,
+  KBCollectionCreateRequest,
+  KBMetadataTag,
+  KBMetadataTagCreateRequest,
+  KBMetadataTagUpdateRequest,
   KBDocumentMetadataUpdateRequest,
   KBDocumentUploadIntentRequest,
   KBDocumentUploadIntentResponse,
   UploadKBDocumentRequest,
 } from '@/src/types/kb'
 
-const BASE_PATH = `/api/${API_VERSION}/admin/kb/documents`
+const KB_BASE_PATH = `/api/${API_VERSION}/admin/kb`
+const BASE_PATH = `${KB_BASE_PATH}/documents`
+
+export const listKBCollections = (): Promise<KBCollection[]> =>
+  apiClient<KBCollection[]>(`${KB_BASE_PATH}/collections`)
+
+export const createKBCollection = (
+  request: KBCollectionCreateRequest,
+): Promise<KBCollection> =>
+  apiClient<KBCollection>(`${KB_BASE_PATH}/collections`, {
+    method: 'POST',
+    json: request,
+  })
+
+export const listKBMetadataTags = (includeArchived = false): Promise<KBMetadataTag[]> =>
+  apiClient<KBMetadataTag[]>(
+    `${KB_BASE_PATH}/metadata-tags${includeArchived ? '?include_archived=true' : ''}`,
+  )
+
+export const createKBMetadataTag = (
+  request: KBMetadataTagCreateRequest,
+): Promise<KBMetadataTag> =>
+  apiClient<KBMetadataTag>(`${KB_BASE_PATH}/metadata-tags`, {
+    method: 'POST',
+    json: request,
+  })
+
+export const updateKBMetadataTag = (
+  tagId: string,
+  request: KBMetadataTagUpdateRequest,
+): Promise<KBMetadataTag> =>
+  apiClient<KBMetadataTag>(`${KB_BASE_PATH}/metadata-tags/${tagId}`, {
+    method: 'PATCH',
+    json: request,
+  })
+
+export const archiveKBMetadataTag = (tagId: string): Promise<void> =>
+  apiClient<void>(`${KB_BASE_PATH}/metadata-tags/${tagId}`, { method: 'DELETE' })
 
 export const listKBDocuments = (): Promise<KBDocument[]> =>
   apiClient<KBDocument[]>(BASE_PATH)
@@ -24,8 +66,9 @@ export const createKBDocumentUploadIntent = (
       filename: request.filename,
       content_type: request.content_type,
       size_bytes: request.size_bytes,
+      collection_id: request.collection_id,
+      ...(request.tag_slugs ? { tag_slugs: request.tag_slugs } : {}),
       ...(request.title ? { title: request.title } : {}),
-      ...(request.metadata_tags ? { metadata_tags: request.metadata_tags } : {}),
       ...(request.source_date ? { source_date: request.source_date } : {}),
     },
   })
@@ -45,8 +88,9 @@ export const uploadKBDocument = async (request: UploadKBDocumentRequest): Promis
     filename: file.filename,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,
+    collection_id: request.collection_id,
+    tag_slugs: request.tag_slugs,
     title: request.title,
-    metadata_tags: request.metadata_tags,
     source_date: request.source_date,
   })
   await postDirectUpload({

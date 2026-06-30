@@ -23,8 +23,14 @@ import { useAdminUsers, useUpdateUserRole } from '@/src/hooks/useAdmin'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
 import {
   useDeleteKBDocument,
+  useArchiveKBMetadataTag,
+  useCreateKBCollection,
+  useCreateKBMetadataTag,
+  useKBCollections,
+  useKBMetadataTags,
   useKBDocuments,
   useRetryKBDocument,
+  useUpdateKBMetadataTag,
   useUpdateKBDocumentMetadata,
   useUploadKBDocument,
 } from '@/src/hooks/useKBDocuments'
@@ -55,12 +61,20 @@ export function AdminShell() {
   const isAdmin = user?.role === 'admin' || isSuperAdmin
   const documentsQuery = useKBDocuments()
   const documents = documentsQuery.data ?? []
+  const collectionsQuery = useKBCollections()
+  const collections = collectionsQuery.data ?? []
+  const metadataTagsQuery = useKBMetadataTags()
+  const metadataTags = metadataTagsQuery.data ?? []
   const usersQuery = useAdminUsers(Boolean(isSuperAdmin))
   const users = usersQuery.data ?? []
   const retryDocument = useRetryKBDocument()
   const deleteDocument = useDeleteKBDocument()
   const updateDocument = useUpdateKBDocumentMetadata()
   const uploadDocument = useUploadKBDocument()
+  const createCollection = useCreateKBCollection()
+  const createMetadataTag = useCreateKBMetadataTag()
+  const updateMetadataTag = useUpdateKBMetadataTag()
+  const archiveMetadataTag = useArchiveKBMetadataTag()
   const updateRole = useUpdateUserRole()
   const adminChatSessionsQuery = useAdminChatSessions(Boolean(isAdmin) && adminChatOpen)
   const latestAdminChatSessionId = adminChatSessionsQuery.data?.[0]?.id ?? null
@@ -194,13 +208,27 @@ export function AdminShell() {
           <KBPanel
             canCreateCollection={Boolean(isSuperAdmin)}
             canManageDocuments={Boolean(isAdmin)}
+            canManageTags={Boolean(isSuperAdmin)}
+            collections={collections}
             documents={documents}
-            isError={documentsQuery.isError}
-            isFetching={documentsQuery.isFetching && !documentsQuery.isLoading}
-            isLoading={documentsQuery.isLoading && documents.length === 0}
+            isError={documentsQuery.isError || collectionsQuery.isError || metadataTagsQuery.isError}
+            isFetching={
+              (documentsQuery.isFetching && !documentsQuery.isLoading) ||
+              (collectionsQuery.isFetching && !collectionsQuery.isLoading) ||
+              (metadataTagsQuery.isFetching && !metadataTagsQuery.isLoading)
+            }
+            isLoading={
+              (documentsQuery.isLoading && documents.length === 0) ||
+              (collectionsQuery.isLoading && collections.length === 0)
+            }
+            metadataTags={metadataTags}
+            onArchiveMetadataTag={(tagId) => archiveMetadataTag.mutateAsync(tagId)}
+            onCreateCollection={(request) => createCollection.mutateAsync(request)}
+            onCreateMetadataTag={(request) => createMetadataTag.mutateAsync(request)}
             onDelete={(id) => deleteDocument.mutate(id)}
             onRetry={(id) => retryDocument.mutate(id)}
             onUpdateMetadata={(documentId, metadata) => updateDocument.mutateAsync({ documentId, metadata })}
+            onUpdateMetadataTag={(tagId, request) => updateMetadataTag.mutateAsync({ tagId, request })}
             onUpload={(request) => uploadDocument.mutateAsync(request)}
           />
         )}

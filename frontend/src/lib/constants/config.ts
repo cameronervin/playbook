@@ -22,6 +22,8 @@ export const QUERY_KEYS = {
   conversations: 'conversations',
   conversationDetail: 'conversationDetail',
   kbDocuments: 'kbDocuments',
+  kbCollections: 'kbCollections',
+  kbMetadataTags: 'kbMetadataTags',
   adminUsers: 'adminUsers',
   auditLogs: 'auditLogs',
   adminChatSessions: 'adminChatSessions',

@@ -38,6 +38,12 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 
 | Method | Endpoint | Purpose | Role |
 |--------|----------|---------|------|
+| GET | `/admin/kb/collections` | List active KB collections | admin |
+| POST | `/admin/kb/collections` | Create a KB collection with title, description, and icon | super_admin |
+| GET | `/admin/kb/metadata-tags` | List metadata tag presets; `include_archived=true` returns archived tags too | admin |
+| POST | `/admin/kb/metadata-tags` | Create a metadata tag preset | super_admin |
+| PATCH | `/admin/kb/metadata-tags/{tag_id}` | Rename a metadata tag label | super_admin |
+| DELETE | `/admin/kb/metadata-tags/{tag_id}` | Archive a metadata tag while preserving existing document assignments | super_admin |
 | GET | `/admin/kb/documents` | List KB documents and status | admin |
 | POST | `/admin/kb/documents` | Create KB document direct-upload request | admin |
 | POST | `/admin/kb/documents/{document_id}/upload-complete` | Verify completed KB document upload | admin |
@@ -330,10 +336,9 @@ POST /api/v1/admin/kb/documents
   "filename": "nil-handbook.pdf",
   "content_type": "application/pdf",
   "size_bytes": 456789,
+  "collection_id": "uuid",
   "title": "NIL Handbook",
-  "metadata_tags": {
-    "topic": "nil"
-  },
+  "tag_slugs": ["nil", "compliance"],
   "source_date": "2026-01-15"
 }
 ```
@@ -348,8 +353,14 @@ Response:
     "content_type": "application/pdf",
     "size_bytes": 456789,
     "processing_status": "upload_pending",
+    "collection_id": "uuid",
+    "tag_slugs": ["nil", "compliance"],
     "metadata_tags": {
-      "topic": "nil"
+      "collection": "compliance",
+      "collection_title": "Compliance & NIL",
+      "tag_slugs": ["nil", "compliance"],
+      "tags": ["NIL", "Compliance"],
+      "topics": ["Compliance & NIL", "NIL", "Compliance"]
     }
   },
   "upload": {
@@ -376,6 +387,9 @@ POST /api/v1/admin/kb/documents/{document_id}/upload-complete
 The backend verifies the object with storage `HEAD`, marks the document
 `uploaded`, and queues KB-service ingest handoff. Browser callers never supply
 `source_type`, organization IDs, storage keys, signed URLs, or KB-service IDs.
+Browser callers also do not author arbitrary `metadata_tags`; admin upload and
+metadata update requests use the persisted `collection_id` and organization tag
+preset `tag_slugs`, and the backend composes KB-service-compatible metadata.
 
 ### Analytics Summary
 ```json

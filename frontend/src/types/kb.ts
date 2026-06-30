@@ -12,6 +12,8 @@ export interface KBDocument {
   size_bytes: number
   processing_status: KBDocumentStatus
   failure_reason: string | null
+  collection_id: string | null
+  tag_slugs: string[]
   visibility_policy: Record<string, unknown>
   metadata_tags: Record<string, unknown>
   source_date: string | null
@@ -21,7 +23,7 @@ export interface KBDocument {
 }
 
 export interface KBDocumentMetadataUpdateRequest {
-  metadata_tags?: Record<string, unknown>
+  tag_slugs?: string[]
   source_date?: string | null
 }
 
@@ -29,8 +31,9 @@ export interface KBDocumentUploadIntentRequest {
   filename: string
   content_type: string
   size_bytes: number
+  collection_id: string
+  tag_slugs?: string[]
   title?: string
-  metadata_tags?: Record<string, unknown>
   source_date?: string | null
 }
 
@@ -41,8 +44,9 @@ export interface KBDocumentUploadIntentResponse {
 
 export interface UploadKBDocumentRequest extends DirectUploadMutationOptions {
   file: File
+  collection_id: string
+  tag_slugs?: string[]
   title?: string
-  metadata_tags?: Record<string, unknown>
   source_date?: string | null
 }
 
@@ -50,10 +54,40 @@ export type KBCollectionIcon = 'shield' | 'plane' | 'book-open' | 'users' | 'dat
 
 export interface KBCollection {
   id: string
-  name: string
+  organization_id: string
+  slug: string
+  title: string
+  description: string
   icon: KBCollectionIcon
-  blurb: string
-  keywords: string[]
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface KBCollectionCreateRequest {
+  title: string
+  description: string
+  icon: KBCollectionIcon
+}
+
+export interface KBMetadataTag {
+  id: string
+  organization_id: string
+  slug: string
+  label: string
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface KBMetadataTagCreateRequest {
+  label: string
+}
+
+export interface KBMetadataTagUpdateRequest {
+  label: string
 }
 
 export interface KBCollectionViewModel extends KBCollection {

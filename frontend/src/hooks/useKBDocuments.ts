@@ -1,13 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  archiveKBMetadataTag,
+  createKBCollection,
+  createKBMetadataTag,
   deleteKBDocument,
+  listKBCollections,
   listKBDocuments,
+  listKBMetadataTags,
   retryKBDocument,
+  updateKBMetadataTag,
   updateKBDocumentMetadata,
   uploadKBDocument,
 } from '@/src/lib/api/endpoints/kbDocuments'
 import { QUERY_KEYS } from '@/src/lib/constants/config'
-import type { KBDocument, KBDocumentMetadataUpdateRequest } from '@/src/types/kb'
+import type {
+  KBCollection,
+  KBCollectionCreateRequest,
+  KBDocument,
+  KBMetadataTag,
+  KBMetadataTagCreateRequest,
+  KBMetadataTagUpdateRequest,
+  KBDocumentMetadataUpdateRequest,
+} from '@/src/types/kb'
 
 const KB_DOCUMENT_STATUS_REFETCH_INTERVAL_MS = 3_000
 
@@ -20,6 +34,76 @@ export const useKBDocuments = () =>
       return hasActiveKBDocumentStatus(documents) ? KB_DOCUMENT_STATUS_REFETCH_INTERVAL_MS : false
     },
   })
+
+export const useKBCollections = () =>
+  useQuery({
+    queryKey: [QUERY_KEYS.kbCollections],
+    queryFn: listKBCollections,
+  })
+
+export const useKBMetadataTags = () =>
+  useQuery({
+    queryKey: [QUERY_KEYS.kbMetadataTags],
+    queryFn: () => listKBMetadataTags(true),
+  })
+
+export const useCreateKBCollection = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: KBCollectionCreateRequest) => createKBCollection(request),
+    onSuccess: (collection) => {
+      queryClient.setQueryData<KBCollection[]>([QUERY_KEYS.kbCollections], (current) =>
+        current ? [...current.filter((item) => item.id !== collection.id), collection] : [collection],
+      )
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbCollections] })
+    },
+  })
+}
+
+export const useCreateKBMetadataTag = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: KBMetadataTagCreateRequest) => createKBMetadataTag(request),
+    onSuccess: (tag) => {
+      queryClient.setQueryData<KBMetadataTag[]>([QUERY_KEYS.kbMetadataTags], (current) =>
+        current ? [...current.filter((item) => item.id !== tag.id), tag] : [tag],
+      )
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbMetadataTags] })
+    },
+  })
+}
+
+export const useUpdateKBMetadataTag = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      tagId,
+      request,
+    }: {
+      tagId: string
+      request: KBMetadataTagUpdateRequest
+    }) => updateKBMetadataTag(tagId, request),
+    onSuccess: (tag) => {
+      queryClient.setQueryData<KBMetadataTag[]>([QUERY_KEYS.kbMetadataTags], (current) =>
+        current?.map((item) => (item.id === tag.id ? tag : item)) ?? [tag],
+      )
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbMetadataTags] })
+    },
+  })
+}
+
+export const useArchiveKBMetadataTag = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: archiveKBMetadataTag,
+    onSuccess: (_, tagId) => {
+      queryClient.setQueryData<KBMetadataTag[]>([QUERY_KEYS.kbMetadataTags], (current) =>
+        current?.map((item) => (item.id === tagId ? { ...item, is_active: false } : item)),
+      )
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbMetadataTags] })
+    },
+  })
+}
 
 export const useUploadKBDocument = () => {
   const queryClient = useQueryClient()

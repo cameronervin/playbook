@@ -1,39 +1,8 @@
 import type { KBCollection, KBCollectionViewModel, KBDocument } from '@/src/types/kb'
 
-export const ADMIN_KB_COLLECTIONS: KBCollection[] = [
-  {
-    id: 'compliance',
-    name: 'Compliance & NIL',
-    icon: 'shield',
-    blurb: 'NIL, eligibility, and recruiting rules - kept current with department and NCAA policy.',
-    keywords: ['nil', 'compliance', 'eligibility', 'recruiting', 'ncaa', 'transfer', 'bylaw'],
-  },
-  {
-    id: 'travel',
-    name: 'Team Travel',
-    icon: 'plane',
-    blurb: 'Per-diem rates, charter logistics, and team hotel policy for every sport.',
-    keywords: ['travel', 'per diem', 'per_diem', 'hotel', 'charter', 'team travel'],
-  },
-  {
-    id: 'academics',
-    name: 'Academic Services',
-    icon: 'book-open',
-    blurb: 'Study-hall rules, tutoring, and academic eligibility support.',
-    keywords: ['academic', 'academics', 'study', 'tutoring', 'class', 'eligibility support'],
-  },
-  {
-    id: 'donor',
-    name: 'Donor Relations',
-    icon: 'users',
-    blurb: 'Giving levels, suite benefits, and booster club answers for boosters.',
-    keywords: ['donor', 'booster', 'cowboy club', 'suite', 'giving'],
-  },
-]
-
 export function buildKBCollectionViews(
   documents: KBDocument[],
-  collections: KBCollection[] = ADMIN_KB_COLLECTIONS,
+  collections: KBCollection[],
 ): KBCollectionViewModel[] {
   return collections.map((collection) => {
     const collectionDocuments = documents.filter((document) => resolveDocumentCollectionId(document, collections) === collection.id)
@@ -46,22 +15,19 @@ export function buildKBCollectionViews(
   })
 }
 
-export function collectionUploadMetadata(collection: KBCollection): Record<string, unknown> {
-  return {
-    collection: collection.id,
-    topics: [collection.name],
-  }
-}
-
 function resolveDocumentCollectionId(document: KBDocument, collections: KBCollection[]): string {
+  if (document.collection_id && hasCollection(document.collection_id, collections)) return document.collection_id
+
   const metadataCollection = readString(document.metadata_tags.collection)
-  if (metadataCollection && hasCollection(metadataCollection, collections)) return metadataCollection
+  if (metadataCollection) {
+    const matched = collections.find((collection) => collection.slug === metadataCollection)
+    if (matched) return matched.id
+  }
 
   const searchable = [
     document.title,
     document.filename,
-    readString(document.metadata_tags.topic),
-    readString(document.metadata_tags.category),
+    metadataCollection,
     ...readStringList(document.metadata_tags.topics),
     ...readStringList(document.metadata_tags.tags),
   ]
@@ -70,8 +36,9 @@ function resolveDocumentCollectionId(document: KBDocument, collections: KBCollec
 
   return (
     collections.find((collection) =>
-      collection.keywords.some((keyword) => searchable.includes(keyword.toLowerCase())),
-    )?.id ?? collections[0]?.id ?? ADMIN_KB_COLLECTIONS[0].id
+      searchable.includes(collection.slug.toLowerCase()) ||
+      searchable.includes(collection.title.toLowerCase()),
+    )?.id ?? collections[0]?.id ?? ''
   )
 }
 
