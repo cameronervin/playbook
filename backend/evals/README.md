@@ -15,9 +15,10 @@ cd backend
 uv sync --group evals          # runtime, dev, and eval deps
 ```
 
-The `evals` dependency group pulls `ragas`, `langfuse`, and `click`. The harness modules
-import these lazily, so `python -m compileall evals` succeeds even before the
-group is installed.
+Langfuse is a backend runtime dependency because the API and backend Celery
+workers can attach runtime traces. The `evals` dependency group adds `ragas` and
+`click`; harness modules import eval-only dependencies lazily, so
+`python -m compileall evals` succeeds even before the group is installed.
 
 ## Run
 
@@ -30,6 +31,7 @@ Author the dataset + rubric YAMLs first (see `datasets/README.md`, `rubrics/READ
 ```bash
 cd backend
 uv run --group evals python -m evals.cli sync-datasets  # mirror datasets into Langfuse
+uv run --group evals python -m evals.cli run --agent dashboard_insights --max-concurrency 5
 uv run --group evals python -m evals.cli run --agent example --max-concurrency 5
 uv run --group evals python -m evals.cli run-all --max-concurrency 5
 ```
@@ -39,7 +41,12 @@ defaults to `5`, accepts values from `1` through `50`, and can also be set with
 `EVAL_MAX_CONCURRENCY=5`. `run-all` still runs specs one after another so total
 LLM/KB load stays bounded; each spec's items run concurrently.
 
-`--agent` choices: `example`.
+`--agent` choices: `dashboard_insights`, `example`.
+
+`dashboard_insights` is a deterministic structural golden spec for Phase 4. It
+uses seeded NIL, compliance, recruiting, and unanswered support-gap cases to
+check expected topic/risk labels, source-message grounding, and bounded metrics
+without external LLM judge calls.
 
 > The CLI initialises Langfuse via `app.observability.langfuse_init`
 > (`init_langfuse`, `is_langfuse_ready`, `shutdown_langfuse`) and the chain

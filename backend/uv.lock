@@ -2409,6 +2409,7 @@ dependencies = [
     { name = "langchain-anthropic" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
+    { name = "langfuse" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "litellm" },
@@ -2431,7 +2432,6 @@ dev = [
 ]
 evals = [
     { name = "click" },
-    { name = "langfuse" },
     { name = "ragas" },
 ]
 
@@ -2449,6 +2449,7 @@ requires-dist = [
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },
     { name = "langchain-openai", specifier = ">=0.2.0" },
+    { name = "langfuse", specifier = ">=3.0.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=1.0.0" },
     { name = "litellm", specifier = ">=1.50.0" },
@@ -2471,7 +2472,6 @@ dev = [
 ]
 evals = [
     { name = "click", specifier = ">=8.1" },
-    { name = "langfuse", specifier = ">=3.0.0" },
     { name = "ragas", specifier = ">=0.4.3,<0.5" },
 ]
 

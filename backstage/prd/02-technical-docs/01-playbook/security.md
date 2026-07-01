@@ -56,6 +56,11 @@ Role storage must support future roles without schema redesign.
 5. Dashboard insights receive only the anonymized analytics snapshot and source
    message IDs already scoped to the organization/window.
 6. Stored conversations are used for athlete history, dashboard insights, and anonymized admin analytics.
+7. Runtime Langfuse traces can contain model/tool telemetry, so production
+   tracing must use an approved Langfuse project. Admin analytics/admin chat
+   traces must remain anonymized: allowlisted IDs are allowed, but athlete owner
+   identity, raw query text, source URIs, storage keys, signed URLs, tokens, and
+   secrets must be masked before trace payloads leave the backend.
 
 ## Safety Policy
 
@@ -80,6 +85,8 @@ Audited actions:
 - KB document deletion/archive.
 - User role change.
 - Insight run manual trigger.
+- Admin chat session creation.
+- Admin chat question submission.
 
 Audit entries include actor, action, target type, target ID, timestamp, and metadata. Normal admin UI/API operations must not modify or delete audit entries.
 
@@ -100,3 +107,6 @@ Audit entries include actor, action, target type, target ID, timestamp, and meta
    emails, raw user IDs, provider subjects, teams, and storage keys.
 6. Emergency and unsupported questions refuse safely.
 7. OAuth tokens are not logged or returned to frontend API responses.
+8. Admin chat session creation and question submission create audit records.
+9. Runtime traces attach only safe ID metadata and mask prompts, messages,
+   source locations, emails, tokens, secrets, and storage keys.

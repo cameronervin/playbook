@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import String, and_, cast, func, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -45,7 +45,8 @@ class AdminAnalyticsRepository:
         organization_id: UUID,
         window_start: datetime,
         window_end: datetime,
-        limit: int = 5000,
+        source_filters: dict[str, Any] | None = None,
+        limit: int | None = 5000,
         offset: int = 0,
     ) -> list[AnalyticsQueryRecord]:
         """Return user query rows paired with their assistant response metadata."""
@@ -74,11 +75,14 @@ class AdminAnalyticsRepository:
                 user_message.role == "user",
                 user_message.created_at >= window_start,
                 user_message.created_at < window_end,
+                *_source_filter_conditions(assistant_message, source_filters or {}),
             )
             .order_by(user_message.created_at.desc(), user_message.id.asc())
-            .limit(limit)
-            .offset(offset)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        if offset:
+            stmt = stmt.offset(offset)
         result = await self.session.execute(stmt)
         records: list[AnalyticsQueryRecord] = []
         for user_row, assistant_row, athlete_id in result.all():
@@ -299,7 +303,13 @@ class DashboardInsightRepository:
         window_start: datetime | None = None,
         window_end: datetime | None = None,
     ) -> DashboardInsight | None:
-        """Return the latest completed output for one organization/window."""
+        """Return the latest completed output for one organization/window.
+
+        When a window is supplied, match completed insight runs whose source
+        window overlaps the requested dashboard window. Nightly runs are anchored
+        to UTC midnights, while user-selected dashboard windows can be resolved
+        relative to the current request time.
+        """
         stmt = (
             select(DashboardInsight)
             .join(DashboardInsightRun, DashboardInsight.run_id == DashboardInsightRun.id)
@@ -308,10 +318,15 @@ class DashboardInsightRepository:
                 DashboardInsightRun.status == "completed",
             )
         )
-        if window_start is not None:
-            stmt = stmt.where(DashboardInsightRun.window_start == window_start)
-        if window_end is not None:
-            stmt = stmt.where(DashboardInsightRun.window_end == window_end)
+        if window_start is not None and window_end is not None:
+            stmt = stmt.where(
+                DashboardInsightRun.window_start < window_end,
+                DashboardInsightRun.window_end > window_start,
+            )
+        elif window_start is not None:
+            stmt = stmt.where(DashboardInsightRun.window_end > window_start)
+        elif window_end is not None:
+            stmt = stmt.where(DashboardInsightRun.window_start < window_end)
         result = await self.session.scalars(
             stmt.order_by(DashboardInsight.generated_at.desc(), DashboardInsight.id.asc())
             .limit(1)
@@ -377,3 +392,44 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if str(item)]
     return [str(value)]
+
+
+def _source_filter_conditions(
+    assistant_message: type[ConversationMessage],
+    source_filters: dict[str, Any],
+) -> list[Any]:
+    conditions: list[Any] = []
+    topic_filter = _string_filter(source_filters.get("topic_labels"))
+    risk_filter = _string_filter(source_filters.get("risk_labels"))
+    status_filter = _string_filter(source_filters.get("message_statuses"))
+    if topic_filter:
+        conditions.append(
+            or_(
+                *[
+                    assistant_message.topic_labels.contains([label])
+                    for label in sorted(topic_filter)
+                ]
+            )
+        )
+    if risk_filter:
+        conditions.append(
+            or_(
+                *[
+                    assistant_message.risk_labels.contains([label])
+                    for label in sorted(risk_filter)
+                ]
+            )
+        )
+    if status_filter:
+        conditions.append(assistant_message.status.in_(sorted(status_filter)))
+    return conditions
+
+
+def _string_filter(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        return {value} if value else set()
+    if isinstance(value, list):
+        return {str(item) for item in value if str(item)}
+    return {str(value)}

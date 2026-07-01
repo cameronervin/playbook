@@ -54,7 +54,7 @@ The visual source of truth is `backstage/design/`, especially `backstage/design/
 - `Button`, `IconButton`, `Input`, `Textarea`, and Radix wrappers own default focus and sizing behavior. Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions, and use `IconButton size="sm" variant="ghost"` for compact panel close/action buttons.
 - `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
 - `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`. Admin and super-admin users default to `/admin`, but account-menu switchers use real links so they can explicitly move between `/admin` and `/chat`.
-- Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.
+- Admin Insights reads real Phase 4 analytics APIs through TanStack Query hooks: summary and anonymized query rows feed the KPI/topic/risk/volume modules, `/admin/dashboard-insights/current` feeds the AI summary, and manual Regenerate posts a concrete UTC `window_start`/`window_end` before polling the returned run ID until completion or failure.
 - Admin pages share `AdminPageScaffold` for the Claude header, grid layer, toolbar band, content padding, and max-width rhythm across Insights, Knowledge base, and Users & roles.
 - Admin and super-admin users can manage KB documents from the Knowledge base view. Upload starts from an inline `pb-admin-kb-upload-panel` with a visible title and centered drag/drop tile powered by `react-dropzone`; the tile includes accepted file type guidance, and selecting a supported file opens the metadata review dialog, where admins edit title, choose preset metadata tags, and optionally set a `YYYY-MM-DD` source date. The browser then requests a JSON upload intent, posts the file directly to storage, and completes the backend upload.
 - Admin KB document rows must visibly represent every persisted ingestion status: `upload_pending` as Pending upload, `uploaded` as Queued, `processing` as Processing, `ready` as Ready, and `failed` as Failed. Failed rows show the backend failure reason when available and expose retry; local direct-upload failures show a safe error plus Try again with the original metadata.
@@ -74,7 +74,7 @@ The visual source of truth is `backstage/design/`, especially `backstage/design/
   `task_id` stream metadata, and the browser opens the returned SSE
   `stream_url` with cookies included.
 - Zustand stores only client UI state, such as selected conversation, sources panel, admin tab, and settings modal state.
-- Missing Phase 2+ APIs are represented by typed fixtures, not hidden server-state mocks.
+- Planned API gaps should use typed endpoint clients and explicit loading/empty/error states; do not add hidden server-state mocks to production feature components.
 
 ## Structure
 
@@ -86,7 +86,7 @@ src/components/features/workspace/ Shared chat/admin workspace shell components
 src/components/features/   Route/feature-specific components
 src/hooks/                 TanStack Query hooks
 src/lib/api/               Fetch client and endpoint modules
-src/lib/fixtures/          Typed adapters for planned APIs
+src/lib/fixtures/          Static UI suggestions and view adapters
 src/lib/store/             Zustand UI stores
 src/lib/constants/         Route, query-key, and UI constants
 src/lib/utils/             Pure helpers

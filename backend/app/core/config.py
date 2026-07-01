@@ -174,8 +174,7 @@ class Settings(BaseSettings):
     # --- Observability ---------------------------------------------------------
     TRACING_ENABLED: bool = False
 
-    # Langfuse — LLM tracing + eval dataset/score sync (used by evals/)
-    # Install the dependency group: uv sync --group evals
+    # Langfuse — runtime LLM tracing plus eval dataset/score sync.
     LANGFUSE_ENABLED: bool = False
     LANGFUSE_SECRET_KEY: str = Field(default="", repr=False)
     LANGFUSE_PUBLIC_KEY: str = ""

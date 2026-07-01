@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { AdminChatPanel } from '@/src/components/features/admin/AdminChatPanel'
@@ -19,6 +20,14 @@ import {
   useCreateAdminChatSession,
   useSubmitAdminChatMessage,
 } from '@/src/hooks/useAdminChat'
+import {
+  toManualRunWindow,
+  useAdminAnalyticsQueries,
+  useAdminAnalyticsSummary,
+  useCreateDashboardInsightRun,
+  useCurrentDashboardInsight,
+  useDashboardInsightRun,
+} from '@/src/hooks/useAdminAnalytics'
 import { useAdminUsers, useUpdateUserRole } from '@/src/hooks/useAdmin'
 import { useCurrentUser, useLogout } from '@/src/hooks/useAuth'
 import {
@@ -38,8 +47,7 @@ import {
   useUploadKBDocument,
 } from '@/src/hooks/useKBDocuments'
 import { useSessionActivity } from '@/src/hooks/useSessionActivity'
-import { ANALYTICS_SUMMARY, DASHBOARD_INSIGHT } from '@/src/lib/fixtures/admin'
-import { ROUTES } from '@/src/lib/constants/config'
+import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
 import type { AdminChatMessage } from '@/src/types/adminChat'
 
@@ -47,7 +55,9 @@ const EMPTY_ADMIN_CHAT_MESSAGES: AdminChatMessage[] = []
 
 export function AdminShell() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [adminChatSessionId, setAdminChatSessionId] = useState<string | null>(null)
+  const [dashboardInsightRunId, setDashboardInsightRunId] = useState<string | null>(null)
   const { data: user, isLoading } = useCurrentUser()
   const logout = useLogout()
   const adminTab = useUIStore((state) => state.adminTab)
@@ -58,10 +68,17 @@ export function AdminShell() {
   const setAdminChatOpen = useUIStore((state) => state.setAdminChatOpen)
   const adminTimeWindow = useUIStore((state) => state.adminTimeWindow)
   const setAdminTimeWindow = useUIStore((state) => state.setAdminTimeWindow)
-  const adminInsightStatus = useUIStore((state) => state.adminInsightStatus)
-  const setAdminInsightStatus = useUIStore((state) => state.setAdminInsightStatus)
   const isSuperAdmin = user?.role === 'super_admin'
   const isAdmin = user?.role === 'admin' || isSuperAdmin
+  const insightsEnabled = Boolean(isAdmin && adminTab === 'insights')
+  const analyticsSummaryQuery = useAdminAnalyticsSummary(adminTimeWindow, insightsEnabled)
+  const analyticsQueriesQuery = useAdminAnalyticsQueries(adminTimeWindow, insightsEnabled)
+  const currentInsightQuery = useCurrentDashboardInsight(adminTimeWindow, insightsEnabled)
+  const createDashboardInsightRun = useCreateDashboardInsightRun()
+  const dashboardInsightRunQuery = useDashboardInsightRun(
+    dashboardInsightRunId,
+    insightsEnabled,
+  )
   const documentsQuery = useKBDocuments()
   const documents = documentsQuery.data ?? []
   const collectionsQuery = useKBCollections()
@@ -113,6 +130,19 @@ export function AdminShell() {
     if (!adminChatOpen || adminChatSessionId || !latestAdminChatSessionId) return
     setAdminChatSessionId(latestAdminChatSessionId)
   }, [adminChatOpen, adminChatSessionId, latestAdminChatSessionId])
+
+  useEffect(() => {
+    const run = dashboardInsightRunQuery.data
+    if (run?.status !== 'completed') return
+    if (run.output) {
+      queryClient.setQueryData(
+        [QUERY_KEYS.dashboardInsightCurrent, adminTimeWindow],
+        run.output,
+      )
+    }
+    void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboardInsightCurrent] })
+    void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.dashboardInsightOutputs] })
+  }, [adminTimeWindow, dashboardInsightRunQuery.data, queryClient])
 
   const ensureAdminChatSession = useCallback(
     async (content: string): Promise<string> => {
@@ -177,8 +207,16 @@ export function AdminShell() {
   }
 
   const handleGenerate = () => {
-    setAdminInsightStatus('processing')
-    window.setTimeout(() => setAdminInsightStatus('completed'), 2200)
+    void (async () => {
+      const request = toManualRunWindow(adminTimeWindow)
+      if (!request) return
+      try {
+        const response = await createDashboardInsightRun.mutateAsync(request)
+        setDashboardInsightRunId(response.run_id)
+      } catch {
+        // Mutation state renders the recoverable dashboard error.
+      }
+    })()
   }
 
   const leftRail = (
@@ -200,12 +238,30 @@ export function AdminShell() {
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
         {adminTab === 'insights' && (
           <AdminInsightsDashboard
-            insight={DASHBOARD_INSIGHT}
-            insightStatus={adminInsightStatus}
+            currentInsight={currentInsightQuery.data ?? null}
+            currentRun={dashboardInsightRunQuery.data ?? null}
+            isError={
+              analyticsSummaryQuery.isError ||
+              analyticsQueriesQuery.isError ||
+              currentInsightQuery.isError ||
+              createDashboardInsightRun.isError ||
+              dashboardInsightRunQuery.isError
+            }
+            isGenerating={
+              createDashboardInsightRun.isPending ||
+              dashboardInsightRunQuery.data?.status === 'pending' ||
+              dashboardInsightRunQuery.data?.status === 'processing'
+            }
+            isLoading={
+              (analyticsSummaryQuery.isLoading && !analyticsSummaryQuery.data) ||
+              (analyticsQueriesQuery.isLoading && !analyticsQueriesQuery.data) ||
+              (currentInsightQuery.isLoading && currentInsightQuery.data === undefined)
+            }
             onGenerate={handleGenerate}
             onOpenChat={() => setAdminChatOpen(true)}
             onTimeWindowChange={setAdminTimeWindow}
-            summary={ANALYTICS_SUMMARY}
+            queries={analyticsQueriesQuery.data?.queries ?? []}
+            summary={analyticsSummaryQuery.data ?? null}
             timeWindow={adminTimeWindow}
           />
         )}

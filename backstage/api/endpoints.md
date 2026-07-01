@@ -73,7 +73,7 @@ Example error response:
 | GET | `/admin/audit-logs` | Query org-scoped audit log records |
 | GET | `/admin/analytics/summary` | Return admin-only query volume, topic, unanswered, and risk summary for an org/window |
 | GET | `/admin/analytics/queries` | Return admin-only anonymized athlete query rows for review and filtering |
-| GET | `/admin/dashboard-insights/current` | Get the latest completed dashboard insight output, optionally scoped to a window |
+| GET | `/admin/dashboard-insights/current` | Get the latest completed dashboard insight output, optionally scoped to a window that overlaps the run window |
 | GET | `/admin/dashboard-insights/outputs` | List generated dashboard insight outputs |
 | GET | `/admin/dashboard-insights/outputs/{insight_id}` | Get one generated dashboard insight output |
 | GET | `/admin/dashboard-insights/runs` | List dashboard insight generation runs |

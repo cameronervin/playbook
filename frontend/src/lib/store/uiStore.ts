@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AdminTimeWindow, DashboardInsightStatus } from '@/src/types/fixtures'
+import type { AdminTimeWindow } from '@/src/types/adminAnalytics'
 
 type AdminTab = 'insights' | 'kb' | 'users'
 
@@ -11,7 +11,6 @@ interface UIState {
   adminTab: AdminTab
   adminChatOpen: boolean
   adminTimeWindow: AdminTimeWindow
-  adminInsightStatus: DashboardInsightStatus
   setActiveConversationId: (id: string | null) => void
   toggleSources: () => void
   setSourcesOpen: (open: boolean) => void
@@ -20,7 +19,6 @@ interface UIState {
   setAdminTab: (tab: AdminTab) => void
   setAdminChatOpen: (open: boolean) => void
   setAdminTimeWindow: (window: AdminTimeWindow) => void
-  setAdminInsightStatus: (status: DashboardInsightStatus) => void
   resetSessionState: () => void
 }
 
@@ -32,7 +30,6 @@ export const useUIStore = create<UIState>((set) => ({
   adminTab: 'insights',
   adminChatOpen: false,
   adminTimeWindow: '7d',
-  adminInsightStatus: 'completed',
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   toggleSources: () => set((state) => ({ sourcesOpen: !state.sourcesOpen })),
   setSourcesOpen: (open) => set({ sourcesOpen: open }),
@@ -41,7 +38,6 @@ export const useUIStore = create<UIState>((set) => ({
   setAdminTab: (tab) => set({ adminTab: tab }),
   setAdminChatOpen: (open) => set({ adminChatOpen: open }),
   setAdminTimeWindow: (window) => set({ adminTimeWindow: window }),
-  setAdminInsightStatus: (status) => set({ adminInsightStatus: status }),
   resetSessionState: () =>
     set({
       activeConversationId: null,

@@ -414,8 +414,12 @@ GET /api/v1/admin/analytics/summary?window=7d
 ```
 
 ### Analytics Queries
+Supported query parameters are `window`, `window_start`, `window_end`,
+repeatable `topic_labels`, repeatable `risk_labels`, `limit`, and `offset`.
+Unsupported query parameters return `422`.
+
 ```json
-GET /api/v1/admin/analytics/queries?window=7d&topic_labels=nil
+GET /api/v1/admin/analytics/queries?window=7d&topic_labels=nil&risk_labels=compliance
 {
   "window_start": "2026-05-27T00:00:00Z",
   "window_end": "2026-06-03T00:00:00Z",
@@ -440,6 +444,11 @@ must not include athlete names, emails, raw user IDs, provider subjects, teams,
 or storage keys.
 
 ### Current Dashboard Insight
+`window`, or explicit `window_start` and `window_end`, scopes the lookup to the
+latest completed dashboard insight run whose source window overlaps the
+requested dashboard window. This allows UTC-midnight nightly runs and
+request-relative dashboard windows to resolve to the same current output.
+
 ```json
 GET /api/v1/admin/dashboard-insights/current?window=7d
 {
@@ -456,9 +465,20 @@ GET /api/v1/admin/dashboard-insights/current?window=7d
   "topic_breakdown": [
     { "label": "NIL", "count": 48 }
   ],
+  "unanswered_questions": [
+    {
+      "message_id": "uuid",
+      "text": "Can recruiting staff text this prospect?",
+      "reason": "unsupported"
+    }
+  ],
+  "risk_breakdown": [
+    { "label": "compliance", "count": 14 }
+  ],
   "recommended_attention_areas": [
     "Clarify NIL disclosure timing in athlete-facing guidance."
   ],
+  "source_message_ids": ["uuid"],
   "generated_at": "2026-06-03T12:00:00Z"
 }
 ```

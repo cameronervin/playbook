@@ -1,0 +1,211 @@
+- input:
+    scenario: "nil-disclosure-volume"
+    prompt: "Generate dashboard insight output for the seeded NIL disclosure window."
+    source_counts:
+      query_count: 5
+      unanswered_count: 1
+      topics:
+        nil: 4
+        compliance: 1
+      risks:
+        compliance: 2
+      source_message_ids:
+        - "nil-msg-1"
+        - "nil-msg-2"
+        - "nil-msg-3"
+        - "nil-msg-4"
+        - "nil-msg-5"
+    generated_output:
+      summary: "NIL disclosure timing is the top athlete support gap in this window."
+      headline_cards:
+        - title: "NIL disclosure timing"
+          value: "4 related questions"
+          severity: "medium"
+      topic_breakdown:
+        - label: "nil"
+          count: 4
+        - label: "compliance"
+          count: 1
+      unanswered_questions:
+        - message_id: "nil-msg-5"
+          reason: "Unsupported NIL disclosure timing edge case."
+      risk_breakdown:
+        - label: "compliance"
+          count: 2
+      recommended_attention_areas:
+        - "Clarify when athletes must disclose NIL activity before promotion."
+      source_message_ids:
+        - "nil-msg-1"
+        - "nil-msg-2"
+        - "nil-msg-5"
+  expected_output:
+    expected_topic_labels: ["nil", "compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 5
+      unanswered_count: 1
+      topics:
+        nil: 4
+        compliance: 1
+      risks:
+        compliance: 2
+      source_message_ids:
+        - "nil-msg-1"
+        - "nil-msg-2"
+        - "nil-msg-3"
+        - "nil-msg-4"
+        - "nil-msg-5"
+  metadata: {category: nil}
+- input:
+    scenario: "compliance-benefits-risk"
+    prompt: "Generate dashboard insight output for the seeded compliance benefits window."
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        compliance: 4
+      risks:
+        compliance: 3
+      source_message_ids:
+        - "comp-msg-1"
+        - "comp-msg-2"
+        - "comp-msg-3"
+        - "comp-msg-4"
+    generated_output:
+      summary: "Athletes are repeatedly asking whether benefits or meals are permissible."
+      headline_cards:
+        - title: "Benefit eligibility"
+          value: "4 compliance questions"
+          severity: "high"
+      topic_breakdown:
+        - label: "compliance"
+          count: 4
+      unanswered_questions: []
+      risk_breakdown:
+        - label: "compliance"
+          count: 3
+      recommended_attention_areas:
+        - "Review extra-benefit guidance for common team travel scenarios."
+      source_message_ids:
+        - "comp-msg-1"
+        - "comp-msg-2"
+        - "comp-msg-3"
+  expected_output:
+    expected_topic_labels: ["compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        compliance: 4
+      risks:
+        compliance: 3
+      source_message_ids:
+        - "comp-msg-1"
+        - "comp-msg-2"
+        - "comp-msg-3"
+        - "comp-msg-4"
+  metadata: {category: compliance}
+- input:
+    scenario: "recruiting-contact-risk"
+    prompt: "Generate dashboard insight output for the seeded recruiting risk window."
+    source_counts:
+      query_count: 3
+      unanswered_count: 1
+      topics:
+        recruiting: 3
+      risks:
+        recruiting: 2
+      source_message_ids:
+        - "rec-msg-1"
+        - "rec-msg-2"
+        - "rec-msg-3"
+    generated_output:
+      summary: "Recruiting contact timing questions need staff review."
+      headline_cards:
+        - title: "Recruiting contact timing"
+          value: "3 related questions"
+          severity: "high"
+      topic_breakdown:
+        - label: "recruiting"
+          count: 3
+      unanswered_questions:
+        - message_id: "rec-msg-3"
+          reason: "Unsupported prospect-contact edge case."
+      risk_breakdown:
+        - label: "recruiting"
+          count: 2
+      recommended_attention_areas:
+        - "Confirm recruiting-contact guidance for staff and athletes."
+      source_message_ids:
+        - "rec-msg-1"
+        - "rec-msg-2"
+        - "rec-msg-3"
+  expected_output:
+    expected_topic_labels: ["recruiting"]
+    expected_risk_labels: ["recruiting"]
+    source_counts:
+      query_count: 3
+      unanswered_count: 1
+      topics:
+        recruiting: 3
+      risks:
+        recruiting: 2
+      source_message_ids:
+        - "rec-msg-1"
+        - "rec-msg-2"
+        - "rec-msg-3"
+  metadata: {category: recruiting}
+- input:
+    scenario: "unanswered-support-gap"
+    prompt: "Generate dashboard insight output for the seeded unanswered support gap."
+    source_counts:
+      query_count: 2
+      unanswered_count: 2
+      topics:
+        nil: 1
+        compliance: 1
+      risks:
+        compliance: 1
+      source_message_ids:
+        - "gap-msg-1"
+        - "gap-msg-2"
+    generated_output:
+      summary: "Two athlete questions were unsupported and should be reviewed."
+      headline_cards:
+        - title: "Unsupported questions"
+          value: "2 unanswered"
+          severity: "medium"
+      topic_breakdown:
+        - label: "nil"
+          count: 1
+        - label: "compliance"
+          count: 1
+      unanswered_questions:
+        - message_id: "gap-msg-1"
+          reason: "No approved answer for local NIL collective policy."
+        - message_id: "gap-msg-2"
+          reason: "No approved answer for compliance appeal process."
+      risk_breakdown:
+        - label: "compliance"
+          count: 1
+      recommended_attention_areas:
+        - "Add reviewed guidance for unanswered NIL and compliance edge cases."
+      source_message_ids:
+        - "gap-msg-1"
+        - "gap-msg-2"
+  expected_output:
+    expected_topic_labels: ["nil", "compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 2
+      unanswered_count: 2
+      topics:
+        nil: 1
+        compliance: 1
+      risks:
+        compliance: 1
+      source_message_ids:
+        - "gap-msg-1"
+        - "gap-msg-2"
+  metadata: {category: unanswered}

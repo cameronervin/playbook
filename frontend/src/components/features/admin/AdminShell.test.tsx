@@ -96,6 +96,119 @@ const createAdminChatSessionMutateAsync = vi.hoisted(() => vi.fn())
 const submitAdminChatMessageMutateAsync = vi.hoisted(() => vi.fn())
 const startAdminChatStream = vi.hoisted(() => vi.fn())
 const stopAdminChatStream = vi.hoisted(() => vi.fn())
+const createDashboardInsightRunMutateAsync = vi.hoisted(() => vi.fn())
+const adminAnalyticsHookCalls = vi.hoisted(
+  () =>
+    [] as Array<{
+      hook: string
+      enabled: boolean
+      window?: string
+      runId?: string | null
+    }>,
+)
+const analyticsSummary = vi.hoisted(() => ({
+  window_start: '2026-05-27T00:00:00Z',
+  window_end: '2026-06-03T00:00:00Z',
+  query_volume: 128,
+  top_topics: [
+    { label: 'nil', count: 48 },
+    { label: 'compliance', count: 31 },
+    { label: 'recruiting', count: 18 },
+    { label: 'travel', count: 14 },
+  ],
+  unanswered_count: 12,
+  risk_counts: { nil: 22, compliance: 14, recruiting: 3 },
+}))
+const analyticsQueries = vi.hoisted(() => ({
+  window_start: '2026-05-27T00:00:00Z',
+  window_end: '2026-06-03T00:00:00Z',
+  queries: [
+    {
+      message_id: 'message-1',
+      anonymous_user_key: 'anon_1111',
+      text: 'When do I disclose an NIL deal?',
+      created_at: '2026-06-01T15:32:00Z',
+      topic_labels: ['nil'],
+      risk_labels: ['compliance'],
+      response_status: 'complete',
+      answer_type: 'grounded_answer',
+      unanswered_reason: null,
+    },
+    {
+      message_id: 'message-2',
+      anonymous_user_key: 'anon_2222',
+      text: 'Can recruiting staff text this prospect?',
+      created_at: '2026-06-02T15:32:00Z',
+      topic_labels: ['recruiting'],
+      risk_labels: ['recruiting'],
+      response_status: 'declined',
+      answer_type: 'unsupported',
+      unanswered_reason: 'unsupported',
+    },
+  ],
+}))
+const dashboardInsight = vi.hoisted(() => ({
+  id: 'insight-1',
+  run_id: 'run-1',
+  summary:
+    'NIL disclosure timing is the clearest support gap this week. Athletes repeatedly asked when in-kind benefits must be reported.',
+  headline_cards: [
+    {
+      title: 'NIL disclosure timing',
+      value: '18 questions',
+      severity: 'medium' as const,
+    },
+    {
+      title: 'Recruiting-contact rules',
+      value: '6 high-risk questions',
+      severity: 'high' as const,
+    },
+  ],
+  topic_breakdown: [{ label: 'nil', count: 48 }],
+  unanswered_questions: [
+    {
+      message_id: 'message-2',
+      text: 'Can recruiting staff text this prospect?',
+      reason: 'unsupported',
+    },
+  ],
+  risk_breakdown: [{ label: 'recruiting', count: 3 }],
+  recommended_attention_areas: [
+    'Clarify NIL disclosure timing for in-kind benefits in athlete-facing guidance.',
+    'Publish the NIL agency-registration deadline for the upcoming year.',
+  ],
+  source_message_ids: ['message-1', 'message-2'],
+  generated_at: '2026-06-03T12:00:00Z',
+}))
+const adminAnalyticsState = vi.hoisted(() => ({
+  currentInsight: null as typeof dashboardInsight | null,
+  currentInsightError: false,
+  currentInsightLoading: false,
+  queries: analyticsQueries,
+  queriesError: false,
+  queriesLoading: false,
+  run: null as {
+    id: string
+    organization_id: string
+    requested_by: string | null
+    trigger_type: 'manual' | 'nightly'
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    window_start: string
+    window_end: string
+    source_filters: Record<string, unknown>
+    error_message: string | null
+    created_at: string
+    updated_at: string
+    output: typeof dashboardInsight | null
+  } | null,
+  runError: false,
+  runLoading: false,
+  summary: analyticsSummary,
+  summaryError: false,
+  summaryLoading: false,
+  createRunError: false,
+  createRunPending: false,
+}))
 const adminChatMessages = vi.hoisted(
   () =>
     [] as Array<{
@@ -378,6 +491,58 @@ vi.mock('@/src/hooks/useAdminChat', () => ({
   }),
 }))
 
+vi.mock('@/src/hooks/useAdminAnalytics', () => ({
+  toManualRunWindow: (window: string) =>
+    window === 'custom'
+      ? null
+      : {
+          window_start: '2026-06-01T00:00:00.000Z',
+          window_end: '2026-06-08T00:00:00.000Z',
+          source_filters: {},
+        },
+  useAdminAnalyticsSummary: (window: string, enabled: boolean) => {
+    adminAnalyticsHookCalls.push({ hook: 'summary', window, enabled })
+    return {
+      data: enabled ? adminAnalyticsState.summary : undefined,
+      isError: adminAnalyticsState.summaryError,
+      isFetching: false,
+      isLoading: adminAnalyticsState.summaryLoading,
+    }
+  },
+  useAdminAnalyticsQueries: (window: string, enabled: boolean) => {
+    adminAnalyticsHookCalls.push({ hook: 'queries', window, enabled })
+    return {
+      data: enabled ? adminAnalyticsState.queries : undefined,
+      isError: adminAnalyticsState.queriesError,
+      isFetching: false,
+      isLoading: adminAnalyticsState.queriesLoading,
+    }
+  },
+  useCurrentDashboardInsight: (window: string, enabled: boolean) => {
+    adminAnalyticsHookCalls.push({ hook: 'current', window, enabled })
+    return {
+      data: enabled ? adminAnalyticsState.currentInsight : undefined,
+      isError: adminAnalyticsState.currentInsightError,
+      isFetching: false,
+      isLoading: adminAnalyticsState.currentInsightLoading,
+    }
+  },
+  useDashboardInsightRun: (runId: string | null, enabled: boolean) => {
+    adminAnalyticsHookCalls.push({ hook: 'run', runId, enabled })
+    return {
+      data: enabled ? adminAnalyticsState.run : undefined,
+      isError: adminAnalyticsState.runError,
+      isFetching: false,
+      isLoading: adminAnalyticsState.runLoading,
+    }
+  },
+  useCreateDashboardInsightRun: () => ({
+    mutateAsync: createDashboardInsightRunMutateAsync,
+    isError: adminAnalyticsState.createRunError,
+    isPending: adminAnalyticsState.createRunPending,
+  }),
+}))
+
 vi.mock('@/src/hooks/useKBDocuments', () => ({
   useKBCollections: () => ({
     data: adminQueryState.kbLoading ? undefined : kbCollections,
@@ -485,6 +650,26 @@ describe('AdminShell', () => {
     submitAdminChatMessageMutateAsync.mockClear()
     startAdminChatStream.mockClear()
     stopAdminChatStream.mockClear()
+    createDashboardInsightRunMutateAsync.mockClear()
+    createDashboardInsightRunMutateAsync.mockResolvedValue({
+      run_id: 'run-started',
+      status: 'pending',
+    })
+    adminAnalyticsHookCalls.splice(0, adminAnalyticsHookCalls.length)
+    adminAnalyticsState.currentInsight = dashboardInsight
+    adminAnalyticsState.currentInsightError = false
+    adminAnalyticsState.currentInsightLoading = false
+    adminAnalyticsState.queries = analyticsQueries
+    adminAnalyticsState.queriesError = false
+    adminAnalyticsState.queriesLoading = false
+    adminAnalyticsState.run = null
+    adminAnalyticsState.runError = false
+    adminAnalyticsState.runLoading = false
+    adminAnalyticsState.summary = analyticsSummary
+    adminAnalyticsState.summaryError = false
+    adminAnalyticsState.summaryLoading = false
+    adminAnalyticsState.createRunError = false
+    adminAnalyticsState.createRunPending = false
     adminChatMessages.splice(0, adminChatMessages.length)
     uploadDocumentMutate.mockResolvedValue(kbDocuments[0])
     createAdminChatSessionMutateAsync.mockResolvedValue({
@@ -634,7 +819,6 @@ describe('AdminShell', () => {
       adminTab: 'insights',
       adminChatOpen: false,
       adminTimeWindow: '7d',
-      adminInsightStatus: 'completed',
     })
   })
 
@@ -643,6 +827,15 @@ describe('AdminShell', () => {
     renderAdmin()
 
     expect(screen.getByRole('heading', { name: /admins only/i })).toBeInTheDocument()
+    expect(createDashboardInsightRunMutateAsync).not.toHaveBeenCalled()
+    expect(adminAnalyticsHookCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ hook: 'summary', enabled: false }),
+        expect.objectContaining({ hook: 'queries', enabled: false }),
+        expect.objectContaining({ hook: 'current', enabled: false }),
+        expect.objectContaining({ hook: 'run', enabled: false }),
+      ]),
+    )
   })
 
   it('renders a workspace skeleton while admin auth resolves', () => {
@@ -719,14 +912,65 @@ describe('AdminShell', () => {
     expect(screen.getByText(/AI summary/i)).toBeInTheDocument()
     expect(screen.getByText(/NIL disclosure timing is the clearest support gap/i)).toBeInTheDocument()
     expect(screen.getByText(/NIL questions/i)).toBeInTheDocument()
-    expect(screen.getByText(/High-risk flags/i)).toBeInTheDocument()
+    expect(screen.getByText(/Nil flags/i)).toBeInTheDocument()
     expect(screen.getByText(/Common topics/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^Risk flags$/i })).toBeInTheDocument()
     expect(screen.getByText(/Query volume/i)).toBeInTheDocument()
-    expect(screen.getByText(/128 this week/i)).toBeInTheDocument()
+    expect(screen.getByText(/128 in window/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Knowledge base 1 failed document/i })).toBeInTheDocument()
     expect(screen.queryByText(/Fixture-backed until Phase 4 APIs land/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Grounded rate/i)).not.toBeInTheDocument()
+  })
+
+  it('starts a manual dashboard insight run for concrete UTC windows', async () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Regenerate$/i }))
+
+    await waitFor(() =>
+      expect(createDashboardInsightRunMutateAsync).toHaveBeenCalledWith({
+        window_start: '2026-06-01T00:00:00.000Z',
+        window_end: '2026-06-08T00:00:00.000Z',
+        source_filters: {},
+      }),
+    )
+  })
+
+  it('renders an empty-current dashboard insight state', () => {
+    currentUser.role = 'super_admin'
+    adminAnalyticsState.currentInsight = null
+
+    renderAdmin()
+
+    expect(
+      screen.getByText(/No dashboard insight has been generated for this window yet/i),
+    ).toBeInTheDocument()
+  })
+
+  it('renders failed dashboard insight run visibility', () => {
+    currentUser.role = 'super_admin'
+    adminAnalyticsState.currentInsight = null
+    adminAnalyticsState.run = {
+      id: 'run-failed',
+      organization_id: 'org-1',
+      requested_by: 'u1',
+      trigger_type: 'manual',
+      status: 'failed',
+      window_start: '2026-06-01T00:00:00Z',
+      window_end: '2026-06-08T00:00:00Z',
+      source_filters: {},
+      error_message: 'RuntimeError',
+      created_at: '2026-06-08T12:00:00Z',
+      updated_at: '2026-06-08T12:01:00Z',
+      output: null,
+    }
+
+    renderAdmin()
+
+    expect(screen.getByText(/^Failed$/i)).toBeInTheDocument()
+    expect(screen.getByText('RuntimeError')).toBeInTheDocument()
+    expect(screen.queryByText(/secret/i)).not.toBeInTheDocument()
   })
 
   it('renders shared admin page headers for knowledge base and users', async () => {
@@ -1271,4 +1515,4 @@ describe('AdminShell', () => {
         '/api/v1/admin/chat/sessions/admin-chat-session-1/messages/admin-assistant-message-1/stream?task_id=admin-chat-task-1',
     })
   })
-})
+}, 15_000)

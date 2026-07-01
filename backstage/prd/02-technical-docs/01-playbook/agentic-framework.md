@@ -352,15 +352,22 @@ Constraints:
 
 ## Observability
 
-Agent runs should emit:
-- request ID,
-- conversation ID, dashboard insight run ID, or admin chat session ID,
-- organization ID,
-- topic/risk labels,
-- retrieval document IDs and scores,
-- answer type,
-- token usage,
-- latency,
-- non-sensitive error reason.
+Runtime LangGraph tracing uses Langfuse when both `TRACING_ENABLED=true` and
+`LANGFUSE_ENABLED=true` are configured with `LANGFUSE_PUBLIC_KEY`,
+`LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` for the backend API and backend
+Celery workers. Startup logs emit a `tracing_startup_check` or
+`backend_worker_tracing_startup_check` readiness payload so operators can see
+whether callbacks will attach.
 
-Logs must not include OAuth tokens, secrets, or unnecessary PII.
+Traces cover athlete chat, conversation title, dashboard insight, and admin
+chat graph runs. Each traced run uses tags in the form `playbook`, `env:*`,
+`mode:*`, and `phase:*`. Trace metadata is allowlisted to stable IDs only:
+environment, mode, phase, task ID, organization ID, conversation ID, session
+ID, run ID, and assistant/user/message IDs.
+
+Trace metadata and logs must not include raw query text, prompts, source URIs,
+storage keys, signed URLs, attached file IDs, athlete owner identity, OAuth
+tokens, secrets, or unnecessary PII. The Langfuse runtime client installs a
+recursive mask that redacts prompts, messages, model inputs/outputs, raw text,
+source locations, signed URLs, emails, tokens, secrets, and storage keys before
+payloads leave the backend process.

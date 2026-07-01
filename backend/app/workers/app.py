@@ -31,6 +31,8 @@ from app.infrastructure.checkpointer import (
     create_checkpointer,
     create_checkpointer_pool,
 )
+from app.observability.agent_trace import verify_tracing_configuration
+from app.observability.langfuse_init import init_langfuse, shutdown_langfuse
 from app.workers.queues import (
     BACKEND_INSIGHTS_QUEUE,
     TASK_QUEUES,
@@ -246,6 +248,10 @@ def init_worker_resources(**_: Any) -> None:
     if _worker_resources_initialized:
         return
 
+    init_langfuse(settings)
+    tracing_status = verify_tracing_configuration(settings)
+    logger.info("backend_worker_tracing_startup_check", **tracing_status)
+
     _worker_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(_worker_loop)
     _worker_loop_owner_thread = threading.get_ident()
@@ -270,6 +276,7 @@ def teardown_worker_resources(**_: Any) -> None:
     _worker_loop = None
     _worker_loop_owner_thread = None
     _worker_resources_initialized = False
+    shutdown_langfuse()
     logger.info("backend_worker_shutdown")
 
 

@@ -20,6 +20,12 @@ Playbook should not be considered ready for athlete use until core answer behavi
 | Dashboard insight evals | Agent-curated topics and risk summaries match seeded data | US-18, US-20, US-21, US-26 |
 | Admin chat evals | Admin chat answers cite authorized analytics or dashboard insight records | US-22, US-26 |
 
+Phase 4 includes the first concrete dashboard insight eval spec:
+`dashboard_insights`, a deterministic structural golden set with NIL,
+compliance, recruiting, and unanswered support-gap cases. It verifies expected
+topic/risk labels, source-message grounding, and bounded metrics without an
+external judge model.
+
 ## Golden Set Categories
 
 1. NIL process question with clear source.

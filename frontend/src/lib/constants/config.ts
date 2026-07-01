@@ -26,6 +26,11 @@ export const QUERY_KEYS = {
   kbMetadataTags: 'kbMetadataTags',
   adminUsers: 'adminUsers',
   auditLogs: 'auditLogs',
+  adminAnalyticsSummary: 'adminAnalyticsSummary',
+  adminAnalyticsQueries: 'adminAnalyticsQueries',
+  dashboardInsightCurrent: 'dashboardInsightCurrent',
+  dashboardInsightRun: 'dashboardInsightRun',
+  dashboardInsightOutputs: 'dashboardInsightOutputs',
   adminChatSessions: 'adminChatSessions',
   adminChatSessionDetail: 'adminChatSessionDetail',
 } as const

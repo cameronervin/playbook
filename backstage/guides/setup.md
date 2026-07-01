@@ -138,6 +138,12 @@ cp ../deploy/envs/.env.local .env
 # LITELLM_BASE_URL=http://localhost:4000
 # S3_ENDPOINT_URL=http://localhost:9000
 # S3_PUBLIC_ENDPOINT_URL=http://localhost:9000
+# Optional runtime tracing for the API and backend Celery workers:
+# TRACING_ENABLED=true
+# LANGFUSE_ENABLED=true
+# LANGFUSE_PUBLIC_KEY=<public key>
+# LANGFUSE_SECRET_KEY=<secret key>
+# LANGFUSE_HOST=https://cloud.langfuse.com
 
 # Apply database migrations
 uv run alembic upgrade head
@@ -340,6 +346,13 @@ KB infrastructure definitions:
    validating the `playbook-fast` LiteLLM summary alias. Hybrid rerank can be
    smoked separately with `--check-litellm-rerank` once the local reranker alias
    is in scope.
+7. If runtime tracing is enabled, set the same `TRACING_ENABLED` and
+   `LANGFUSE_*` values for the backend API and backend Celery workers, then
+   restart both. Confirm startup logs show `tracing_startup_check` and
+   `backend_worker_tracing_startup_check` with `ready=true`; submit an admin
+   chat question or trigger a dashboard insight run and confirm the Langfuse
+   trace has `playbook`, `env:*`, `mode:*`, and `phase:*` tags plus safe ID
+   metadata only.
 
 ### Direct Upload Smoke
 

@@ -82,6 +82,7 @@ class AdminChatExecutor:
             extra_configurable={
                 "task_id": task_id,
                 "session_id": str(session_id),
+                "user_message_id": str(user_message_id),
                 "assistant_message_id": str(assistant_message_id),
                 "organization_id": str(organization_id),
             },

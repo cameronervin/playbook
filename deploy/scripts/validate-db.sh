@@ -48,7 +48,7 @@ else
 fi
 
 # 2. PostgreSQL accepting connections
-if $CONTAINER_CMD exec "$CONTAINER_NAME" pg_isready -U "$DB_USER" &> /dev/null; then
+if $CONTAINER_CMD exec "$CONTAINER_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME" &> /dev/null; then
     print_status 0 "PostgreSQL is accepting connections"
 else
     print_status 1 "PostgreSQL is not ready"

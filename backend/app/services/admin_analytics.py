@@ -65,6 +65,7 @@ class AdminAnalyticsService:
             window_start=resolved_start,
             window_end=resolved_end,
             source_filters=source_filters,
+            limit=None,
         )
         return _summary_from_records(
             records,
@@ -95,8 +96,9 @@ class AdminAnalyticsService:
             window_start=resolved_start,
             window_end=resolved_end,
             source_filters=source_filters,
+            limit=limit,
+            offset=offset,
         )
-        page = records[offset : offset + limit]
         return AdminAnalyticsQueryListResponse(
             window_start=resolved_start,
             window_end=resolved_end,
@@ -106,7 +108,7 @@ class AdminAnalyticsService:
                     organization_id=actor.organization_id,
                     settings=self.settings,
                 )
-                for record in page
+                for record in records
             ],
         )
 
@@ -125,6 +127,7 @@ class AdminAnalyticsService:
             window_start=window_start,
             window_end=window_end,
             source_filters=source_filters,
+            limit=None,
         )
         resolved_max_queries = int(
             max_queries
@@ -156,14 +159,17 @@ class AdminAnalyticsService:
         window_start: datetime,
         window_end: datetime,
         source_filters: dict[str, Any] | None,
+        limit: int | None,
+        offset: int = 0,
     ) -> list[AnalyticsQueryRecord]:
-        records = await self.analytics_repo.list_query_records(
+        return await self.analytics_repo.list_query_records(
             organization_id=organization_id,
             window_start=window_start,
             window_end=window_end,
-            limit=int(getattr(self.settings, "DASHBOARD_ANALYTICS_MAX_QUERY_ROWS", 5000)),
+            source_filters=source_filters,
+            limit=limit,
+            offset=offset,
         )
-        return _apply_source_filters(records, source_filters or {})
 
 
 def resolve_analytics_window(
@@ -294,35 +300,6 @@ def _anonymous_user_key(
         "sha256",
     ).hex()[:16]
     return f"anon_{digest}"
-
-
-def _apply_source_filters(
-    records: list[AnalyticsQueryRecord],
-    source_filters: dict[str, Any],
-) -> list[AnalyticsQueryRecord]:
-    topic_filter = _string_filter(source_filters.get("topic_labels"))
-    risk_filter = _string_filter(source_filters.get("risk_labels"))
-    status_filter = _string_filter(source_filters.get("message_statuses"))
-    filtered: list[AnalyticsQueryRecord] = []
-    for record in records:
-        if topic_filter and not topic_filter.intersection(record.topic_labels):
-            continue
-        if risk_filter and not risk_filter.intersection(record.risk_labels):
-            continue
-        if status_filter and (record.response_status or "") not in status_filter:
-            continue
-        filtered.append(record)
-    return filtered
-
-
-def _string_filter(value: Any) -> set[str]:
-    if value is None:
-        return set()
-    if isinstance(value, str):
-        return {value} if value else set()
-    if isinstance(value, list):
-        return {str(item) for item in value if str(item)}
-    return {str(value)}
 
 
 def _aware_utc(value: datetime) -> datetime:

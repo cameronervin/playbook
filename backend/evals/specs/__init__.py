@@ -9,8 +9,12 @@ content rubric and, because it is a KB-using chain, additionally runs Ragas
 from __future__ import annotations
 
 from evals.core.types import EvalSpec
+from evals.specs.dashboard_insights import SPEC as dashboard_insights_spec
 from evals.specs.example import SPEC as example_spec
 
-REGISTRY: dict[str, EvalSpec] = {example_spec.name: example_spec}
+REGISTRY: dict[str, EvalSpec] = {
+    example_spec.name: example_spec,
+    dashboard_insights_spec.name: dashboard_insights_spec,
+}
 
 __all__ = ["REGISTRY"]

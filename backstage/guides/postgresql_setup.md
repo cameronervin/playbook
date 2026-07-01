@@ -90,8 +90,8 @@ alembic upgrade head
 ./deploy/scripts/validate-db.sh
 ```
 
-This checks the container is running and healthy, the database exists, and
-credentials work.
+This checks the container is running, accepts connections to the configured
+database, the database exists, and credentials work.
 
 ## Reset (destructive)
 

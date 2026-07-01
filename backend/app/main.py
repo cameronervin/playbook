@@ -46,6 +46,7 @@ from app.infrastructure.storage import cleanup_storage_provider, get_storage_pro
 from app.infrastructure.streaming import cleanup_agent_stream_provider
 from app.middleware import setup_cors, setup_request_context, setup_session_refresh
 from app.observability.agent_trace import verify_tracing_configuration
+from app.observability.langfuse_init import init_langfuse, shutdown_langfuse
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -68,6 +69,7 @@ async def _init_infrastructure(app: FastAPI, settings: Settings) -> tuple:
     kb_provider = None
 
     # 1. Observability
+    init_langfuse(settings)
     tracing_status = verify_tracing_configuration(settings)
     logger.info("tracing_startup_check", **tracing_status)
 
@@ -143,6 +145,8 @@ async def _shutdown_infrastructure(checkpointer_pool: object, kb_provider: objec
         logger.info("Database engine disposed")
     except Exception as e:  # noqa: BLE001
         logger.warning("Error disposing database engine", error=str(e))
+
+    shutdown_langfuse()
 
 
 @asynccontextmanager

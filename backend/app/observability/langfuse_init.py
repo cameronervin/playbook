@@ -9,20 +9,83 @@ Langfuse automatically captures:
 - Tool calls (name, input, output)
 - Nested trace trees for full execution visibility
 
-Used by the eval harness (``evals/``) to link runs/scores to traces, and
-available to the app for runtime tracing. All Langfuse imports are lazy so the
-module loads without the SDK installed (it ships in the ``evals`` extra).
+Used by the eval harness (``evals/``) to link runs/scores to traces and by the
+runtime app/worker processes for LangGraph tracing. Langfuse imports remain
+lazy so settings/tests can import this module without constructing a client.
 """
 
+from __future__ import annotations
+
 import os
+import re
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import structlog
 
 from app.core.config import Settings, get_settings
+from app.core.log_redaction import REDACTION, redact_string
 
 logger = structlog.get_logger(__name__)
 
 _initialized = False
+_client: Any | None = None
+
+_EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+_SIGNED_STORAGE_RE = re.compile(
+    r"(?i)(x-amz-signature=|x-amz-security-token=|signature=|s3://|gs://)"
+)
+_TRACE_CONTENT_KEYS = {
+    "answer",
+    "completion",
+    "completions",
+    "content",
+    "contents",
+    "extracted_text",
+    "file_contents",
+    "input",
+    "inputs",
+    "message",
+    "messages",
+    "model_input",
+    "model_inputs",
+    "model_output",
+    "model_outputs",
+    "output",
+    "outputs",
+    "prompt",
+    "prompts",
+    "question",
+    "raw_text",
+    "response",
+    "responses",
+    "tool_input",
+    "tool_inputs",
+    "tool_output",
+    "tool_outputs",
+}
+_TRACE_SENSITIVE_KEYS = {
+    "email",
+    "emails",
+    "source_uri",
+    "source_uris",
+    "presigned_url",
+    "presigned_urls",
+    "signed_url",
+    "signed_urls",
+    "storage_key",
+    "storage_keys",
+}
+_TRACE_SENSITIVE_KEY_PARTS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "password",
+    "private_key",
+    "secret",
+    "signature",
+    "token",
+)
 
 
 def is_langfuse_ready() -> bool:
@@ -30,38 +93,61 @@ def is_langfuse_ready() -> bool:
     return _initialized
 
 
-def init_langfuse(settings: Settings | None = None) -> None:
-    """Initialize Langfuse by setting environment variables for the SDK.
+def init_langfuse(settings: Settings | None = None) -> bool:
+    """Initialize Langfuse for eval and runtime tracing.
 
-    The Langfuse Python SDK (v3+) uses a singleton pattern and reads
-    credentials from environment variables automatically. This function
-    sets the env vars from our application settings and validates
-    the connection.
-
-    Must be called once at application startup before any CallbackHandler
-    is created.
+    Returns True when a client is ready. ``LANGFUSE_ENABLED`` controls client
+    initialization; runtime callback attachment is additionally gated by
+    ``TRACING_ENABLED`` in ``agent_trace``.
     """
-    global _initialized
+    global _client, _initialized
     app_settings = settings or get_settings()
 
     if not app_settings.LANGFUSE_ENABLED:
-        logger.info("Langfuse tracing is disabled", langfuse_enabled=False)
-        return
+        _reset_langfuse_state()
+        logger.info("langfuse_tracing_disabled", langfuse_enabled=False)
+        return False
 
     if not app_settings.LANGFUSE_SECRET_KEY or not app_settings.LANGFUSE_PUBLIC_KEY:
+        _reset_langfuse_state()
         logger.warning(
-            "Langfuse enabled but credentials missing",
-            has_secret_key=bool(app_settings.LANGFUSE_SECRET_KEY),
-            has_public_key=bool(app_settings.LANGFUSE_PUBLIC_KEY),
+            "langfuse_credentials_missing",
+            private_credential_configured=bool(app_settings.LANGFUSE_SECRET_KEY),
+            public_key_configured=bool(app_settings.LANGFUSE_PUBLIC_KEY),
         )
-        return
+        return False
+
+    try:
+        from langfuse import Langfuse  # noqa: PLC0415
+    except ImportError as exc:
+        _reset_langfuse_state()
+        logger.warning("langfuse_sdk_unavailable", error=str(exc))
+        return False
 
     os.environ["LANGFUSE_SECRET_KEY"] = app_settings.LANGFUSE_SECRET_KEY
     os.environ["LANGFUSE_PUBLIC_KEY"] = app_settings.LANGFUSE_PUBLIC_KEY
     os.environ["LANGFUSE_HOST"] = app_settings.LANGFUSE_HOST
 
+    try:
+        _client = Langfuse(
+            public_key=app_settings.LANGFUSE_PUBLIC_KEY,
+            secret_key=app_settings.LANGFUSE_SECRET_KEY,
+            host=app_settings.LANGFUSE_HOST,
+            environment=app_settings.ENVIRONMENT,
+            mask=mask_langfuse_data,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _reset_langfuse_state()
+        logger.warning("langfuse_initialization_failed", error=str(exc))
+        return False
+
     _initialized = True
-    logger.info("Langfuse tracing initialized", host=app_settings.LANGFUSE_HOST)
+    logger.info(
+        "langfuse_tracing_initialized",
+        host=app_settings.LANGFUSE_HOST,
+        environment=app_settings.ENVIRONMENT,
+    )
+    return True
 
 
 def create_langfuse_handler():
@@ -80,7 +166,11 @@ def create_langfuse_handler():
     if not _initialized:
         return None
 
-    from langfuse.langchain import CallbackHandler  # noqa: PLC0415
+    try:
+        from langfuse.langchain import CallbackHandler  # noqa: PLC0415
+    except ImportError as exc:
+        logger.warning("langfuse_callback_handler_unavailable", error=str(exc))
+        return None
 
     return CallbackHandler()
 
@@ -91,13 +181,65 @@ def shutdown_langfuse() -> None:
     Must be called at application shutdown to ensure all traces
     are sent before the process exits.
     """
-    if not _initialized:
+    global _client
+    if not _initialized and _client is None:
         return
 
     try:
-        from langfuse import get_client  # noqa: PLC0415
+        if _client is not None:
+            _client.shutdown()
+        else:
+            from langfuse import get_client  # noqa: PLC0415
 
-        get_client().shutdown()
-        logger.info("Langfuse client shut down successfully")
+            get_client().shutdown()
+        logger.info("langfuse_client_shutdown")
     except Exception as e:  # noqa: BLE001
-        logger.warning("Error shutting down Langfuse", error=str(e))
+        logger.warning("langfuse_shutdown_failed", error=str(e))
+    finally:
+        _reset_langfuse_state()
+
+
+def mask_langfuse_data(data: Any) -> Any:
+    """Recursively redact trace payload data before it leaves the process."""
+    if isinstance(data, str):
+        return _redact_trace_string(data)
+    if isinstance(data, Mapping):
+        return {
+            key: REDACTION
+            if _is_trace_sensitive_key(key)
+            else mask_langfuse_data(value)
+            for key, value in data.items()
+        }
+    if isinstance(data, tuple):
+        return tuple(mask_langfuse_data(item) for item in data)
+    if isinstance(data, Sequence) and not isinstance(data, (bytes, bytearray)):
+        return [mask_langfuse_data(item) for item in data]
+    return data
+
+
+def _reset_langfuse_state() -> None:
+    global _client, _initialized
+    _initialized = False
+    _client = None
+
+
+def _is_trace_sensitive_key(key: Any) -> bool:
+    normalized = _normalize_key(key)
+    if normalized.endswith(("_id", "_ids")):
+        return False
+    return (
+        normalized in _TRACE_CONTENT_KEYS
+        or normalized in _TRACE_SENSITIVE_KEYS
+        or any(part in normalized for part in _TRACE_SENSITIVE_KEY_PARTS)
+    )
+
+
+def _normalize_key(key: Any) -> str:
+    snake_case = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key))
+    return snake_case.lower().replace("-", "_").replace(" ", "_")
+
+
+def _redact_trace_string(value: str) -> str:
+    if _SIGNED_STORAGE_RE.search(value):
+        return REDACTION
+    return _EMAIL_RE.sub(REDACTION, redact_string(value))

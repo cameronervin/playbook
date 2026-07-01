@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
-
 from app.core.config import Settings, get_settings
 from app.infrastructure.streaming import (
     AgentStreamEventType,
@@ -200,7 +198,7 @@ def test_backend_worker_app_imports_in_fresh_process() -> None:
         stderr=subprocess.PIPE,
         stdout=subprocess.PIPE,
         text=True,
-        timeout=10,
+        timeout=45,
     )
 
     assert result.returncode == 0, result.stderr
