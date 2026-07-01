@@ -178,6 +178,15 @@ async def test_outbox_worker_dispatches_admin_document(db_session, test_settings
         source_type="admin_upload",
         kb_document_id=document_id,
     )
+    await KBDocumentRepository(db_session).update_metadata(
+        document,
+        metadata_tags={"collection": "compliance", "tag_slugs": ["compliance"]},
+        source_date=datetime(2026, 2, 1, tzinfo=UTC).date(),
+        visibility_policy={"scope": "all_athletes"},
+        is_official=True,
+        priority=0,
+    )
+    await db_session.commit()
     storage = FakeWorkerStorageProvider()
     kb_provider = FakeWorkerKBProvider()
 
@@ -204,6 +213,14 @@ async def test_outbox_worker_dispatches_admin_document(db_session, test_settings
     assert request.organization_id == organization_id
     assert request.playbook_document_id == document_id
     assert request.source_uri.startswith("https://storage.example/")
+    assert request.source_date == datetime(2026, 2, 1, tzinfo=UTC).date()
+    assert request.visibility_policy == {"scope": "all_athletes"}
+    assert request.metadata_tags == {
+        "collection": "compliance",
+        "tag_slugs": ["compliance"],
+    }
+    assert request.is_official is True
+    assert request.priority == 0
 
     events = list(
         (

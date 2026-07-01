@@ -21,6 +21,8 @@ __all__ = [
     "KBDocumentIngestRequest",
     "KBConversationFileIngestRequest",
     "KBDocumentIngestResponse",
+    "KBDocumentMetadataRefreshRequest",
+    "KBDocumentMetadataRefreshResponse",
     "KBDocumentStatusResponse",
 ]
 
@@ -111,6 +113,28 @@ class KBDocumentIngestResponse(BaseModel):
     conversation_file_id: UUID | None = None
     task_id: str | None = None
     status: str = "pending"
+
+
+class KBDocumentMetadataRefreshRequest(BaseModel):
+    """Semantic backend-to-KB-service metadata refresh request."""
+
+    source_date: date | None = None
+    is_official: bool = True
+    priority: int = 0
+    visibility_policy: dict[str, Any] = Field(
+        default_factory=lambda: {"scope": "all_athletes"}
+    )
+    metadata_tags: dict[str, Any] = Field(default_factory=dict)
+
+
+class KBDocumentMetadataRefreshResponse(BaseModel):
+    """Semantic backend-to-KB-service metadata refresh response."""
+
+    kb_service_document_id: UUID
+    source_type: KBSourceType = "admin_upload"
+    playbook_document_id: UUID | None = None
+    updated_embedding_count: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class KBDocumentStatusResponse(BaseModel):

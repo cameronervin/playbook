@@ -2,7 +2,7 @@
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import type { ReactNode } from 'react'
-import { AlertTriangle, FileText, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { cn } from '@/src/lib/utils/cn'
 import type { KBDocument } from '@/src/types/kb'
 
@@ -25,6 +25,7 @@ export function AdminKBDocumentRow({
   const pendingUpload = document.processing_status === 'upload_pending'
   const queued = document.processing_status === 'uploaded'
   const processing = document.processing_status === 'processing'
+  const ready = document.processing_status === 'ready'
   const extension = getDocumentExtension(document)
   const tags = getDocumentTags(document).slice(0, 2)
 
@@ -73,7 +74,13 @@ export function AdminKBDocumentRow({
             Failed
           </span>
         )}
-        {!pendingUpload && !queued && !processing && !failed && <span className="pb-admin-kb-ext">{extension}</span>}
+        {ready && (
+          <span className="pb-admin-kb-status text-success">
+            <CheckCircle2 size={14} />
+            Ready
+          </span>
+        )}
+        {!pendingUpload && !queued && !processing && !failed && !ready && <span className="pb-admin-kb-ext">{extension}</span>}
         <DocumentActions
           canManage={canManage}
           documentTitle={document.title}

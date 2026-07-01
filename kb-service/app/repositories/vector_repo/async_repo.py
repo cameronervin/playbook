@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.configuration import Configuration
@@ -15,6 +15,7 @@ from app.repositories.vector_repo.queries import (
     _build_lexical_search_statement,
     _build_search_statement,
     _document_metadata_match,
+    _refreshed_cmetadata_value,
 )
 from app.repositories.vector_repo.ranking import (
     _dedupe_fetch_limit,
@@ -168,6 +169,20 @@ class AsyncVectorRepository:
     async def delete_document_embeddings(self, document_id: uuid.UUID) -> int:
         result = await self._session.execute(
             delete(VectorEmbedding).where(_document_metadata_match(document_id))
+        )
+        await self._session.commit()
+        return result.rowcount or 0
+
+    async def refresh_document_metadata(
+        self,
+        document_id: uuid.UUID,
+        metadata: dict[str, Any],
+        stale_metadata_keys: set[str] | None = None,
+    ) -> int:
+        result = await self._session.execute(
+            update(VectorEmbedding)
+            .where(_document_metadata_match(document_id))
+            .values(cmetadata=_refreshed_cmetadata_value(metadata, stale_metadata_keys))
         )
         await self._session.commit()
         return result.rowcount or 0

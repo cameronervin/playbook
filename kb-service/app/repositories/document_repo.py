@@ -175,6 +175,20 @@ class DocumentRepository:
         await self._session.refresh(doc)
         return doc
 
+    async def update_metadata(
+        self,
+        document_id: uuid.UUID,
+        metadata: dict,
+    ) -> Document | None:
+        doc = await self.get(document_id)
+        if not doc:
+            return None
+        doc.metadata_ = metadata
+        doc.updated_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(doc)
+        return doc
+
     async def find_by_name(
         self,
         configuration_id: uuid.UUID,

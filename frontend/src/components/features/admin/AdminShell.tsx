@@ -190,7 +190,6 @@ export function AdminShell() {
       onLogout={handleLogout}
       onNavigate={setAdminTab}
       onOpenSettings={() => setSettingsOpen(true)}
-      onOpenChatWorkspace={() => router.push(ROUTES.chat)}
       user={user}
     />
   )

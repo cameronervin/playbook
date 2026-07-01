@@ -14,6 +14,7 @@ All non-health endpoints require service-to-service bearer authentication.
 | POST | `/configuration/resolve` | Resolve or create the default Playbook KB configuration |
 | POST | `/ingest/document` | Start ingestion for an admin-uploaded document |
 | GET | `/status/documents/{document_id}` | Return KB-service document status |
+| PATCH | `/documents/{document_id}/metadata` | Refresh admin-upload retrieval metadata without re-embedding |
 | POST | `/documents/{document_id}/retry` | Retry ingestion for an existing KB-service document |
 | DELETE | `/documents/{document_id}` | Delete/archive a KB-service document and its vectors |
 | POST | `/search` | Search ready shared KB chunks and trusted conversation-file chunks when explicitly scoped |
@@ -50,8 +51,11 @@ POST /api/kb/ingest/document
   "source_date": "2026-01-15",
   "visibility_policy": { "scope": "all_athletes" },
   "metadata_tags": {
-    "topic": "nil",
-    "source_type": "policy"
+    "collection": "compliance",
+    "collection_title": "Compliance & NIL",
+    "tag_slugs": ["nil", "compliance"],
+    "tags": ["NIL", "Compliance"],
+    "topics": ["Compliance & NIL", "NIL", "Compliance"]
   },
   "status_webhook_url": "https://app.example/api/v1/kb/webhook"
 }
@@ -98,6 +102,65 @@ pipeline `task_id`; terminal duplicates return `task_id: null`. Failed
 documents are not implicitly retried through ingest; callers must use the retry
 endpoint. If identical content is submitted for a different trusted source
 identity, KB-service returns `409` rather than replacing the existing document.
+Repeated admin-upload requests refresh mutable retrieval metadata from the
+current request before returning the existing document, so duplicate ingest does
+not leave stale tags, source dates, or visibility metadata on searchable chunks.
+
+## Refresh Admin Upload Metadata
+
+```json
+PATCH /api/kb/documents/{document_id}/metadata
+{
+  "source_date": "2026-02-01",
+  "is_official": true,
+  "priority": 0,
+  "visibility_policy": { "scope": "all_athletes" },
+  "metadata_tags": {
+    "collection": "compliance",
+    "collection_title": "Compliance & NIL",
+    "tag_slugs": ["nil", "compliance"],
+    "tags": ["NIL", "Compliance"],
+    "topics": ["Compliance & NIL", "NIL", "Compliance"]
+  }
+}
+```
+
+This route is service-to-service only and is used by the main backend after
+`PATCH /admin/kb/documents/{document_id}/metadata` when the backend document is
+already linked to a KB-service document. It supports `admin_upload` documents
+only, updates `kb.documents.metadata`, and merges the refreshed fields into all
+existing vector `cmetadata` rows for that KB-service document without parsing,
+chunking, or re-embedding. MVP admin uploads are normalized to
+`is_official=true`, `priority=0`, and `visibility_policy.scope="all_athletes"`;
+browser clients never send `is_official`, `priority`, or raw KB-service
+`metadata_tags`.
+
+Response:
+
+```json
+{
+  "kb_service_document_id": "uuid",
+  "source_type": "admin_upload",
+  "playbook_document_id": "uuid",
+  "updated_embedding_count": 12,
+  "metadata": {
+    "source_type": "admin_upload",
+    "organization_id": "uuid",
+    "playbook_document_id": "uuid",
+    "source_date": "2026-02-01",
+    "is_official": true,
+    "priority": 0,
+    "visibility_policy": { "scope": "all_athletes" },
+    "metadata_tags": {
+      "collection": "compliance",
+      "collection_title": "Compliance & NIL",
+      "tag_slugs": ["nil", "compliance"],
+      "tags": ["NIL", "Compliance"],
+      "topics": ["Compliance & NIL", "NIL", "Compliance"]
+    }
+  }
+}
+```
 
 ## Status Webhook
 
@@ -201,7 +264,14 @@ Response:
         "source_type": "admin_upload",
         "organization_id": "uuid",
         "source_locator": { "type": "page", "page_number": 3 },
-        "visibility_policy": { "scope": "all_athletes" }
+        "visibility_policy": { "scope": "all_athletes" },
+        "metadata_tags": {
+          "collection": "compliance",
+          "collection_title": "Compliance & NIL",
+          "tag_slugs": ["nil", "compliance"],
+          "tags": ["NIL", "Compliance"],
+          "topics": ["Compliance & NIL", "NIL", "Compliance"]
+        }
       }
     }
   ]

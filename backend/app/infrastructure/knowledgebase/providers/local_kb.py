@@ -30,6 +30,8 @@ from app.schemas.knowledgebase import (
     KBConversationFileIngestRequest,
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
+    KBDocumentMetadataRefreshRequest,
+    KBDocumentMetadataRefreshResponse,
     KBDocumentStatusResponse,
     KBIngestRequest,
     KnowledgebaseResult,
@@ -306,6 +308,33 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
             status=data.get("status", "pending"),
         )
 
+    async def refresh_document_metadata(
+        self,
+        kb_service_document_id: str,
+        request: KBDocumentMetadataRefreshRequest,
+    ) -> KBDocumentMetadataRefreshResponse:
+        """Refresh KB-service document/vector metadata without re-embedding."""
+        payload = {
+            "source_date": request.source_date.isoformat()
+            if request.source_date
+            else None,
+            "is_official": request.is_official,
+            "priority": request.priority,
+            "visibility_policy": request.visibility_policy,
+            "metadata_tags": request.metadata_tags,
+        }
+        data = await self._patch(
+            f"/api/kb/documents/{kb_service_document_id}/metadata",
+            payload,
+        )
+        return KBDocumentMetadataRefreshResponse(
+            kb_service_document_id=data["kb_service_document_id"],
+            source_type=data.get("source_type", "admin_upload"),
+            playbook_document_id=data.get("playbook_document_id"),
+            updated_embedding_count=data.get("updated_embedding_count", 0),
+            metadata=data.get("metadata", {}),
+        )
+
     async def delete_document(self, kb_service_document_id: str) -> None:
         """Delete a document through the KB-service semantic route."""
         await self._delete(f"/api/kb/documents/{kb_service_document_id}")
@@ -318,6 +347,17 @@ class LocalKBProvider(BaseKnowledgebaseProvider):
         """POST JSON and map transport/HTTP errors to KB exceptions."""
         try:
             response = await self._client.post(path, json=json_body)
+        except httpx.TimeoutException as exc:
+            raise KBTimeoutError(f"KB request to {path} timed out") from exc
+        except httpx.HTTPError as exc:
+            raise KBConnectionError(f"KB request to {path} failed: {exc}") from exc
+
+        return self._handle_response(path, response)
+
+    async def _patch(self, path: str, json_body: dict[str, Any]) -> Any:
+        """PATCH JSON and map transport/HTTP errors to KB exceptions."""
+        try:
+            response = await self._client.patch(path, json=json_body)
         except httpx.TimeoutException as exc:
             raise KBTimeoutError(f"KB request to {path} timed out") from exc
         except httpx.HTTPError as exc:

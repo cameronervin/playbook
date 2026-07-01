@@ -20,8 +20,8 @@ Target route model:
 
 - `/login` for SSO entry.
 - `/profile` for first-time athlete profile completion.
-- `/chat` for the athlete-first chat workspace.
-- `/admin` for admin-only operations.
+- `/chat` for the athlete-first chat workspace; admins may enter it explicitly from the account-menu switcher.
+- `/admin` for default admin-only operations.
 - `/` as an auth-aware redirect to the appropriate route.
 
 Current route organization keeps `/login` and `/profile` under `src/app/(auth)/`
@@ -82,7 +82,8 @@ Implementation should wire currently implemented backend APIs immediately and is
   - Unauthenticated users go to `/login`.
   - Authenticated athletes with incomplete profiles go to `/profile`.
   - Athletes use `/chat`.
-  - Admin and super-admin users can access `/admin`.
+  - Admin and super-admin users default to `/admin` after auth-aware redirects and OAuth callbacks.
+  - Admin and super-admin users can explicitly switch between `/admin` and `/chat` through real account-menu route links.
   - Athletes attempting `/admin` see the Admin design's access-denied state.
 
 ## Phase 3: Login Screen
@@ -95,7 +96,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 - Add tests for provider ordering, disabled provider handling, login click redirect behavior, accessible button names, and no email/password fields.
 
 ## Phase 4: Athlete Chat Workspace
-- Recreate the Home/chat wireframe at `/chat` as an athlete-first workspace.
+- Recreate the Home/chat wireframe at `/chat` as an athlete-first workspace that admin-capable users can enter by explicit choice.
 - Build chat feature components under `frontend/src/components/features/chat/` for:
   - Nav rail with brand lockup, new chat action, searchable conversation history, account block, and settings/profile menu.
   - Center chat area with top bar, thread, empty state, thinking/streaming states, citation chips, and composer.
@@ -217,7 +218,7 @@ Implementation should wire currently implemented backend APIs immediately and is
 - The source JSX in `backstage/design/source/` is structural reference material; production code must use TypeScript, imports/exports, route files, hooks, and feature modules.
 - Prototype Tweaks controls are not part of the product.
 - Radix UI is the primary primitive layer for accessible component behavior; shadcn/ui should not be initialized unless a later plan explicitly adopts its code-generation workflow.
-- `/chat` is athlete-first per the PRD and current backend authorization model.
+- `/chat` is athlete-first per the PRD, but admin-capable users can explicitly enter it from `/admin`; root and OAuth defaults still send admins to `/admin`.
 - Admin-only controls must be gated by real role data, not prototype role toggles.
 - Implemented backend APIs should be wired directly.
 - Planned backend APIs should be represented by typed fixture adapters that can be swapped later without rewriting UI components.

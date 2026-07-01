@@ -18,6 +18,8 @@ from app.schemas.knowledgebase import (
     KBConversationFileIngestRequest,
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
+    KBDocumentMetadataRefreshRequest,
+    KBDocumentMetadataRefreshResponse,
     KBDocumentStatusResponse,
     KBIngestRequest,
     KnowledgebaseResult,
@@ -202,6 +204,18 @@ class MockProvider(BaseKnowledgebaseProvider):
             playbook_document_id=uuid4(),
             task_id=f"mock-retry-{kb_service_document_id}",
             status="pending",
+        )
+
+    async def refresh_document_metadata(
+        self,
+        kb_service_document_id: str,
+        request: KBDocumentMetadataRefreshRequest,
+    ) -> KBDocumentMetadataRefreshResponse:
+        return KBDocumentMetadataRefreshResponse(
+            kb_service_document_id=UUID(kb_service_document_id),
+            source_type="admin_upload",
+            updated_embedding_count=0,
+            metadata=request.metadata_tags,
         )
 
     async def delete_document(self, kb_service_document_id: str) -> None:

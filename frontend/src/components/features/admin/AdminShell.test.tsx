@@ -672,12 +672,11 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))
 
-    expect(screen.getByRole('menuitem', { name: /chat workspace/i })).toBeInTheDocument()
+    const chatWorkspace = screen.getByRole('menuitem', { name: /chat workspace/i })
+
+    expect(chatWorkspace).toBeInTheDocument()
+    expect(chatWorkspace).toHaveAttribute('href', '/chat')
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('menuitem', { name: /chat workspace/i }))
-
-    expect(adminRouterMocks.push).toHaveBeenCalledWith('/chat')
   })
 
   it('opens admin settings without security and SSO options', async () => {

@@ -24,6 +24,7 @@ from app.repositories.knowledge_base import KBDocumentRepository
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
+    KBDocumentMetadataRefreshRequest,
     KBDocumentStatusResponse,
     KnowledgebaseResult,
 )
@@ -104,6 +105,7 @@ class FakeKnowledgebaseProvider:
 
     def __init__(self) -> None:
         self.ingest_requests: list[KBDocumentIngestRequest] = []
+        self.metadata_refresh_requests: list[tuple[str, KBDocumentMetadataRefreshRequest]] = []
         self.deleted_document_ids: list[str] = []
         self.retried_document_ids: list[str] = []
 
@@ -165,6 +167,13 @@ class FakeKnowledgebaseProvider:
 
     async def delete_document(self, kb_service_document_id: str) -> None:
         self.deleted_document_ids.append(kb_service_document_id)
+
+    async def refresh_document_metadata(
+        self,
+        kb_service_document_id: str,
+        request: KBDocumentMetadataRefreshRequest,
+    ) -> None:
+        self.metadata_refresh_requests.append((kb_service_document_id, request))
 
 
 async def _admin_user(db_session, *, role: str = "admin"):
@@ -675,6 +684,70 @@ async def test_kb_metadata_patch_preserves_omitted_source_date_and_clears_null(
     assert cleared.status_code == 200
     assert cleared.json()["source_date"] is None
     assert cleared.json()["tag_slugs"] == ["compliance"]
+
+
+@pytest.mark.asyncio
+async def test_kb_metadata_patch_refreshes_linked_kb_service_metadata(
+    route_client,
+    db_session,
+) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+    _storage, kb_provider = _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    linked_id = uuid4()
+    document = await KBDocumentRepository(db_session).create(
+        organization_id=admin.organization_id,
+        uploaded_by=admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        processing_status="ready",
+        collection_id=UUID(collection["id"]),
+        metadata_tags={"collection": "compliance", "tag_slugs": ["nil"]},
+        source_date=datetime(2026, 1, 15, tzinfo=UTC).date(),
+        is_official=True,
+        priority=0,
+    )
+    await KBDocumentRepository(db_session).link_kb_service_document(
+        document,
+        kb_service_document_id=linked_id,
+    )
+    await db_session.commit()
+
+    response = await route_client.client.patch(
+        f"/api/v1/admin/kb/documents/{document.id}/metadata",
+        json={"tag_slugs": ["compliance"], "source_date": "2026-02-01"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["tag_slugs"] == ["compliance"]
+    assert response.json()["source_date"] == "2026-02-01"
+    assert kb_provider.metadata_refresh_requests == [
+        (
+            str(linked_id),
+            KBDocumentMetadataRefreshRequest(
+                source_date=datetime(2026, 2, 1, tzinfo=UTC).date(),
+                is_official=True,
+                priority=0,
+                visibility_policy={"scope": "all_athletes"},
+                metadata_tags={
+                    "collection": "compliance",
+                    "collection_title": "Compliance & NIL",
+                    "tag_slugs": ["compliance"],
+                    "tags": ["Compliance"],
+                    "topics": ["Compliance & NIL", "Compliance"],
+                },
+            ),
+        )
+    ]
+    assert "priority" not in response.json()
+    assert "is_official" not in response.json()
 
 
 @pytest.mark.asyncio

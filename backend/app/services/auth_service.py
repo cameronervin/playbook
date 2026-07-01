@@ -202,7 +202,7 @@ class AuthService:
         return SessionResponse(
             user=user_to_response(user),
             access_token=access_token,
-            next_route=self._next_route(user=user, identity=identity),
+            next_route=self._next_route(user=user),
         )
 
     def browser_redirect_response(self, session: SessionResponse) -> RedirectResponse:
@@ -366,8 +366,8 @@ class AuthService:
             )
         return user
 
-    def _next_route(self, *, user: User, identity: OAuthIdentity) -> str:
-        if identity.provider == "dev" and user.role in {"admin", "super_admin"}:
+    def _next_route(self, *, user: User) -> str:
+        if user.role in {"admin", "super_admin"}:
             return "/admin"
         return "/chat" if is_profile_complete(user) else "/profile"
 

@@ -136,6 +136,12 @@ metadata tag presets for the organization. Browser clients do not submit
 free-form `metadata_tags`; the backend composes KB-service-compatible
 `metadata_tags` from the collection and tag assignments.
 
+Admin KB metadata edits keep the same browser contract: clients PATCH only
+`tag_slugs` and/or `source_date`. If the backend document is already linked to a
+KB-service document, the backend also refreshes KB-service document metadata and
+existing vector metadata so search results and persisted citations return the
+updated tags, source date, and all-athletes visibility without re-embedding.
+
 Browser clients submit a multipart form POST directly to `upload.url` with every
 returned `field` and a final `file` part. After storage upload succeeds, clients
 call the matching `upload-complete` route with `{ "upload_request_id": "uuid" }`.

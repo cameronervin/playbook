@@ -33,6 +33,33 @@ const metadataTags = [
   },
 ]
 
+function documentFixture(
+  overrides: Partial<KBDocument> & Pick<KBDocument, 'id' | 'processing_status' | 'title'>,
+): KBDocument {
+  const { id, processing_status, title, ...rest } = overrides
+  const filename = `${title.toLowerCase().replaceAll(' ', '-')}.pdf`
+  return {
+    id,
+    organization_id: 'org-1',
+    uploaded_by: 'u1',
+    title,
+    filename,
+    content_type: 'application/pdf',
+    size_bytes: 42_000,
+    processing_status,
+    failure_reason: null,
+    collection_id: collectionBase.id,
+    tag_slugs: [],
+    visibility_policy: { scope: 'all_athletes' },
+    metadata_tags: { collection: 'compliance' },
+    source_date: null,
+    kb_service_document_id: null,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+    ...rest,
+  }
+}
+
 function documentFromUpload(request: UploadKBDocumentRequest): KBDocument {
   return {
     id: 'doc-uploaded',
@@ -56,6 +83,126 @@ function documentFromUpload(request: UploadKBDocumentRequest): KBDocument {
 }
 
 describe('AdminKBCollectionDetail', () => {
+  it('shows the persisted ingestion lifecycle states, including ready', () => {
+    render(
+      <AdminKBCollectionDetail
+        canManage
+        collection={{
+          ...collectionBase,
+          documents: [
+            documentFixture({
+              id: 'doc-pending',
+              processing_status: 'upload_pending',
+              title: 'Pending upload document',
+            }),
+            documentFixture({
+              id: 'doc-uploaded',
+              processing_status: 'uploaded',
+              title: 'Queued document',
+            }),
+            documentFixture({
+              id: 'doc-processing',
+              processing_status: 'processing',
+              title: 'Processing document',
+            }),
+            documentFixture({
+              id: 'doc-ready',
+              processing_status: 'ready',
+              title: 'Ready document',
+            }),
+            documentFixture({
+              failure_reason: 'NO_TEXT_EXTRACTED: No usable text could be extracted.',
+              id: 'doc-failed',
+              processing_status: 'failed',
+              title: 'Failed document',
+            }),
+          ],
+        }}
+        metadataTags={metadataTags}
+        onBack={vi.fn()}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onRetry={vi.fn()}
+        onUpload={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Pending upload')).toBeInTheDocument()
+    expect(screen.getByText('Queued')).toBeInTheDocument()
+    expect(screen.getByText('Processing')).toBeInTheDocument()
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('NO_TEXT_EXTRACTED: No usable text could be extracted.')).toBeInTheDocument()
+  })
+
+  it('lets admins retry a failed persisted document and reflects retry status updates', async () => {
+    const onRetry = vi.fn()
+    const failedDocument = documentFixture({
+      failure_reason: 'NO_TEXT_EXTRACTED: No usable text could be extracted.',
+      id: 'doc-failed',
+      processing_status: 'failed',
+      title: 'Failed document',
+    })
+    const props = {
+      canManage: true,
+      collection: {
+        ...collectionBase,
+        documents: [failedDocument],
+      },
+      metadataTags,
+      onBack: vi.fn(),
+      onDelete: vi.fn(),
+      onEdit: vi.fn(),
+      onRetry,
+      onUpload: vi.fn(),
+    }
+    const { rerender } = render(<AdminKBCollectionDetail {...props} />)
+
+    expect(screen.getByText('NO_TEXT_EXTRACTED: No usable text could be extracted.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Retry Failed document/i }))
+
+    expect(onRetry).toHaveBeenCalledWith('doc-failed')
+
+    rerender(
+      <AdminKBCollectionDetail
+        {...props}
+        collection={{
+          ...collectionBase,
+          documents: [
+            {
+              ...failedDocument,
+              failure_reason: null,
+              processing_status: 'uploaded',
+            },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Queued')).toBeInTheDocument()
+    expect(screen.queryByText('NO_TEXT_EXTRACTED: No usable text could be extracted.')).not.toBeInTheDocument()
+
+    rerender(
+      <AdminKBCollectionDetail
+        {...props}
+        collection={{
+          ...collectionBase,
+          documents: [
+            {
+              ...failedDocument,
+              failure_reason: 'NO_TEXT_EXTRACTED: No usable text could be extracted.',
+              processing_status: 'failed',
+            },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('NO_TEXT_EXTRACTED: No usable text could be extracted.')).toBeInTheDocument()
+  })
+
   it('keeps the upload drop area centered, accessible, and file-selectable', async () => {
     render(
       <AdminKBCollectionDetail

@@ -68,3 +68,25 @@ class IngestDocumentResponse(BaseModel):
     conversation_file_id: uuid.UUID | None = None
     task_id: str | None
     status: str
+
+
+class DocumentMetadataRefreshRequest(BaseModel):
+    """Refresh metadata for an already-ingested KB-service document."""
+
+    source_date: date | None = None
+    is_official: bool = True
+    priority: int = 0
+    visibility_policy: dict[str, Any] = Field(
+        default_factory=lambda: {"scope": "all_athletes"}
+    )
+    metadata_tags: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentMetadataRefreshResponse(BaseModel):
+    """Response for a KB-service metadata refresh request."""
+
+    kb_service_document_id: uuid.UUID
+    source_type: KBSourceType = "admin_upload"
+    playbook_document_id: uuid.UUID | None = None
+    updated_embedding_count: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)

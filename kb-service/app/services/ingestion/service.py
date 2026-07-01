@@ -25,7 +25,12 @@ from app.repositories.configuration_repo import ConfigurationRepository
 from app.repositories.document_repo import DocumentRepository
 from app.repositories.ingestion_log_repo import IngestionLogRepository
 from app.repositories.vector_repo import AsyncVectorRepository
-from app.schemas.ingest import IngestDocumentRequest, IngestDocumentResponse
+from app.schemas.ingest import (
+    DocumentMetadataRefreshRequest,
+    DocumentMetadataRefreshResponse,
+    IngestDocumentRequest,
+    IngestDocumentResponse,
+)
 from app.schemas.status import DocumentStatusResponse, TaskStatusResponse
 from app.services.ingestion.metadata import (
     IngestRequest,
@@ -63,6 +68,61 @@ _conversation_file_id = conversation_file_id_from_metadata
 _ingest_response = ingest_response
 _delete_s3_object = delete_s3_object
 _SOURCE_IDENTITY_CONFLICT_DETAIL = SOURCE_IDENTITY_CONFLICT_DETAIL
+
+
+def _refreshed_admin_upload_metadata(
+    existing_metadata: dict[str, Any],
+    req: DocumentMetadataRefreshRequest,
+) -> dict[str, Any]:
+    """Return refreshed metadata for an existing admin-upload document."""
+    if existing_metadata.get("source_type") != "admin_upload":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="metadata refresh is only supported for admin_upload documents",
+        )
+
+    metadata = dict(existing_metadata)
+    old_metadata_tags = metadata.get("metadata_tags")
+    if isinstance(old_metadata_tags, dict):
+        for key in old_metadata_tags:
+            metadata.pop(str(key), None)
+
+    metadata_tags = dict(req.metadata_tags)
+    metadata.update(metadata_tags)
+    metadata.update(
+        {
+            "source_date": req.source_date.isoformat() if req.source_date else None,
+            "is_official": True,
+            "priority": 0,
+            "visibility_policy": req.visibility_policy,
+            "metadata_tags": metadata_tags,
+        }
+    )
+    return metadata
+
+
+def _metadata_refresh_stale_keys(
+    existing_metadata: dict[str, Any],
+    refreshed_metadata: dict[str, Any],
+) -> set[str]:
+    stale_keys = set(refreshed_metadata)
+    old_metadata_tags = existing_metadata.get("metadata_tags")
+    if isinstance(old_metadata_tags, dict):
+        stale_keys.update(str(key) for key in old_metadata_tags)
+    return stale_keys
+
+
+def _metadata_refresh_request_from_admin_ingest(
+    req: IngestDocumentRequest,
+) -> DocumentMetadataRefreshRequest:
+    """Project an admin ingest request onto mutable retrieval metadata fields."""
+    return DocumentMetadataRefreshRequest(
+        source_date=req.source_date,
+        is_official=True,
+        priority=0,
+        visibility_policy=req.visibility_policy,
+        metadata_tags=req.metadata_tags,
+    )
 
 
 def _delete_pages_staging(document_id: str) -> None:
@@ -116,6 +176,7 @@ class IngestionService:
         if existing_source is not None:
             return await self._existing_ingest_response(
                 existing_source,
+                refresh_from_request=req,
                 fallback_playbook_document_id=req.playbook_document_id
                 if isinstance(req, IngestDocumentRequest)
                 else None,
@@ -145,6 +206,7 @@ class IngestionService:
                 )
             return await self._existing_ingest_response(
                 existing,
+                refresh_from_request=req,
                 fallback_playbook_document_id=req.playbook_document_id
                 if isinstance(req, IngestDocumentRequest)
                 else None,
@@ -192,26 +254,52 @@ class IngestionService:
         self,
         existing: Any,
         *,
+        refresh_from_request: IngestRequest | None = None,
         fallback_playbook_document_id: uuid.UUID | None = None,
     ) -> IngestDocumentResponse:
         task_id = None
         if existing.status in self._IN_PROGRESS_STATUSES:
             log = await self._log_repo.get_by_document(existing.id)
             task_id = log.pipeline_task_id if log else None
+        metadata = existing.metadata_
+        if isinstance(refresh_from_request, IngestDocumentRequest):
+            metadata = await self._refresh_existing_admin_upload_metadata(
+                existing,
+                refresh_from_request,
+            )
         logger.info(
             "kb_ingest_duplicate_source_identity",
             doc_id=str(existing.id),
             doc_status=existing.status,
-            source_type=(existing.metadata_ or {}).get("source_type"),
+            source_type=(metadata or {}).get("source_type"),
             active=existing.status in self._IN_PROGRESS_STATUSES,
         )
         return ingest_response(
             kb_service_document_id=existing.id,
-            metadata=existing.metadata_,
+            metadata=metadata,
             task_id=task_id,
             status_=existing.status,
             fallback_playbook_document_id=fallback_playbook_document_id,
         )
+
+    async def _refresh_existing_admin_upload_metadata(
+        self,
+        existing: Any,
+        req: IngestDocumentRequest,
+    ) -> dict[str, Any]:
+        existing_metadata = existing.metadata_ or {}
+        metadata = _refreshed_admin_upload_metadata(
+            existing_metadata,
+            _metadata_refresh_request_from_admin_ingest(req),
+        )
+        stale_keys = _metadata_refresh_stale_keys(existing_metadata, metadata)
+        updated = await self._doc_repo.update_metadata(existing.id, metadata)
+        await self._vector_repo.refresh_document_metadata(
+            existing.id,
+            metadata,
+            stale_metadata_keys=stale_keys,
+        )
+        return (updated.metadata_ if updated is not None else metadata) or metadata
 
     async def _dispatch_pipeline(
         self,
@@ -280,6 +368,40 @@ class IngestionService:
             task_id=task_id,
             status_="pending",
             fallback_playbook_document_id=document_id,
+        )
+
+    async def refresh_document_metadata(
+        self,
+        document_id: uuid.UUID,
+        req: DocumentMetadataRefreshRequest,
+    ) -> DocumentMetadataRefreshResponse:
+        doc = await self._doc_repo.get(document_id)
+        if doc is None:
+            raise LookupError(f"Document {document_id} not found")
+
+        existing_metadata = doc.metadata_ or {}
+        metadata = _refreshed_admin_upload_metadata(existing_metadata, req)
+        stale_keys = _metadata_refresh_stale_keys(existing_metadata, metadata)
+        updated = await self._doc_repo.update_metadata(document_id, metadata)
+        if updated is None:
+            raise LookupError(f"Document {document_id} not found")
+        updated_embedding_count = await self._vector_repo.refresh_document_metadata(
+            document_id,
+            metadata,
+            stale_metadata_keys=stale_keys,
+        )
+        logger.info(
+            "kb_document_metadata_refreshed",
+            doc_id=str(document_id),
+            source_type=metadata.get("source_type"),
+            updated_embedding_count=updated_embedding_count,
+        )
+        return DocumentMetadataRefreshResponse(
+            kb_service_document_id=document_id,
+            source_type="admin_upload",
+            playbook_document_id=playbook_document_id_from_metadata(metadata),
+            updated_embedding_count=updated_embedding_count,
+            metadata=metadata,
         )
 
     async def delete_document(self, document_id: uuid.UUID) -> None:

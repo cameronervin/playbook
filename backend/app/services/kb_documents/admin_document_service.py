@@ -26,6 +26,7 @@ from app.schemas.kb_documents import (
     KBDocumentUploadRequest,
     KBDocumentUploadRequestResponse,
 )
+from app.schemas.knowledgebase import KBDocumentMetadataRefreshRequest
 from app.schemas.uploads import UploadCompleteRequest
 from app.services.audit_service import AuditLogService
 from app.services.direct_uploads import DirectUploadSourceRef
@@ -205,6 +206,17 @@ class KBDocumentService:
             metadata_tags=metadata_tags,
             source_date=source_date,
         )
+        if updated.kb_service_document_id is not None:
+            await self.kb_provider.refresh_document_metadata(
+                str(updated.kb_service_document_id),
+                KBDocumentMetadataRefreshRequest(
+                    source_date=updated.source_date,
+                    is_official=True,
+                    priority=0,
+                    visibility_policy=updated.visibility_policy,
+                    metadata_tags=updated.metadata_tags,
+                ),
+            )
         await self.event_repo.create(
             document_id=document.id,
             event_type="document.metadata_updated",

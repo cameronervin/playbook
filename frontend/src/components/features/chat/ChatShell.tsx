@@ -29,6 +29,7 @@ import {
 } from '@/src/hooks/useConversations'
 import { useSessionActivity } from '@/src/hooks/useSessionActivity'
 import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
+import { getChatWorkspaceRedirect } from '@/src/lib/authRouting'
 import { useUIStore } from '@/src/lib/store/uiStore'
 import type {
   ChatMessage,
@@ -82,12 +83,9 @@ export function ChatShell() {
 
   useEffect(() => {
     if (!user || userLoading) return
-    if (!user.profile_complete) {
-      router.replace(ROUTES.profile)
-      return
-    }
-    if (user.role !== 'athlete') {
-      router.replace(ROUTES.admin)
+    const redirect = getChatWorkspaceRedirect(user)
+    if (redirect) {
+      router.replace(redirect)
     }
   }, [router, user, userLoading])
 

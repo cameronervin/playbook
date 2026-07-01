@@ -18,6 +18,8 @@ import structlog
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
+    KBDocumentMetadataRefreshRequest,
+    KBDocumentMetadataRefreshResponse,
     KBDocumentStatusResponse,
     KBIngestRequest,
     KnowledgebaseResult,
@@ -152,6 +154,14 @@ class BaseKnowledgebaseProvider(ABC):
         kb_service_document_id: str,
     ) -> KBDocumentIngestResponse:
         """Retry ingestion for an existing KB-service document."""
+        raise NotImplementedError
+
+    async def refresh_document_metadata(
+        self,
+        kb_service_document_id: str,
+        request: KBDocumentMetadataRefreshRequest,
+    ) -> KBDocumentMetadataRefreshResponse:
+        """Refresh metadata for an existing KB-service document."""
         raise NotImplementedError
 
     async def delete_document(self, kb_service_document_id: str) -> None:

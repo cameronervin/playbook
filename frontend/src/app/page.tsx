@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { BrandLockup } from '@/src/components/ui'
 import { useCurrentUser } from '@/src/hooks/useAuth'
 import { ROUTES } from '@/src/lib/constants/config'
+import { getDefaultAuthenticatedRoute } from '@/src/lib/authRouting'
 
 export default function RootRedirect() {
   const router = useRouter()
@@ -16,15 +17,7 @@ export default function RootRedirect() {
       router.replace(ROUTES.login)
       return
     }
-    if (user.role === 'athlete' && !user.profile_complete) {
-      router.replace(ROUTES.profile)
-      return
-    }
-    if (user.role === 'admin' || user.role === 'super_admin') {
-      router.replace(ROUTES.admin)
-      return
-    }
-    router.replace(ROUTES.chat)
+    router.replace(getDefaultAuthenticatedRoute(user))
   }, [isError, isLoading, router, user])
 
   return (
