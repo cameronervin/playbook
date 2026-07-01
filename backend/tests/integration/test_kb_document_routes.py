@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import BinaryIO
 from uuid import UUID, uuid4
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
 from app.infrastructure.knowledgebase import get_kb_provider_dependency
 from app.infrastructure.storage import get_storage_provider_dependency
-from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjectMetadata
+from app.infrastructure.storage.provider import (
+    ObjectVerificationResult,
+    PresignedPostUpload,
+    StoredObjectMetadata,
+)
 from app.models.audit import AuditLog
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
 from app.models.uploads import KBIngestOutbox, UploadRequest
-from app.repositories.knowledge_base import KBDocumentRepository
 from app.repositories.identity import OrganizationRepository, UserRepository
+from app.repositories.knowledge_base import KBDocumentRepository
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
@@ -79,8 +83,6 @@ class FakeStorageProvider:
         expected_size_bytes: int,
         expected_content_type: str,
     ):
-        from app.infrastructure.storage.provider import ObjectVerificationResult
-
         metadata = await self.get_object_metadata(key)
         if metadata is None:
             return ObjectVerificationResult(status="missing")
@@ -202,6 +204,7 @@ async def test_kb_catalog_routes_seed_defaults_and_require_super_admin_for_write
 
     collections = await route_client.client.get("/api/v1/admin/kb/collections")
     tags = await route_client.client.get("/api/v1/admin/kb/metadata-tags")
+    tag_id = tags.json()[0]["id"]
     denied_collection = await route_client.client.post(
         "/api/v1/admin/kb/collections",
         json={
@@ -211,10 +214,22 @@ async def test_kb_catalog_routes_seed_defaults_and_require_super_admin_for_write
         },
         headers={"X-Request-ID": "req-kb-collection-denied"},
     )
+    denied_collection_delete = await route_client.client.delete(
+        f"/api/v1/admin/kb/collections/{collections.json()[0]['id']}",
+        headers={"X-Request-ID": "req-kb-collection-delete-denied"},
+    )
     denied_tag = await route_client.client.post(
         "/api/v1/admin/kb/metadata-tags",
         json={"label": "Medical"},
         headers={"X-Request-ID": "req-kb-tag-denied"},
+    )
+    denied_unarchive = await route_client.client.post(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/unarchive",
+        headers={"X-Request-ID": "req-kb-tag-unarchive-denied"},
+    )
+    denied_permanent_delete = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/permanent",
+        headers={"X-Request-ID": "req-kb-tag-permanent-delete-denied"},
     )
 
     assert collections.status_code == 200
@@ -230,7 +245,10 @@ async def test_kb_catalog_routes_seed_defaults_and_require_super_admin_for_write
         {item["slug"] for item in tags.json()}
     )
     assert denied_collection.status_code == 403
+    assert denied_collection_delete.status_code == 403
     assert denied_tag.status_code == 403
+    assert denied_unarchive.status_code == 403
+    assert denied_permanent_delete.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -258,6 +276,24 @@ async def test_super_admin_can_create_collections_and_manage_metadata_tags(
     assert collection_response.json()["slug"] == "sports-medicine"
     assert collection_response.json()["title"] == "Sports Medicine"
     assert collection_response.json()["description"] == "Athletic training process documents."
+    collection_id = collection_response.json()["id"]
+    deleted_collection = await route_client.client.delete(
+        f"/api/v1/admin/kb/collections/{collection_id}",
+    )
+    collections_after_delete = await route_client.client.get(
+        "/api/v1/admin/kb/collections"
+    )
+    collection_audit = await db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.action == "kb.collection_archived",
+            AuditLog.target_id == UUID(collection_id),
+        )
+    )
+    assert deleted_collection.status_code == 204
+    assert "sports-medicine" not in {
+        item["slug"] for item in collections_after_delete.json()
+    }
+    assert collection_audit is not None
     assert tag_response.status_code == 201
     assert tag_response.json()["slug"] == "medical-referral"
     tag_id = tag_response.json()["id"]
@@ -266,6 +302,9 @@ async def test_super_admin_can_create_collections_and_manage_metadata_tags(
         f"/api/v1/admin/kb/metadata-tags/{tag_id}",
         json={"label": "Medical referrals"},
     )
+    active_delete = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/permanent"
+    )
     archived = await route_client.client.delete(
         f"/api/v1/admin/kb/metadata-tags/{tag_id}"
     )
@@ -273,14 +312,110 @@ async def test_super_admin_can_create_collections_and_manage_metadata_tags(
     all_tags = await route_client.client.get(
         "/api/v1/admin/kb/metadata-tags?include_archived=true"
     )
+    restored = await route_client.client.post(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/unarchive"
+    )
+    rearchived = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}"
+    )
+    permanent_deleted = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/permanent"
+    )
+    all_tags_after_delete = await route_client.client.get(
+        "/api/v1/admin/kb/metadata-tags?include_archived=true"
+    )
 
     assert renamed.status_code == 200
     assert renamed.json()["slug"] == "medical-referral"
     assert renamed.json()["label"] == "Medical referrals"
-    assert archived.status_code == 204
+    assert active_delete.status_code == 409
+    assert active_delete.json()["error"]["details"]["assigned_document_count"] == 0
     assert "medical-referral" not in {item["slug"] for item in active_tags.json()}
     archived_row = next(item for item in all_tags.json() if item["slug"] == "medical-referral")
     assert archived_row["is_active"] is False
+    assert restored.status_code == 200
+    assert restored.json()["slug"] == "medical-referral"
+    assert restored.json()["is_active"] is True
+    assert archived.status_code == 204
+    assert rearchived.status_code == 204
+    assert permanent_deleted.status_code == 204
+    assert "medical-referral" not in {
+        item["slug"] for item in all_tags_after_delete.json()
+    }
+
+
+@pytest.mark.asyncio
+async def test_super_admin_cannot_delete_collection_with_documents(
+    route_client,
+    db_session,
+) -> None:
+    super_admin = await _admin_user(db_session, role="super_admin")
+    route_client.authenticate_as(super_admin)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    await KBDocumentRepository(db_session).create(
+        organization_id=super_admin.organization_id,
+        uploaded_by=super_admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        collection_id=UUID(collection["id"]),
+    )
+    await db_session.commit()
+
+    response = await route_client.client.delete(
+        f"/api/v1/admin/kb/collections/{collection['id']}",
+    )
+    collections_after_delete = await route_client.client.get(
+        "/api/v1/admin/kb/collections"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["details"]["document_count"] == 1
+    assert "compliance" in {item["slug"] for item in collections_after_delete.json()}
+
+
+@pytest.mark.asyncio
+async def test_super_admin_cannot_permanently_delete_assigned_archived_metadata_tag(
+    route_client,
+    db_session,
+) -> None:
+    super_admin = await _admin_user(db_session, role="super_admin")
+    route_client.authenticate_as(super_admin)
+    _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    tags_response = await route_client.client.get("/api/v1/admin/kb/metadata-tags")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    nil_tag = next(item for item in tags_response.json() if item["slug"] == "nil")
+
+    upload = await route_client.client.post(
+        "/api/v1/admin/kb/documents",
+        json={
+            "filename": "assigned-nil.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 10,
+            "collection_id": collection["id"],
+            "tag_slugs": [nil_tag["slug"]],
+            "title": "Assigned NIL",
+        },
+    )
+    archived = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{nil_tag['id']}"
+    )
+    permanent_deleted = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{nil_tag['id']}/permanent"
+    )
+
+    assert upload.status_code == 201
+    assert archived.status_code == 204
+    assert permanent_deleted.status_code == 409
+    assert permanent_deleted.json()["error"]["details"]["assigned_document_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -451,10 +586,6 @@ async def test_kb_upload_rejects_client_authored_metadata_tags(
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     _override_external_providers(route_client)
-    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
-    collection = next(
-        item for item in collections_response.json() if item["slug"] == "compliance"
-    )
 
     response = await route_client.client.post(
         "/api/v1/admin/kb/documents",

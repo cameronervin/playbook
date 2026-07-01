@@ -5,9 +5,12 @@ import {
   createKBCollection,
   createKBDocumentUploadIntent,
   createKBMetadataTag,
+  deleteKBCollection,
+  deleteKBMetadataTagPermanently,
   listKBCollections,
   listKBMetadataTags,
   updateKBMetadataTag,
+  unarchiveKBMetadataTag,
   uploadKBDocument,
 } from '@/src/lib/api/endpoints/kbDocuments'
 import { apiClient } from '@/src/lib/api/client'
@@ -165,6 +168,18 @@ describe('kb document upload endpoints', () => {
         updated_at: '2026-06-17T12:00:00Z',
       })
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        id: 'tag-1',
+        organization_id: 'org-1',
+        slug: 'team-rules',
+        label: 'Team policies',
+        sort_order: 20,
+        is_active: true,
+        created_at: '2026-06-17T12:00:00Z',
+        updated_at: '2026-06-17T12:00:00Z',
+      })
+      .mockResolvedValueOnce(undefined)
 
     await listKBCollections()
     await createKBCollection({
@@ -172,10 +187,13 @@ describe('kb document upload endpoints', () => {
       description: 'Sport-specific team rules.',
       icon: 'book-open',
     })
+    await deleteKBCollection('collection-new')
     await listKBMetadataTags(true)
     await createKBMetadataTag({ label: 'Team rules' })
     await updateKBMetadataTag('tag-1', { label: 'Team policies' })
     await archiveKBMetadataTag('tag-1')
+    await unarchiveKBMetadataTag('tag-1')
+    await deleteKBMetadataTagPermanently('tag-1')
 
     expect(apiClient).toHaveBeenNthCalledWith(1, '/api/v1/admin/kb/collections')
     expect(apiClient).toHaveBeenNthCalledWith(2, '/api/v1/admin/kb/collections', {
@@ -186,16 +204,25 @@ describe('kb document upload endpoints', () => {
         icon: 'book-open',
       },
     })
-    expect(apiClient).toHaveBeenNthCalledWith(3, '/api/v1/admin/kb/metadata-tags?include_archived=true')
-    expect(apiClient).toHaveBeenNthCalledWith(4, '/api/v1/admin/kb/metadata-tags', {
+    expect(apiClient).toHaveBeenNthCalledWith(3, '/api/v1/admin/kb/collections/collection-new', {
+      method: 'DELETE',
+    })
+    expect(apiClient).toHaveBeenNthCalledWith(4, '/api/v1/admin/kb/metadata-tags?include_archived=true')
+    expect(apiClient).toHaveBeenNthCalledWith(5, '/api/v1/admin/kb/metadata-tags', {
       method: 'POST',
       json: { label: 'Team rules' },
     })
-    expect(apiClient).toHaveBeenNthCalledWith(5, '/api/v1/admin/kb/metadata-tags/tag-1', {
+    expect(apiClient).toHaveBeenNthCalledWith(6, '/api/v1/admin/kb/metadata-tags/tag-1', {
       method: 'PATCH',
       json: { label: 'Team policies' },
     })
-    expect(apiClient).toHaveBeenNthCalledWith(6, '/api/v1/admin/kb/metadata-tags/tag-1', {
+    expect(apiClient).toHaveBeenNthCalledWith(7, '/api/v1/admin/kb/metadata-tags/tag-1', {
+      method: 'DELETE',
+    })
+    expect(apiClient).toHaveBeenNthCalledWith(8, '/api/v1/admin/kb/metadata-tags/tag-1/unarchive', {
+      method: 'POST',
+    })
+    expect(apiClient).toHaveBeenNthCalledWith(9, '/api/v1/admin/kb/metadata-tags/tag-1/permanent', {
       method: 'DELETE',
     })
   })

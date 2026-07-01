@@ -100,6 +100,19 @@ class KBCollectionRepository:
         await self.session.refresh(collection)
         return collection
 
+    async def update(
+        self,
+        collection: KBCollection,
+        *,
+        is_active: bool | None = None,
+    ) -> KBCollection:
+        """Update editable collection fields without committing."""
+        if is_active is not None:
+            collection.is_active = is_active
+        await self.session.flush()
+        await self.session.refresh(collection)
+        return collection
+
 
 class KBMetadataTagRepository:
     """Data access for organization metadata tag presets."""
@@ -206,6 +219,20 @@ class KBMetadataTagRepository:
         await self.session.flush()
         await self.session.refresh(tag)
         return tag
+
+    async def count_document_assignments(self, tag: KBMetadataTag) -> int:
+        """Return how many KB documents currently reference this tag."""
+        result = await self.session.scalar(
+            select(func.count())
+            .select_from(KBDocumentTag)
+            .where(KBDocumentTag.tag_id == tag.id)
+        )
+        return int(result or 0)
+
+    async def delete(self, tag: KBMetadataTag) -> None:
+        """Delete a metadata tag without committing."""
+        await self.session.delete(tag)
+        await self.session.flush()
 
 
 class KBDocumentTagRepository:
@@ -318,6 +345,23 @@ class KBDocumentRepository:
             select(func.count())
             .select_from(KBDocument)
             .where(KBDocument.processing_status == processing_status)
+        )
+        return int(result or 0)
+
+    async def count_by_collection(
+        self,
+        *,
+        organization_id: UUID,
+        collection_id: UUID,
+    ) -> int:
+        """Return the number of KB documents assigned to one collection."""
+        result = await self.session.scalar(
+            select(func.count())
+            .select_from(KBDocument)
+            .where(
+                KBDocument.organization_id == organization_id,
+                KBDocument.collection_id == collection_id,
+            )
         )
         return int(result or 0)
 

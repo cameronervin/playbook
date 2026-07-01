@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AdminKBCollectionCreateDialog } from '@/src/components/features/admin/AdminKBCollectionCreateDialog'
+import { AdminKBCollectionDeleteDialog } from '@/src/components/features/admin/AdminKBCollectionDeleteDialog'
 import { AdminKBCollectionDetail } from '@/src/components/features/admin/AdminKBCollectionDetail'
 import { AdminKBCollectionGrid } from '@/src/components/features/admin/AdminKBCollectionGrid'
 import { AdminKBManageTagsDialog } from '@/src/components/features/admin/AdminKBManageTagsDialog'
@@ -10,6 +11,7 @@ import { buildKBCollectionViews } from '@/src/lib/fixtures/kbCollections'
 import type {
   KBCollection,
   KBCollectionCreateRequest,
+  KBCollectionViewModel,
   KBDocument,
   KBDocumentMetadataUpdateRequest,
   KBMetadataTag,
@@ -20,6 +22,7 @@ import type {
 
 interface AdminKnowledgeBasePanelProps {
   canCreateCollection: boolean
+  canDeleteCollection: boolean
   canManageDocuments: boolean
   canManageTags: boolean
   collections: KBCollection[]
@@ -31,8 +34,11 @@ interface AdminKnowledgeBasePanelProps {
   onArchiveMetadataTag: (tagId: string) => Promise<unknown>
   onCreateCollection: (request: KBCollectionCreateRequest) => Promise<KBCollection>
   onCreateMetadataTag: (request: KBMetadataTagCreateRequest) => Promise<unknown>
+  onDeleteCollection: (collectionId: string) => Promise<unknown>
+  onDeleteMetadataTagPermanently: (tagId: string) => Promise<unknown>
   onDelete: (id: string) => void
   onRetry: (id: string) => void
+  onUnarchiveMetadataTag: (tagId: string) => Promise<unknown>
   onUpdateMetadata: (documentId: string, metadata: KBDocumentMetadataUpdateRequest) => Promise<KBDocument>
   onUpdateMetadataTag: (tagId: string, request: KBMetadataTagUpdateRequest) => Promise<unknown>
   onUpload: (request: UploadKBDocumentRequest) => Promise<KBDocument>
@@ -40,6 +46,7 @@ interface AdminKnowledgeBasePanelProps {
 
 export function AdminKnowledgeBasePanel({
   canCreateCollection,
+  canDeleteCollection,
   canManageDocuments,
   canManageTags,
   collections,
@@ -51,8 +58,11 @@ export function AdminKnowledgeBasePanel({
   onArchiveMetadataTag,
   onCreateCollection,
   onCreateMetadataTag,
+  onDeleteCollection,
+  onDeleteMetadataTagPermanently,
   onDelete,
   onRetry,
+  onUnarchiveMetadataTag,
   onUpdateMetadata,
   onUpdateMetadataTag,
   onUpload,
@@ -60,8 +70,10 @@ export function AdminKnowledgeBasePanel({
   const [openId, setOpenId] = useState<string | null>(null)
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false)
+  const [deletingCollection, setDeletingCollection] = useState<KBCollectionViewModel | null>(null)
   const [manageTagsOpen, setManageTagsOpen] = useState(false)
   const collectionViews = useMemo(() => buildKBCollectionViews(documents, collections), [collections, documents])
+  const metadataTagUsageCounts = useMemo(() => buildMetadataTagUsageCounts(documents), [documents])
   const openCollection = openId ? collectionViews.find((collection) => collection.id === openId) : null
   const editingDocument = editingDocumentId ? documents.find((document) => document.id === editingDocumentId) ?? null : null
 
@@ -71,15 +83,21 @@ export function AdminKnowledgeBasePanel({
     return collection
   }
 
+  const handleDeletedCollection = (collectionId: string) => {
+    if (openId === collectionId) setOpenId(null)
+  }
+
   if (openCollection) {
     return (
       <>
         <AdminKBCollectionDetail
+          canDeleteCollection={canDeleteCollection}
           canManage={canManageDocuments}
           canManageTags={canManageTags}
           collection={openCollection}
           metadataTags={metadataTags}
           onBack={() => setOpenId(null)}
+          onDeleteCollection={setDeletingCollection}
           onDelete={onDelete}
           onEdit={setEditingDocumentId}
           onManageTags={() => setManageTagsOpen(true)}
@@ -97,10 +115,19 @@ export function AdminKnowledgeBasePanel({
         <AdminKBManageTagsDialog
           onArchive={onArchiveMetadataTag}
           onCreate={onCreateMetadataTag}
+          onDeletePermanently={onDeleteMetadataTagPermanently}
           onOpenChange={setManageTagsOpen}
+          onUnarchive={onUnarchiveMetadataTag}
           onUpdate={onUpdateMetadataTag}
           open={manageTagsOpen}
+          tagUsageCounts={metadataTagUsageCounts}
           tags={metadataTags}
+        />
+        <AdminKBCollectionDeleteDialog
+          collection={deletingCollection}
+          onClose={() => setDeletingCollection(null)}
+          onDelete={onDeleteCollection}
+          onDeleted={handleDeletedCollection}
         />
       </>
     )
@@ -110,12 +137,14 @@ export function AdminKnowledgeBasePanel({
     <>
       <AdminKBCollectionGrid
         canCreateCollection={canCreateCollection}
+        canDeleteCollection={canDeleteCollection}
         canManageTags={canManageTags}
         collections={collectionViews}
         isError={isError}
         isFetching={isFetching}
         isLoading={isLoading}
         onCreateCollection={() => setCreateCollectionOpen(true)}
+        onDeleteCollection={setDeletingCollection}
         onManageTags={() => setManageTagsOpen(true)}
         onOpen={setOpenId}
       />
@@ -127,11 +156,40 @@ export function AdminKnowledgeBasePanel({
       <AdminKBManageTagsDialog
         onArchive={onArchiveMetadataTag}
         onCreate={onCreateMetadataTag}
+        onDeletePermanently={onDeleteMetadataTagPermanently}
         onOpenChange={setManageTagsOpen}
+        onUnarchive={onUnarchiveMetadataTag}
         onUpdate={onUpdateMetadataTag}
         open={manageTagsOpen}
+        tagUsageCounts={metadataTagUsageCounts}
         tags={metadataTags}
+      />
+      <AdminKBCollectionDeleteDialog
+        collection={deletingCollection}
+        onClose={() => setDeletingCollection(null)}
+        onDelete={onDeleteCollection}
+        onDeleted={handleDeletedCollection}
       />
     </>
   )
+}
+
+function buildMetadataTagUsageCounts(documents: KBDocument[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const document of documents) {
+    const slugs = new Set([
+      ...document.tag_slugs,
+      ...readMetadataTagSlugs(document.metadata_tags),
+    ])
+    for (const slug of slugs) {
+      counts.set(slug, (counts.get(slug) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
+function readMetadataTagSlugs(metadataTags: Record<string, unknown>): string[] {
+  const value = metadataTags.tag_slugs
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
 }

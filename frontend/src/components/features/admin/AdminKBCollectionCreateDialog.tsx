@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type FormEvent } from 'react'
-import { Check, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Button, Dialog, Input } from '@/src/components/ui'
 import {
   COLLECTION_ICON_COMPONENTS,
@@ -109,7 +109,6 @@ export function AdminKBCollectionCreateDialog({
                 >
                   <Icon size={16} />
                   <span>{option.label}</span>
-                  {selected && <Check size={13} />}
                 </button>
               )
             })}

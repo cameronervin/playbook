@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useDropzone, type FileRejection } from 'react-dropzone'
-import { ArrowLeft, FileUp, Tags } from 'lucide-react'
+import { ArrowLeft, FileUp, Tags, Trash2 } from 'lucide-react'
 import { AdminKBDocumentRow } from '@/src/components/features/admin/AdminKBDocumentRow'
 import { AdminKBLocalUploadRowView } from '@/src/components/features/admin/AdminKBLocalUploadRow'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
@@ -13,7 +13,7 @@ import {
   type AdminKBUploadRetryRequest,
   type AdminKBLocalUploadRow,
 } from '@/src/components/features/admin/kbFormatting'
-import { Button } from '@/src/components/ui'
+import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/src/components/ui'
 import { validateUploadFile } from '@/src/lib/api/uploadValidation'
 import type {
   KBCollectionViewModel,
@@ -30,11 +30,13 @@ const KB_UPLOAD_DROPZONE_ACCEPT = {
 } as const
 
 interface AdminKBCollectionDetailProps {
+  canDeleteCollection?: boolean
   canManage: boolean
   canManageTags?: boolean
   collection: KBCollectionViewModel
   metadataTags: KBMetadataTag[]
   onBack: () => void
+  onDeleteCollection?: (collection: KBCollectionViewModel) => void
   onDelete: (id: string) => void
   onEdit: (id: string) => void
   onManageTags?: () => void
@@ -43,11 +45,13 @@ interface AdminKBCollectionDetailProps {
 }
 
 export function AdminKBCollectionDetail({
+  canDeleteCollection = false,
   canManage,
   canManageTags = false,
   collection,
   metadataTags,
   onBack,
+  onDeleteCollection,
   onDelete,
   onEdit,
   onManageTags,
@@ -189,6 +193,12 @@ export function AdminKBCollectionDetail({
               Manage tags
             </Button>
           )}
+          {canDeleteCollection && onDeleteCollection && (
+            <CollectionDeleteButton
+              collection={collection}
+              onDeleteCollection={() => onDeleteCollection(collection)}
+            />
+          )}
         </>
       }
       contentClassName="py-6"
@@ -277,6 +287,46 @@ export function AdminKBCollectionDetail({
         open={uploadDialogOpen}
       />
     </AdminPageScaffold>
+  )
+}
+
+interface CollectionDeleteButtonProps {
+  collection: KBCollectionViewModel
+  onDeleteCollection: () => void
+}
+
+function CollectionDeleteButton({
+  collection,
+  onDeleteCollection,
+}: CollectionDeleteButtonProps) {
+  const hasDocuments = collection.documents.length > 0
+  const button = (
+    <Button
+      aria-disabled={hasDocuments}
+      className="pb-admin-header-control"
+      disabled={hasDocuments}
+      onClick={onDeleteCollection}
+      size="sm"
+      variant="secondary"
+    >
+      <Trash2 size={15} />
+      Delete collection
+    </Button>
+  )
+
+  if (!hasDocuments) return button
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">{button}</span>
+        </TooltipTrigger>
+        <TooltipContent>
+          Delete the documents in this collection first.
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

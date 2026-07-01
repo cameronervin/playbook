@@ -47,6 +47,17 @@ async def create_collection(
     return await service.create_collection(actor=actor, request=request)
 
 
+@router.delete("/collections/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_collection(
+    collection_id: UUID,
+    actor: SuperAdminUserDep,
+    service: KBCatalogServiceDep,
+) -> Response:
+    """Archive an empty organization KB collection."""
+    await service.delete_collection(actor=actor, collection_id=collection_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/metadata-tags", response_model=list[KBMetadataTagResponse])
 async def list_metadata_tags(
     actor: AdminUserDep,
@@ -80,6 +91,30 @@ async def update_metadata_tag(
 ) -> KBMetadataTagResponse:
     """Update a metadata tag preset label."""
     return await service.update_tag(actor=actor, tag_id=tag_id, request=request)
+
+
+@router.post("/metadata-tags/{tag_id}/unarchive", response_model=KBMetadataTagResponse)
+async def unarchive_metadata_tag(
+    tag_id: UUID,
+    actor: SuperAdminUserDep,
+    service: KBCatalogServiceDep,
+) -> KBMetadataTagResponse:
+    """Restore an archived metadata tag preset."""
+    return await service.unarchive_tag(actor=actor, tag_id=tag_id)
+
+
+@router.delete(
+    "/metadata-tags/{tag_id}/permanent",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def permanently_delete_metadata_tag(
+    tag_id: UUID,
+    actor: SuperAdminUserDep,
+    service: KBCatalogServiceDep,
+) -> Response:
+    """Permanently delete an unused archived metadata tag preset."""
+    await service.permanently_delete_tag(actor=actor, tag_id=tag_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/metadata-tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)

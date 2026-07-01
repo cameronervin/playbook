@@ -29,6 +29,11 @@ export const createKBCollection = (
     json: request,
   })
 
+export const deleteKBCollection = (collectionId: string): Promise<void> =>
+  apiClient<void>(`${KB_BASE_PATH}/collections/${collectionId}`, {
+    method: 'DELETE',
+  })
+
 export const listKBMetadataTags = (includeArchived = false): Promise<KBMetadataTag[]> =>
   apiClient<KBMetadataTag[]>(
     `${KB_BASE_PATH}/metadata-tags${includeArchived ? '?include_archived=true' : ''}`,
@@ -53,6 +58,16 @@ export const updateKBMetadataTag = (
 
 export const archiveKBMetadataTag = (tagId: string): Promise<void> =>
   apiClient<void>(`${KB_BASE_PATH}/metadata-tags/${tagId}`, { method: 'DELETE' })
+
+export const unarchiveKBMetadataTag = (tagId: string): Promise<KBMetadataTag> =>
+  apiClient<KBMetadataTag>(`${KB_BASE_PATH}/metadata-tags/${tagId}/unarchive`, {
+    method: 'POST',
+  })
+
+export const deleteKBMetadataTagPermanently = (tagId: string): Promise<void> =>
+  apiClient<void>(`${KB_BASE_PATH}/metadata-tags/${tagId}/permanent`, {
+    method: 'DELETE',
+  })
 
 export const listKBDocuments = (): Promise<KBDocument[]> =>
   apiClient<KBDocument[]>(BASE_PATH)

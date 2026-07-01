@@ -9,11 +9,12 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.identity import User
 from app.models.knowledge_base import KBCollection, KBDocument, KBMetadataTag
 from app.repositories.knowledge_base import (
     KBCollectionRepository,
+    KBDocumentRepository,
     KBDocumentTagRepository,
     KBMetadataTagRepository,
 )
@@ -101,12 +102,14 @@ class KBCatalogService:
         session: AsyncSession,
         *,
         collection_repo: KBCollectionRepository | None = None,
+        document_repo: KBDocumentRepository | None = None,
         tag_repo: KBMetadataTagRepository | None = None,
         document_tag_repo: KBDocumentTagRepository | None = None,
         audit_service: AuditLogService | None = None,
     ) -> None:
         self.session = session
         self.collection_repo = collection_repo or KBCollectionRepository(session)
+        self.document_repo = document_repo or KBDocumentRepository(session)
         self.tag_repo = tag_repo or KBMetadataTagRepository(session)
         self.document_tag_repo = document_tag_repo or KBDocumentTagRepository(session)
         self.audit_service = audit_service or AuditLogService(session)
@@ -174,6 +177,33 @@ class KBCatalogService:
         )
         await self.session.commit()
         return kb_collection_to_response(collection)
+
+    async def delete_collection(self, *, actor: User, collection_id: UUID) -> None:
+        """Archive an empty super-admin managed KB collection."""
+        collection = await self._get_active_collection_or_404(actor, collection_id)
+        document_count = await self.document_repo.count_by_collection(
+            organization_id=actor.organization_id,
+            collection_id=collection.id,
+        )
+        if document_count > 0:
+            raise ConflictError(
+                "KB collections with documents cannot be deleted",
+                details={"document_count": document_count},
+            )
+        await self.collection_repo.update(collection, is_active=False)
+        await self.audit_service.record(
+            actor=actor,
+            organization_id=actor.organization_id,
+            action="kb.collection_archived",
+            target_type="kb_collection",
+            target_id=collection.id,
+            metadata={
+                "document_count": document_count,
+                "slug": collection.slug,
+                "title": collection.title,
+            },
+        )
+        await self.session.commit()
 
     async def list_tags(
         self,
@@ -259,6 +289,52 @@ class KBCatalogService:
         )
         await self.session.commit()
 
+    async def unarchive_tag(
+        self,
+        *,
+        actor: User,
+        tag_id: UUID,
+    ) -> KBMetadataTagResponse:
+        """Restore an archived metadata tag to active suggestions."""
+        tag = await self._get_tag_or_404(actor, tag_id)
+        updated = await self.tag_repo.update(tag, is_active=True)
+        await self.audit_service.record(
+            actor=actor,
+            organization_id=actor.organization_id,
+            action="kb.metadata_tag_unarchived",
+            target_type="kb_metadata_tag",
+            target_id=tag.id,
+            metadata={"slug": tag.slug, "label": updated.label},
+        )
+        await self.session.commit()
+        return kb_metadata_tag_to_response(updated)
+
+    async def permanently_delete_tag(self, *, actor: User, tag_id: UUID) -> None:
+        """Delete an unused archived metadata tag preset."""
+        tag = await self._get_tag_or_404(actor, tag_id)
+        assigned_document_count = await self.tag_repo.count_document_assignments(tag)
+        details = {"assigned_document_count": assigned_document_count}
+        if tag.is_active:
+            raise ConflictError(
+                "Active metadata tags must be archived before permanent deletion",
+                details=details,
+            )
+        if assigned_document_count > 0:
+            raise ConflictError(
+                "Assigned metadata tags cannot be permanently deleted",
+                details=details,
+            )
+        await self.audit_service.record(
+            actor=actor,
+            organization_id=actor.organization_id,
+            action="kb.metadata_tag_deleted",
+            target_type="kb_metadata_tag",
+            target_id=tag.id,
+            metadata={"slug": tag.slug, "label": tag.label},
+        )
+        await self.tag_repo.delete(tag)
+        await self.session.commit()
+
     async def resolve_document_metadata(
         self,
         *,
@@ -333,6 +409,20 @@ class KBCatalogService:
         if tag is None:
             raise NotFoundError("KB metadata tag", str(tag_id))
         return tag
+
+    async def _get_active_collection_or_404(
+        self,
+        actor: User,
+        collection_id: UUID,
+    ) -> KBCollection:
+        collection = await self.collection_repo.get_for_organization(
+            organization_id=actor.organization_id,
+            collection_id=collection_id,
+            active_only=True,
+        )
+        if collection is None:
+            raise NotFoundError("KB collection", str(collection_id))
+        return collection
 
     async def _unique_collection_slug(self, organization_id: UUID, title: str) -> str:
         base = slugify(title)

@@ -1,30 +1,36 @@
-import { AlertTriangle, ChevronRight, LoaderCircle, Plus, Tags } from 'lucide-react'
+import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
+import { AlertTriangle, LoaderCircle, MoreHorizontal, Plus, Tags, Trash2 } from 'lucide-react'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { COLLECTION_ICON_COMPONENTS } from '@/src/components/features/admin/kbFormatting'
 import { AdminKBSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
-import { Button } from '@/src/components/ui'
+import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/src/components/ui'
+import { cn } from '@/src/lib/utils/cn'
 import type { KBCollectionViewModel } from '@/src/types/kb'
 
 interface AdminKBCollectionGridProps {
   canCreateCollection: boolean
+  canDeleteCollection: boolean
   canManageTags: boolean
   collections: KBCollectionViewModel[]
   isError: boolean
   isFetching: boolean
   isLoading: boolean
   onCreateCollection: () => void
+  onDeleteCollection: (collection: KBCollectionViewModel) => void
   onManageTags: () => void
   onOpen: (id: string) => void
 }
 
 export function AdminKBCollectionGrid({
   canCreateCollection,
+  canDeleteCollection,
   canManageTags,
   collections,
   isError,
   isFetching,
   isLoading,
   onCreateCollection,
+  onDeleteCollection,
   onManageTags,
   onOpen,
 }: AdminKBCollectionGridProps) {
@@ -72,7 +78,13 @@ export function AdminKBCollectionGrid({
           )}
           <div className="pb-admin-kb-grid">
             {collections.map((collection) => (
-              <CollectionCard collection={collection} key={collection.id} onOpen={() => onOpen(collection.id)} />
+              <CollectionCard
+                canDeleteCollection={canDeleteCollection}
+                collection={collection}
+                key={collection.id}
+                onDeleteCollection={() => onDeleteCollection(collection)}
+                onOpen={() => onOpen(collection.id)}
+              />
             ))}
           </div>
         </>
@@ -82,36 +94,105 @@ export function AdminKBCollectionGrid({
 }
 
 interface CollectionCardProps {
+  canDeleteCollection: boolean
   collection: KBCollectionViewModel
+  onDeleteCollection: () => void
   onOpen: () => void
 }
 
-function CollectionCard({ collection, onOpen }: CollectionCardProps) {
+function CollectionCard({
+  canDeleteCollection,
+  collection,
+  onDeleteCollection,
+  onOpen,
+}: CollectionCardProps) {
   const Icon = COLLECTION_ICON_COMPONENTS[collection.icon]
 
   return (
-    <button
+    <article
       className="pb-admin-kb-card"
-      onClick={onOpen}
-      type="button"
-      aria-label={`${collection.title} collection`}
     >
-      <div className="pb-admin-kb-card-header">
-        <span className="pb-admin-kb-card-icon" aria-hidden="true">
-          <Icon size={19} />
-        </span>
-        <span className="pb-admin-kb-card-title">{collection.title}</span>
-        <ChevronRight className="text-fg-4" size={18} />
-      </div>
-      <p className="pb-admin-kb-card-copy">{collection.description}</p>
-      <div className="pb-admin-kb-card-footer">
-        <span className="pb-admin-kb-count">
-          {collection.documents.length} {collection.documents.length === 1 ? 'document' : 'documents'}
-        </span>
-        <span className="text-fg-4">·</span>
-        <CollectionStatus collection={collection} />
-      </div>
-    </button>
+      <button
+        className="pb-admin-kb-card-open"
+        onClick={onOpen}
+        type="button"
+        aria-label={`${collection.title} collection`}
+      >
+        <div className="pb-admin-kb-card-header">
+          <span className="pb-admin-kb-card-icon" aria-hidden="true">
+            <Icon size={19} />
+          </span>
+          <span className="pb-admin-kb-card-title">{collection.title}</span>
+        </div>
+        <p className="pb-admin-kb-card-copy">{collection.description}</p>
+        <div className="pb-admin-kb-card-footer">
+          <span className="pb-admin-kb-count">
+            {collection.documents.length} {collection.documents.length === 1 ? 'document' : 'documents'}
+          </span>
+          <span className="text-fg-4">·</span>
+          <CollectionStatus collection={collection} />
+        </div>
+      </button>
+      {canDeleteCollection && (
+        <CollectionActions
+          collection={collection}
+          onDeleteCollection={onDeleteCollection}
+        />
+      )}
+    </article>
+  )
+}
+
+interface CollectionActionsProps {
+  collection: KBCollectionViewModel
+  onDeleteCollection: () => void
+}
+
+function CollectionActions({ collection, onDeleteCollection }: CollectionActionsProps) {
+  const hasDocuments = collection.documents.length > 0
+
+  return (
+    <DropdownMenuPrimitive.Root>
+      <DropdownMenuPrimitive.Trigger asChild>
+        <button
+          aria-label={`Collection actions for ${collection.title}`}
+          className="pb-admin-kb-card-action"
+          type="button"
+        >
+          <MoreHorizontal size={18} />
+        </button>
+      </DropdownMenuPrimitive.Trigger>
+      <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content align="end" className="pb-admin-menu" sideOffset={4}>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuPrimitive.Item
+                  aria-disabled={hasDocuments}
+                  className={cn('pb-admin-menu-item pb-focus-item text-danger', hasDocuments && 'text-fg-4')}
+                  data-disabled={hasDocuments ? '' : undefined}
+                  onSelect={(event) => {
+                    if (hasDocuments) {
+                      event.preventDefault()
+                      return
+                    }
+                    onDeleteCollection()
+                  }}
+                >
+                  <Trash2 className={hasDocuments ? 'text-fg-4' : 'text-danger'} size={16} />
+                  Delete collection
+                </DropdownMenuPrimitive.Item>
+              </TooltipTrigger>
+              {hasDocuments && (
+                <TooltipContent side="left">
+                  Delete the documents in this collection first.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </DropdownMenuPrimitive.Content>
+      </DropdownMenuPrimitive.Portal>
+    </DropdownMenuPrimitive.Root>
   )
 }
 

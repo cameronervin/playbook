@@ -55,10 +55,13 @@ Example error response:
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream validated assistant response events as SSE from the Valkey stream for `task_id` |
 | GET | `/admin/kb/collections` | List active organization KB collections |
 | POST | `/admin/kb/collections` | Create a KB collection with title, description, and icon; super-admin only |
+| DELETE | `/admin/kb/collections/{collection_id}` | Archive an empty KB collection; super-admin only; returns `409` while documents remain |
 | GET | `/admin/kb/metadata-tags` | List organization metadata tag presets; `include_archived=true` includes archived tags |
 | POST | `/admin/kb/metadata-tags` | Create a global metadata tag preset; super-admin only |
 | PATCH | `/admin/kb/metadata-tags/{tag_id}` | Rename a metadata tag preset label; super-admin only |
 | DELETE | `/admin/kb/metadata-tags/{tag_id}` | Archive a metadata tag preset while preserving existing document assignments; super-admin only |
+| POST | `/admin/kb/metadata-tags/{tag_id}/unarchive` | Restore an archived metadata tag preset to active suggestions; super-admin only |
+| DELETE | `/admin/kb/metadata-tags/{tag_id}/permanent` | Permanently delete an unused archived metadata tag preset; super-admin only |
 | GET | `/admin/kb/documents` | List KB documents and status |
 | POST | `/admin/kb/documents` | Create a KB document direct-upload request and return a presigned POST contract |
 | POST | `/admin/kb/documents/{document_id}/upload-complete` | Verify direct-uploaded object metadata and queue KB-service ingest handoff |

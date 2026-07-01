@@ -210,9 +210,11 @@ CREATE TABLE kb_collections (
 ```
 
 KB collections are organization-owned admin surfaces. Super admins can create
-new collections with a title, description, and icon. Default collections are
-seeded for each organization by migration and by catalog service fallback for
-new organizations.
+new collections with a title, description, and icon. Deleting a collection
+archives it by setting `is_active=false`; deletion is blocked while any KB
+document still references the collection, so admins must delete documents first.
+Default collections are seeded for each organization by migration and by catalog
+service fallback for new organizations.
 
 ### `kb_metadata_tags`
 ```sql
@@ -233,6 +235,8 @@ Metadata tags are global organization presets managed by super admins. Slugs are
 generated from the initial label and remain immutable; labels can be renamed.
 Deleting a tag archives it so existing document assignments remain visible and
 removable, while future suggestions hide the archived tag.
+Unused archived tags can be permanently deleted; permanent deletion is blocked
+while any document assignment still references the tag.
 
 ### `kb_documents`
 ```sql

@@ -3,12 +3,15 @@ import {
   archiveKBMetadataTag,
   createKBCollection,
   createKBMetadataTag,
+  deleteKBCollection,
+  deleteKBMetadataTagPermanently,
   deleteKBDocument,
   listKBCollections,
   listKBDocuments,
   listKBMetadataTags,
   retryKBDocument,
   updateKBMetadataTag,
+  unarchiveKBMetadataTag,
   updateKBDocumentMetadata,
   uploadKBDocument,
 } from '@/src/lib/api/endpoints/kbDocuments'
@@ -60,6 +63,19 @@ export const useCreateKBCollection = () => {
   })
 }
 
+export const useDeleteKBCollection = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: deleteKBCollection,
+    onSuccess: async (_, collectionId) => {
+      queryClient.setQueryData<KBCollection[]>([QUERY_KEYS.kbCollections], (current) =>
+        current?.filter((collection) => collection.id !== collectionId),
+      )
+      await queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbCollections] })
+    },
+  })
+}
+
 export const useCreateKBMetadataTag = () => {
   const queryClient = useQueryClient()
   return useMutation({
@@ -99,6 +115,32 @@ export const useArchiveKBMetadataTag = () => {
     onSuccess: (_, tagId) => {
       queryClient.setQueryData<KBMetadataTag[]>([QUERY_KEYS.kbMetadataTags], (current) =>
         current?.map((item) => (item.id === tagId ? { ...item, is_active: false } : item)),
+      )
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbMetadataTags] })
+    },
+  })
+}
+
+export const useUnarchiveKBMetadataTag = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: unarchiveKBMetadataTag,
+    onSuccess: (tag) => {
+      queryClient.setQueryData<KBMetadataTag[]>([QUERY_KEYS.kbMetadataTags], (current) =>
+        current?.map((item) => (item.id === tag.id ? tag : item)) ?? [tag],
+      )
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbMetadataTags] })
+    },
+  })
+}
+
+export const useDeleteKBMetadataTagPermanently = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: deleteKBMetadataTagPermanently,
+    onSuccess: (_, tagId) => {
+      queryClient.setQueryData<KBMetadataTag[]>([QUERY_KEYS.kbMetadataTags], (current) =>
+        current?.filter((item) => item.id !== tagId),
       )
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.kbMetadataTags] })
     },

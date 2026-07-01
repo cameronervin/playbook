@@ -40,10 +40,13 @@ This document defines Playbook MVP API contracts for authentication, athlete cha
 |--------|----------|---------|------|
 | GET | `/admin/kb/collections` | List active KB collections | admin |
 | POST | `/admin/kb/collections` | Create a KB collection with title, description, and icon | super_admin |
+| DELETE | `/admin/kb/collections/{collection_id}` | Archive an empty KB collection; returns `409` while documents remain | super_admin |
 | GET | `/admin/kb/metadata-tags` | List metadata tag presets; `include_archived=true` returns archived tags too | admin |
 | POST | `/admin/kb/metadata-tags` | Create a metadata tag preset | super_admin |
 | PATCH | `/admin/kb/metadata-tags/{tag_id}` | Rename a metadata tag label | super_admin |
 | DELETE | `/admin/kb/metadata-tags/{tag_id}` | Archive a metadata tag while preserving existing document assignments | super_admin |
+| POST | `/admin/kb/metadata-tags/{tag_id}/unarchive` | Restore an archived metadata tag to active suggestions | super_admin |
+| DELETE | `/admin/kb/metadata-tags/{tag_id}/permanent` | Permanently delete an unused archived metadata tag | super_admin |
 | GET | `/admin/kb/documents` | List KB documents and status | admin |
 | POST | `/admin/kb/documents` | Create KB document direct-upload request | admin |
 | POST | `/admin/kb/documents/{document_id}/upload-complete` | Verify completed KB document upload | admin |
