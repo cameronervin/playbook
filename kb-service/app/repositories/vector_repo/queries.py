@@ -4,8 +4,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import Integer, cast, func, or_, select
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Integer, Text, cast, func, literal, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 
 from app.models.document import Document
 from app.models.vector_embedding import VectorEmbedding
@@ -20,6 +20,23 @@ def _document_metadata_match(document_id: uuid.UUID):
         VectorEmbedding.cmetadata["kb_document_id"].astext == document_id_value,
         VectorEmbedding.cmetadata["document_id"].astext == document_id_value,
     )
+
+
+def _refreshed_cmetadata_value(
+    metadata: dict[str, Any],
+    stale_metadata_keys: set[str] | None = None,
+):
+    """Build a JSONB value that removes stale doc keys, then merges metadata."""
+    current_metadata = func.coalesce(
+        VectorEmbedding.cmetadata,
+        literal({}, type_=JSONB),
+    )
+    stale_keys = sorted(key for key in (stale_metadata_keys or set(metadata)) if key)
+    if stale_keys:
+        current_metadata = current_metadata.op("-")(
+            literal(stale_keys, type_=ARRAY(Text()))
+        )
+    return current_metadata.op("||")(literal(metadata, type_=JSONB))
 
 
 def _build_search_common(

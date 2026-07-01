@@ -40,7 +40,10 @@ describe('direct upload hooks', () => {
     const { result } = renderHook(() => useUploadKBDocument(), { wrapper: wrapper(queryClient) })
 
     await act(async () => {
-      await result.current.mutateAsync({ file: new File(['hello'], 'policy.pdf', { type: 'application/pdf' }) })
+      await result.current.mutateAsync({
+        collection_id: 'collection-compliance',
+        file: new File(['hello'], 'policy.pdf', { type: 'application/pdf' }),
+      })
     })
 
     await waitFor(() =>

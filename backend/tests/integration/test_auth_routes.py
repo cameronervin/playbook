@@ -291,6 +291,51 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["admin", "super_admin"])
+async def test_oauth_callback_sends_admin_roles_to_admin_workspace(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+    role: str,
+) -> None:
+    _configure_oauth_settings(monkeypatch, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
+    oauth_client = provider_registry.clients["google"]
+    organization = await OrganizationRepository(db_session).create(
+        name=test_settings.DEFAULT_ORGANIZATION_NAME,
+        slug=test_settings.DEFAULT_ORGANIZATION_SLUG,
+    )
+    await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email=oauth_client.email,
+        name="Jordan Admin",
+        auth_provider="google",
+        provider_subject="existing-google-subject",
+        role=role,
+    )
+
+    login_response = await route_client.client.get("/api/v1/auth/google/login")
+    assert login_response.status_code == 200
+    assert oauth_client.last_state is not None
+
+    callback_response = await route_client.client.get(
+        "/api/v1/auth/google/callback",
+        params={"code": "oauth-code", "state": oauth_client.last_state},
+    )
+
+    assert callback_response.status_code == 200
+    assert callback_response.json()["user"]["role"] == role
+    assert callback_response.json()["next_route"] == "/admin"
+
+
+@pytest.mark.asyncio
 async def test_oauth_callback_redirects_browser_callers_after_setting_cookie(
     route_client,
     db_session,

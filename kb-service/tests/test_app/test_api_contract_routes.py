@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 
 from app.api.deps.services import get_configuration_service, get_ingestion_service
 from app.main import app
-from app.schemas.ingest import IngestDocumentResponse
+from app.schemas.ingest import (
+    DocumentMetadataRefreshResponse,
+    IngestDocumentResponse,
+)
 
 
 class FakeConfigurationService:
@@ -48,6 +51,20 @@ class FakeIngestionService:
             status="pending",
         )
 
+    async def refresh_document_metadata(
+        self,
+        document_id,
+        body: Any,
+    ) -> DocumentMetadataRefreshResponse:
+        self.requests.append((document_id, body))
+        return DocumentMetadataRefreshResponse(
+            kb_service_document_id=document_id,
+            source_type="admin_upload",
+            playbook_document_id=uuid4(),
+            updated_embedding_count=3,
+            metadata={"source_date": "2026-02-01"},
+        )
+
 
 def test_openapi_exposes_only_canonical_kb_contract_routes() -> None:
     client = TestClient(app)
@@ -62,6 +79,7 @@ def test_openapi_exposes_only_canonical_kb_contract_routes() -> None:
         "/api/kb/search",
         "/api/kb/status/documents/{document_id}",
         "/api/kb/documents/{document_id}/retry",
+        "/api/kb/documents/{document_id}/metadata",
         "/api/kb/documents/{document_id}",
     }.issubset(paths)
     assert "/api/kb/embed/search" not in paths
@@ -114,6 +132,7 @@ def test_canonical_kb_routes_require_service_auth() -> None:
     assert client.post("/api/kb/search", json={}).status_code == 401
     assert client.get(f"/api/kb/status/documents/{document_id}").status_code == 401
     assert client.post(f"/api/kb/documents/{document_id}/retry").status_code == 401
+    assert client.patch(f"/api/kb/documents/{document_id}/metadata").status_code == 401
     assert client.delete(f"/api/kb/documents/{document_id}").status_code == 401
 
 
@@ -186,3 +205,29 @@ def test_ingest_route_accepts_conversation_file_without_playbook_document_id() -
     assert payload["conversation_id"] == str(conversation_id)
     assert payload["conversation_file_id"] == str(conversation_file_id)
     assert payload["playbook_document_id"] is None
+
+
+def test_document_metadata_refresh_route_accepts_authenticated_request() -> None:
+    client = TestClient(app)
+    fake_service = FakeIngestionService()
+    document_id = uuid4()
+    app.dependency_overrides[get_ingestion_service] = lambda: fake_service
+    try:
+        response = client.patch(
+            f"/api/kb/documents/{document_id}/metadata",
+            json={
+                "source_date": "2026-02-01",
+                "is_official": True,
+                "priority": 0,
+                "visibility_policy": {"scope": "all_athletes"},
+                "metadata_tags": {"collection": "compliance"},
+            },
+            headers={"Authorization": "Bearer test-api-secret"},
+        )
+    finally:
+        app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    assert response.json()["kb_service_document_id"] == str(document_id)
+    assert fake_service.requests[0][0] == document_id
+    assert fake_service.requests[0][1].metadata_tags == {"collection": "compliance"}

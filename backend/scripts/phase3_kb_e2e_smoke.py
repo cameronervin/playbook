@@ -58,6 +58,13 @@ SMOKE_QUERY = (
     "What does the Phase 3 smoke policy require before an athlete signs a NIL "
     "brand partnership deal?"
 )
+SMOKE_COLLECTION_SLUG = "compliance"
+SMOKE_INITIAL_TAG_SLUGS = ["nil"]
+SMOKE_UPDATED_TAG_SLUGS = ["nil", "compliance"]
+SMOKE_INITIAL_SOURCE_DATE = "2026-01-15"
+SMOKE_UPDATED_SOURCE_DATE = "2026-02-01"
+SMOKE_VISIBILITY_POLICY = {"scope": "all_athletes"}
+SMOKE_TAG_LABELS = {"nil": "NIL", "compliance": "Compliance"}
 FAILED_DOC_TITLE = "Phase 3 KB E2E Malformed Smoke"
 FAILED_DOC_FILENAME = "phase3-kb-e2e-malformed.docx"
 SAFE_MATCH_SUMMARY = "NIL disclosure compliance phrase"
@@ -109,6 +116,14 @@ class SmokeTokens:
     athlete_token: str
     super_token: str
     organization_id: UUID
+
+
+@dataclass(frozen=True)
+class SmokeCatalog:
+    """Resolved catalog metadata IDs used by upload requests."""
+
+    collection_id: str
+    tag_slugs: list[str]
 
 
 @dataclass(frozen=True)
@@ -300,7 +315,11 @@ async def _run(args: SmokeArgs) -> None:
                 timeout_seconds=args.timeout_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
             )
-            _assert_ready_document(ready_document)
+            _assert_ready_document(
+                ready_document,
+                expected_source_date=SMOKE_INITIAL_SOURCE_DATE,
+                expected_tag_slugs=SMOKE_INITIAL_TAG_SLUGS,
+            )
             await _assert_backend_mirror(document_id)
             await _assert_document_events(document_id)
             await _assert_audit_actions(
@@ -311,6 +330,20 @@ async def _run(args: SmokeArgs) -> None:
                 - {"kb.document_deleted", "kb.document_retry_requested"},
             )
             _emit("Ready admin document mirrored kb-service metadata.")
+
+            updated_document = await _update_document_metadata(
+                client,
+                headers=admin_headers,
+                document_id=document_id,
+                tag_slugs=SMOKE_UPDATED_TAG_SLUGS,
+                source_date=SMOKE_UPDATED_SOURCE_DATE,
+            )
+            _assert_ready_document(
+                updated_document,
+                expected_source_date=SMOKE_UPDATED_SOURCE_DATE,
+                expected_tag_slugs=SMOKE_UPDATED_TAG_SLUGS,
+            )
+            _emit("Metadata patch refreshed backend and kb-service metadata.")
 
             await _assert_provider_search(
                 settings,
@@ -373,8 +406,18 @@ async def _run(args: SmokeArgs) -> None:
                 timeout_seconds=args.timeout_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
             )
-            _assert_ready_document(retried)
+            _assert_ready_document(
+                retried,
+                expected_source_date=SMOKE_UPDATED_SOURCE_DATE,
+                expected_tag_slugs=SMOKE_UPDATED_TAG_SLUGS,
+            )
             await _assert_backend_mirror(document_id)
+            await _assert_provider_search(
+                settings,
+                organization_id=tokens.organization_id,
+                expected_document_id=document_id,
+                should_find=True,
+            )
             _emit("Retry reprocessed the linked document back to ready.")
 
             await _delete_document(client, headers=admin_headers, document_id=document_id)
@@ -442,15 +485,15 @@ async def _upload_admin_docx(
     filename: str,
     payload: bytes,
 ) -> dict[str, Any]:
+    catalog = await _resolve_smoke_catalog(client, headers=headers)
     request = {
         "filename": filename,
         "content_type": DOCX_CONTENT_TYPE,
         "size_bytes": len(payload),
         "title": title,
-        "metadata_tags": {
-            "phase": "phase-3",
-            "smoke": "kb-ingestion-retrieval",
-        },
+        "collection_id": catalog.collection_id,
+        "tag_slugs": catalog.tag_slugs,
+        "source_date": SMOKE_INITIAL_SOURCE_DATE,
     }
     upload = await _request_json(
         client,
@@ -477,6 +520,66 @@ async def _upload_admin_docx(
             f"{_safe_response_detail(storage_response)}"
         )
     return upload
+
+
+async def _resolve_smoke_catalog(
+    client: httpx.AsyncClient,
+    *,
+    headers: dict[str, str],
+) -> SmokeCatalog:
+    collections = await _request_json(
+        client,
+        "GET",
+        "/api/v1/admin/kb/collections",
+        expected_statuses={200},
+        headers=headers,
+    )
+    tags = await _request_json(
+        client,
+        "GET",
+        "/api/v1/admin/kb/metadata-tags",
+        expected_statuses={200},
+        headers=headers,
+    )
+    collection = next(
+        (item for item in collections if item.get("slug") == SMOKE_COLLECTION_SLUG),
+        None,
+    )
+    if collection is None:
+        raise SmokeTestError(
+            f"smoke collection missing from catalog: {SMOKE_COLLECTION_SLUG}"
+        )
+    available_tag_slugs = {item.get("slug") for item in tags}
+    missing_tags = [
+        slug for slug in SMOKE_UPDATED_TAG_SLUGS if slug not in available_tag_slugs
+    ]
+    if missing_tags:
+        raise SmokeTestError(
+            "smoke metadata tags missing from catalog: "
+            + ", ".join(sorted(missing_tags))
+        )
+    return SmokeCatalog(
+        collection_id=collection["id"],
+        tag_slugs=list(SMOKE_INITIAL_TAG_SLUGS),
+    )
+
+
+async def _update_document_metadata(
+    client: httpx.AsyncClient,
+    *,
+    headers: dict[str, str],
+    document_id: str,
+    tag_slugs: list[str],
+    source_date: str,
+) -> dict[str, Any]:
+    return await _request_json(
+        client,
+        "PATCH",
+        f"/api/v1/admin/kb/documents/{document_id}/metadata",
+        expected_statuses={200},
+        headers=headers,
+        json_body={"tag_slugs": tag_slugs, "source_date": source_date},
+    )
 
 
 async def _complete_upload(
@@ -531,14 +634,52 @@ async def _wait_for_document_status(
     )
 
 
-def _assert_ready_document(document: dict[str, Any]) -> None:
+def _assert_ready_document(
+    document: dict[str, Any],
+    *,
+    expected_source_date: str,
+    expected_tag_slugs: list[str],
+) -> None:
     if document.get("processing_status") != "ready":
         raise SmokeTestError("ready document assertion received a non-ready document")
     if not document.get("kb_service_document_id"):
         raise SmokeTestError("ready document is missing kb_service_document_id")
-    tags = document.get("metadata_tags") or {}
-    if tags.get("phase") != "phase-3":
-        raise SmokeTestError("ready document is missing smoke metadata tags")
+    if document.get("source_date") != expected_source_date:
+        raise SmokeTestError("ready document has stale source_date metadata")
+    _assert_refreshed_metadata(
+        document,
+        expected_source_date=expected_source_date,
+        expected_tag_slugs=expected_tag_slugs,
+    )
+
+
+def _assert_refreshed_metadata(
+    metadata: dict[str, Any],
+    *,
+    expected_source_date: str,
+    expected_tag_slugs: list[str],
+) -> None:
+    if metadata.get("source_date") != expected_source_date:
+        raise SmokeTestError(
+            "metadata refresh did not propagate source_date to retrieval metadata"
+        )
+    if metadata.get("visibility_policy") != SMOKE_VISIBILITY_POLICY:
+        raise SmokeTestError(
+            "metadata refresh did not preserve all-athletes visibility"
+        )
+
+    metadata_tags = metadata.get("metadata_tags") or {}
+    expected_labels = [SMOKE_TAG_LABELS[slug] for slug in expected_tag_slugs]
+    if metadata_tags.get("collection") != SMOKE_COLLECTION_SLUG:
+        raise SmokeTestError("metadata refresh returned the wrong collection tag")
+    if metadata_tags.get("collection_title") != "Compliance & NIL":
+        raise SmokeTestError("metadata refresh returned the wrong collection title")
+    if metadata_tags.get("tag_slugs") != expected_tag_slugs:
+        raise SmokeTestError("metadata refresh returned stale metadata tag slugs")
+    if metadata_tags.get("tags") != expected_labels:
+        raise SmokeTestError("metadata refresh returned stale metadata tag labels")
+    if metadata_tags.get("topics") != ["Compliance & NIL", *expected_labels]:
+        raise SmokeTestError("metadata refresh returned stale metadata topics")
 
 
 async def _assert_document_events(document_id: str) -> None:
@@ -639,6 +780,11 @@ async def _assert_provider_search(
         ):
             if metadata.get(key) in (None, ""):
                 raise SmokeTestError(f"provider result missing citation metadata: {key}")
+        _assert_refreshed_metadata(
+            metadata,
+            expected_source_date=SMOKE_UPDATED_SOURCE_DATE,
+            expected_tag_slugs=SMOKE_UPDATED_TAG_SLUGS,
+        )
         return
 
     if matches:
@@ -718,6 +864,11 @@ async def _assert_athlete_chat_citation(
     for key in ("kb_service_document_id", "chunk_index", "source_type"):
         if source_metadata.get(key) in (None, ""):
             raise SmokeTestError(f"persisted citation missing metadata: {key}")
+    _assert_refreshed_metadata(
+        source_metadata,
+        expected_source_date=SMOKE_UPDATED_SOURCE_DATE,
+        expected_tag_slugs=SMOKE_UPDATED_TAG_SLUGS,
+    )
 
 
 async def _consume_stream(

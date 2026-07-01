@@ -9,6 +9,7 @@ from app.repositories.vector_repo.queries import (
     _build_search_common,
     _build_search_statement,
     _document_metadata_match,
+    _refreshed_cmetadata_value,
 )
 from app.repositories.vector_repo.ranking import (
     DEDUPED_SEARCH_FETCH_MULTIPLIER,
@@ -49,6 +50,7 @@ __all__ = [
     "_merge_hybrid_candidates",
     "_normalize_chunk_metadata",
     "_record_ranked_candidates",
+    "_refreshed_cmetadata_value",
     "_result_dedupe_key",
     "_rrf_score",
     "_slice_iter",

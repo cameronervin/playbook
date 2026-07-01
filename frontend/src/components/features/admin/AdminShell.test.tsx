@@ -85,6 +85,13 @@ const deleteDocumentMutate = vi.hoisted(() => vi.fn())
 const updateDocumentMutate = vi.hoisted(() => vi.fn())
 const updateDocumentMutateAsync = vi.hoisted(() => vi.fn())
 const uploadDocumentMutate = vi.hoisted(() => vi.fn())
+const createCollectionMutateAsync = vi.hoisted(() => vi.fn())
+const deleteCollectionMutateAsync = vi.hoisted(() => vi.fn())
+const createMetadataTagMutateAsync = vi.hoisted(() => vi.fn())
+const updateMetadataTagMutateAsync = vi.hoisted(() => vi.fn())
+const archiveMetadataTagMutateAsync = vi.hoisted(() => vi.fn())
+const unarchiveMetadataTagMutateAsync = vi.hoisted(() => vi.fn())
+const deleteMetadataTagPermanentlyMutateAsync = vi.hoisted(() => vi.fn())
 const createAdminChatSessionMutateAsync = vi.hoisted(() => vi.fn())
 const submitAdminChatMessageMutateAsync = vi.hoisted(() => vi.fn())
 const startAdminChatStream = vi.hoisted(() => vi.fn())
@@ -107,6 +114,7 @@ const adminQueryState = vi.hoisted(() => ({
   kbError: false,
   kbFetching: false,
   kbLoading: false,
+  kbMetadataFetching: false,
   usersError: false,
   usersFetching: false,
   usersLoading: false,
@@ -122,8 +130,15 @@ const kbDocuments = vi.hoisted(() => [
     size_bytes: 1_800_000,
     processing_status: 'ready',
     failure_reason: null,
+    collection_id: 'collection-compliance',
+    tag_slugs: ['nil', 'compliance'],
     visibility_policy: { scope: 'all_athletes' },
-    metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
+    metadata_tags: {
+      collection: 'compliance',
+      tag_slugs: ['nil', 'compliance'],
+      tags: ['NIL', 'Compliance'],
+      topics: ['Compliance & NIL', 'NIL', 'Compliance'],
+    },
     source_date: '2026-03-01',
     kb_service_document_id: 'kb-doc-1',
     created_at: '2026-03-14T12:00:00Z',
@@ -139,8 +154,15 @@ const kbDocuments = vi.hoisted(() => [
     size_bytes: 1_100_000,
     processing_status: 'failed',
     failure_reason: 'Scanned PDF - no extractable text layer.',
+    collection_id: 'collection-compliance',
+    tag_slugs: ['recruiting'],
     visibility_policy: { scope: 'all_athletes' },
-    metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
+    metadata_tags: {
+      collection: 'compliance',
+      tag_slugs: ['recruiting'],
+      tags: ['Recruiting'],
+      topics: ['Compliance & NIL', 'Recruiting'],
+    },
     source_date: null,
     kb_service_document_id: null,
     created_at: '2026-06-03T12:00:00Z',
@@ -156,12 +178,133 @@ const kbDocuments = vi.hoisted(() => [
     size_bytes: 88_000,
     processing_status: 'ready',
     failure_reason: null,
+    collection_id: 'collection-travel',
+    tag_slugs: ['travel', 'old-policy'],
     visibility_policy: { scope: 'all_athletes' },
-    metadata_tags: { collection: 'travel', topics: ['Travel'] },
+    metadata_tags: {
+      collection: 'travel',
+      tag_slugs: ['travel', 'old-policy'],
+      tags: ['Travel', 'Old policy'],
+      topics: ['Team Travel', 'Travel', 'Old policy'],
+    },
     source_date: '2026-06-01',
     kb_service_document_id: 'kb-doc-3',
     created_at: '2026-06-01T12:00:00Z',
     updated_at: '2026-06-01T12:00:00Z',
+  },
+] as Array<Record<string, unknown>>)
+
+const kbCollections = vi.hoisted(() => [
+  {
+    id: 'collection-compliance',
+    organization_id: 'org-1',
+    slug: 'compliance',
+    title: 'Compliance & NIL',
+    description: 'NIL, eligibility, and recruiting rules - kept current with department and NCAA policy.',
+    icon: 'shield',
+    sort_order: 10,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'collection-travel',
+    organization_id: 'org-1',
+    slug: 'travel',
+    title: 'Team Travel',
+    description: 'Per-diem rates, charter logistics, and team hotel policy for every sport.',
+    icon: 'plane',
+    sort_order: 20,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'collection-academics',
+    organization_id: 'org-1',
+    slug: 'academics',
+    title: 'Academic Services',
+    description: 'Study-hall rules, tutoring, and academic eligibility support.',
+    icon: 'book-open',
+    sort_order: 30,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'collection-donor',
+    organization_id: 'org-1',
+    slug: 'donor',
+    title: 'Donor Relations',
+    description: 'Giving levels, suite benefits, and booster club answers for boosters.',
+    icon: 'users',
+    sort_order: 40,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+] as Array<Record<string, unknown>>)
+
+const kbMetadataTags = vi.hoisted(() => [
+  {
+    id: 'tag-nil',
+    organization_id: 'org-1',
+    slug: 'nil',
+    label: 'NIL',
+    sort_order: 10,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'tag-compliance',
+    organization_id: 'org-1',
+    slug: 'compliance',
+    label: 'Compliance',
+    sort_order: 20,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'tag-recruiting',
+    organization_id: 'org-1',
+    slug: 'recruiting',
+    label: 'Recruiting',
+    sort_order: 30,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'tag-travel',
+    organization_id: 'org-1',
+    slug: 'travel',
+    label: 'Travel',
+    sort_order: 40,
+    is_active: true,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'tag-archived',
+    organization_id: 'org-1',
+    slug: 'legacy',
+    label: 'Legacy',
+    sort_order: 90,
+    is_active: false,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
+  },
+  {
+    id: 'tag-archived-used',
+    organization_id: 'org-1',
+    slug: 'old-policy',
+    label: 'Old policy',
+    sort_order: 100,
+    is_active: false,
+    created_at: '2026-06-29T12:00:00Z',
+    updated_at: '2026-06-29T12:00:00Z',
   },
 ] as Array<Record<string, unknown>>)
 
@@ -236,6 +379,18 @@ vi.mock('@/src/hooks/useAdminChat', () => ({
 }))
 
 vi.mock('@/src/hooks/useKBDocuments', () => ({
+  useKBCollections: () => ({
+    data: adminQueryState.kbLoading ? undefined : kbCollections,
+    isError: adminQueryState.kbError,
+    isFetching: adminQueryState.kbFetching,
+    isLoading: adminQueryState.kbLoading,
+  }),
+  useKBMetadataTags: () => ({
+    data: kbMetadataTags,
+    isError: false,
+    isFetching: adminQueryState.kbMetadataFetching,
+    isLoading: false,
+  }),
   useKBDocuments: () => ({
     data: adminQueryState.kbLoading ? undefined : kbDocuments,
     isError: adminQueryState.kbError,
@@ -245,6 +400,16 @@ vi.mock('@/src/hooks/useKBDocuments', () => ({
   useUploadKBDocument: () => ({ mutateAsync: uploadDocumentMutate, isPending: false }),
   useRetryKBDocument: () => ({ mutate: retryDocumentMutate, isPending: false }),
   useDeleteKBDocument: () => ({ mutate: deleteDocumentMutate, isPending: false }),
+  useCreateKBCollection: () => ({ mutateAsync: createCollectionMutateAsync, isPending: false }),
+  useDeleteKBCollection: () => ({ mutateAsync: deleteCollectionMutateAsync, isPending: false }),
+  useCreateKBMetadataTag: () => ({ mutateAsync: createMetadataTagMutateAsync, isPending: false }),
+  useUpdateKBMetadataTag: () => ({ mutateAsync: updateMetadataTagMutateAsync, isPending: false }),
+  useArchiveKBMetadataTag: () => ({ mutateAsync: archiveMetadataTagMutateAsync, isPending: false }),
+  useUnarchiveKBMetadataTag: () => ({ mutateAsync: unarchiveMetadataTagMutateAsync, isPending: false }),
+  useDeleteKBMetadataTagPermanently: () => ({
+    mutateAsync: deleteMetadataTagPermanentlyMutateAsync,
+    isPending: false,
+  }),
   useUpdateKBDocumentMetadata: () => ({
     mutate: updateDocumentMutate,
     mutateAsync: updateDocumentMutateAsync,
@@ -261,6 +426,14 @@ function renderAdmin() {
   )
 }
 
+function getKnowledgeBaseUploadInput(): HTMLInputElement {
+  const uploadInput = screen
+    .getAllByLabelText(/Upload knowledge-base document/i)
+    .find((element): element is HTMLInputElement => element instanceof HTMLInputElement)
+  if (!uploadInput) throw new Error('Knowledge-base upload input not found')
+  return uploadInput
+}
+
 describe('AdminShell', () => {
   beforeEach(() => {
     currentUser.id = 'u1'
@@ -270,6 +443,7 @@ describe('AdminShell', () => {
     adminQueryState.kbError = false
     adminQueryState.kbFetching = false
     adminQueryState.kbLoading = false
+    adminQueryState.kbMetadataFetching = false
     adminQueryState.usersError = false
     adminQueryState.usersFetching = false
     adminQueryState.usersLoading = false
@@ -282,6 +456,31 @@ describe('AdminShell', () => {
     updateDocumentMutateAsync.mockClear()
     updateDocumentMutateAsync.mockResolvedValue(kbDocuments[0])
     uploadDocumentMutate.mockClear()
+    createCollectionMutateAsync.mockClear()
+    createCollectionMutateAsync.mockResolvedValue({
+      id: 'collection-sport-rules',
+      organization_id: 'org-1',
+      slug: 'sport-rules',
+      title: 'Sport rules',
+      description: 'Sport-specific rules and team policies.',
+      icon: 'book-open',
+      sort_order: 50,
+      is_active: true,
+      created_at: '2026-06-29T12:00:00Z',
+      updated_at: '2026-06-29T12:00:00Z',
+    })
+    deleteCollectionMutateAsync.mockClear()
+    deleteCollectionMutateAsync.mockResolvedValue(undefined)
+    createMetadataTagMutateAsync.mockClear()
+    createMetadataTagMutateAsync.mockResolvedValue(kbMetadataTags[0])
+    updateMetadataTagMutateAsync.mockClear()
+    updateMetadataTagMutateAsync.mockResolvedValue(kbMetadataTags[0])
+    archiveMetadataTagMutateAsync.mockClear()
+    archiveMetadataTagMutateAsync.mockResolvedValue(undefined)
+    unarchiveMetadataTagMutateAsync.mockClear()
+    unarchiveMetadataTagMutateAsync.mockResolvedValue(kbMetadataTags[0])
+    deleteMetadataTagPermanentlyMutateAsync.mockClear()
+    deleteMetadataTagPermanentlyMutateAsync.mockResolvedValue(undefined)
     createAdminChatSessionMutateAsync.mockClear()
     submitAdminChatMessageMutateAsync.mockClear()
     startAdminChatStream.mockClear()
@@ -318,8 +517,15 @@ describe('AdminShell', () => {
         size_bytes: 1_800_000,
         processing_status: 'ready',
         failure_reason: null,
+        collection_id: 'collection-compliance',
+        tag_slugs: ['nil', 'compliance'],
         visibility_policy: { scope: 'all_athletes' },
-        metadata_tags: { collection: 'compliance', topics: ['NIL', 'Compliance'] },
+        metadata_tags: {
+          collection: 'compliance',
+          tag_slugs: ['nil', 'compliance'],
+          tags: ['NIL', 'Compliance'],
+          topics: ['Compliance & NIL', 'NIL', 'Compliance'],
+        },
         source_date: '2026-03-01',
         kb_service_document_id: 'kb-doc-1',
         created_at: '2026-03-14T12:00:00Z',
@@ -335,8 +541,15 @@ describe('AdminShell', () => {
         size_bytes: 1_100_000,
         processing_status: 'failed',
         failure_reason: 'Scanned PDF - no extractable text layer.',
+        collection_id: 'collection-compliance',
+        tag_slugs: ['recruiting'],
         visibility_policy: { scope: 'all_athletes' },
-        metadata_tags: { collection: 'compliance', topics: ['Recruiting'] },
+        metadata_tags: {
+          collection: 'compliance',
+          tag_slugs: ['recruiting'],
+          tags: ['Recruiting'],
+          topics: ['Compliance & NIL', 'Recruiting'],
+        },
         source_date: null,
         kb_service_document_id: null,
         created_at: '2026-06-03T12:00:00Z',
@@ -352,12 +565,69 @@ describe('AdminShell', () => {
         size_bytes: 88_000,
         processing_status: 'ready',
         failure_reason: null,
+        collection_id: 'collection-travel',
+        tag_slugs: ['travel', 'old-policy'],
         visibility_policy: { scope: 'all_athletes' },
-        metadata_tags: { collection: 'travel', topics: ['Travel'] },
+        metadata_tags: {
+          collection: 'travel',
+          tag_slugs: ['travel', 'old-policy'],
+          tags: ['Travel', 'Old policy'],
+          topics: ['Team Travel', 'Travel', 'Old policy'],
+        },
         source_date: '2026-06-01',
         kb_service_document_id: 'kb-doc-3',
         created_at: '2026-06-01T12:00:00Z',
         updated_at: '2026-06-01T12:00:00Z',
+      },
+    ])
+    kbCollections.splice(0, kbCollections.length, ...[
+      {
+        id: 'collection-compliance',
+        organization_id: 'org-1',
+        slug: 'compliance',
+        title: 'Compliance & NIL',
+        description: 'NIL, eligibility, and recruiting rules - kept current with department and NCAA policy.',
+        icon: 'shield',
+        sort_order: 10,
+        is_active: true,
+        created_at: '2026-06-29T12:00:00Z',
+        updated_at: '2026-06-29T12:00:00Z',
+      },
+      {
+        id: 'collection-travel',
+        organization_id: 'org-1',
+        slug: 'travel',
+        title: 'Team Travel',
+        description: 'Per-diem rates, charter logistics, and team hotel policy for every sport.',
+        icon: 'plane',
+        sort_order: 20,
+        is_active: true,
+        created_at: '2026-06-29T12:00:00Z',
+        updated_at: '2026-06-29T12:00:00Z',
+      },
+      {
+        id: 'collection-academics',
+        organization_id: 'org-1',
+        slug: 'academics',
+        title: 'Academic Services',
+        description: 'Study-hall rules, tutoring, and academic eligibility support.',
+        icon: 'book-open',
+        sort_order: 30,
+        is_active: true,
+        created_at: '2026-06-29T12:00:00Z',
+        updated_at: '2026-06-29T12:00:00Z',
+      },
+      {
+        id: 'collection-donor',
+        organization_id: 'org-1',
+        slug: 'donor',
+        title: 'Donor Relations',
+        description: 'Giving levels, suite benefits, and booster club answers for boosters.',
+        icon: 'users',
+        sort_order: 40,
+        is_active: true,
+        created_at: '2026-06-29T12:00:00Z',
+        updated_at: '2026-06-29T12:00:00Z',
       },
     ])
     useUIStore.setState({
@@ -402,12 +672,11 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /jordan mitchell account menu/i }))
 
-    expect(screen.getByRole('menuitem', { name: /chat workspace/i })).toBeInTheDocument()
+    const chatWorkspace = screen.getByRole('menuitem', { name: /chat workspace/i })
+
+    expect(chatWorkspace).toBeInTheDocument()
+    expect(chatWorkspace).toHaveAttribute('href', '/chat')
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('menuitem', { name: /chat workspace/i }))
-
-    expect(adminRouterMocks.push).toHaveBeenCalledWith('/chat')
   })
 
   it('opens admin settings without security and SSO options', async () => {
@@ -482,6 +751,7 @@ describe('AdminShell', () => {
     renderAdmin()
 
     expect(screen.getByRole('heading', { name: 'Knowledge base' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Manage tags/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /New collection/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toHaveTextContent('2 documents')
     expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toHaveTextContent('1 needs attention')
@@ -489,6 +759,126 @@ describe('AdminShell', () => {
     expect(screen.getByRole('button', { name: /Team Travel collection/i })).toHaveTextContent('All ready')
     expect(screen.getByRole('button', { name: /Academic Services collection/i })).toHaveTextContent('No documents yet')
     expect(screen.getByRole('button', { name: /Donor Relations collection/i })).toHaveTextContent('No documents yet')
+  })
+
+  it('lets super admins create KB collections with title, description, and icon', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /New collection/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /New collection/i })
+    const iconOptions = Array.from(dialog.querySelectorAll('.pb-admin-kb-icon-option'))
+    const shieldOption = within(dialog).getByRole('button', { name: /^Shield$/i, pressed: true })
+    const bookOption = within(dialog).getByRole('button', { name: /^Book$/i, pressed: false })
+
+    expect(shieldOption).toHaveClass('is-selected')
+    expect(iconOptions).toHaveLength(5)
+    for (const option of iconOptions) {
+      expect(option.querySelectorAll('svg')).toHaveLength(1)
+    }
+
+    await userEvent.type(within(dialog).getByLabelText(/Title/i), 'Sport rules')
+    await userEvent.type(within(dialog).getByLabelText(/Description/i), 'Sport-specific rules and team policies.')
+    await userEvent.click(bookOption)
+
+    expect(within(dialog).getByRole('button', { name: /^Book$/i, pressed: true })).toHaveClass('is-selected')
+    expect(within(dialog).getByRole('button', { name: /^Shield$/i, pressed: false })).not.toHaveClass(
+      'is-selected',
+    )
+    for (const option of iconOptions) {
+      expect(option.querySelectorAll('svg')).toHaveLength(1)
+    }
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Create collection/i }))
+
+    expect(createCollectionMutateAsync).toHaveBeenCalledWith({
+      title: 'Sport rules',
+      description: 'Sport-specific rules and team policies.',
+      icon: 'book-open',
+    })
+  })
+
+  it('greys out collection delete when documents still exist and explains why', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Collection actions for Compliance & NIL/i }))
+
+    const deleteAction = screen.getByRole('menuitem', { name: /Delete collection/i })
+    expect(deleteAction).toHaveAttribute('aria-disabled', 'true')
+
+    await userEvent.hover(deleteAction)
+
+    expect(await screen.findAllByText(/Delete the documents in this collection first/i)).not.toHaveLength(0)
+
+    await userEvent.click(deleteAction)
+
+    expect(deleteCollectionMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('lets super admins delete empty KB collections after confirmation', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Collection actions for Academic Services/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Delete collection/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /Delete collection/i })
+    expect(within(dialog).getByText(/removes the empty collection/i)).toHaveTextContent(
+      'Delete Academic Services?',
+    )
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Delete collection/i }))
+
+    expect(deleteCollectionMutateAsync).toHaveBeenCalledWith('collection-academics')
+  })
+
+  it('lets super admins manage active and archived metadata tag presets', async () => {
+    currentUser.role = 'super_admin'
+    useUIStore.setState({ adminTab: 'kb' })
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Manage tags/i }))
+
+    const dialog = screen.getByRole('dialog', { name: /Manage tags/i })
+    expect(within(dialog).getByRole('heading', { name: /Active tags/i })).toBeInTheDocument()
+    expect(within(dialog).getByRole('heading', { name: /Archived tags/i })).toBeInTheDocument()
+    expect(within(dialog).queryByLabelText(/Search tags/i)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/^nil$/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/^legacy$/)).not.toBeInTheDocument()
+
+    await userEvent.type(within(dialog).getByLabelText(/New metadata tag label/i), 'Sport rules')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Add$/i }))
+
+    expect(createMetadataTagMutateAsync).toHaveBeenCalledWith({ label: 'Sport rules' })
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Rename NIL/i }))
+    await userEvent.clear(within(dialog).getByLabelText(/Edit NIL/i))
+    await userEvent.type(within(dialog).getByLabelText(/Edit NIL/i), 'NIL policy')
+    await userEvent.click(within(dialog).getByRole('button', { name: /Save NIL/i }))
+
+    expect(updateMetadataTagMutateAsync).toHaveBeenCalledWith({
+      tagId: 'tag-nil',
+      request: { label: 'NIL policy' },
+    })
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Archive Compliance/i }))
+
+    expect(archiveMetadataTagMutateAsync).toHaveBeenCalledWith('tag-compliance')
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Unarchive Legacy/i }))
+    expect(unarchiveMetadataTagMutateAsync).toHaveBeenCalledWith('tag-archived')
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /Delete Legacy permanently/i }))
+    expect(deleteMetadataTagPermanentlyMutateAsync).toHaveBeenCalledWith('tag-archived')
+
+    expect(
+      within(dialog).getByRole('button', { name: /Delete Old policy permanently/i }),
+    ).toBeDisabled()
   })
 
   it('renders collection skeletons for the first knowledge-base load', () => {
@@ -516,6 +906,18 @@ describe('AdminShell', () => {
     expect(screen.queryByTestId('admin-kb-skeleton')).not.toBeInTheDocument()
   })
 
+  it('does not show a knowledge-base refresh state during metadata tag refetches', () => {
+    currentUser.role = 'super_admin'
+    adminQueryState.kbMetadataFetching = true
+    useUIStore.setState({ adminTab: 'kb' })
+
+    renderAdmin()
+
+    expect(screen.getByRole('button', { name: /Compliance & NIL collection/i })).toBeInTheDocument()
+    expect(screen.queryByText(/refreshing knowledge base/i)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('admin-kb-skeleton')).not.toBeInTheDocument()
+  })
+
   it('uses info-tone indicators for queued and processing documents', async () => {
     currentUser.role = 'super_admin'
     kbDocuments.push({
@@ -528,8 +930,15 @@ describe('AdminShell', () => {
       size_bytes: 640_000,
       processing_status: 'uploaded',
       failure_reason: null,
+      collection_id: 'collection-travel',
+      tag_slugs: ['travel'],
       visibility_policy: { scope: 'all_athletes' },
-      metadata_tags: { collection: 'travel', topics: ['Travel'] },
+      metadata_tags: {
+        collection: 'travel',
+        tag_slugs: ['travel'],
+        tags: ['Travel'],
+        topics: ['Team Travel', 'Travel'],
+      },
       source_date: null,
       kb_service_document_id: null,
       created_at: '2026-06-03T12:00:00Z',
@@ -556,29 +965,25 @@ describe('AdminShell', () => {
     renderAdmin()
 
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
-    await userEvent.click(screen.getByRole('button', { name: /Upload document/i }))
-
-    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.upload(
-      within(dialog).getByLabelText(/Document file/i),
+      getKnowledgeBaseUploadInput(),
       new File(['hello'], 'athlete-handbook.pdf', { type: 'application/pdf' }),
     )
+    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.clear(within(dialog).getByLabelText(/Title/i))
     await userEvent.type(within(dialog).getByLabelText(/Title/i), 'Athlete handbook')
-    await userEvent.clear(within(dialog).getByLabelText(/Metadata tags/i))
-    await userEvent.type(within(dialog).getByLabelText(/Metadata tags/i), 'NIL, Compliance')
+    await userEvent.click(within(dialog).getByRole('button', { name: /Add NIL/i }))
+    await userEvent.click(within(dialog).getByRole('button', { name: /Add Compliance/i }))
     await userEvent.type(within(dialog).getByLabelText(/Source date/i), '2026-06-29')
     await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
 
     expect(uploadDocumentMutate).toHaveBeenCalledWith(
       expect.objectContaining({
+        collection_id: 'collection-compliance',
         file: expect.objectContaining({ name: 'athlete-handbook.pdf' }),
-        metadata_tags: {
-          collection: 'compliance',
-          topics: ['NIL', 'Compliance'],
-        },
         onProgress: expect.any(Function),
         source_date: '2026-06-29',
+        tag_slugs: ['nil', 'compliance'],
         title: 'Athlete handbook',
       }),
     )
@@ -592,13 +997,11 @@ describe('AdminShell', () => {
     renderAdmin()
 
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
-    await userEvent.click(screen.getByRole('button', { name: /Upload document/i }))
-
-    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.upload(
-      within(dialog).getByLabelText(/Document file/i),
+      getKnowledgeBaseUploadInput(),
       new File(['hello'], 'bad-date.pdf', { type: 'application/pdf' }),
     )
+    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.type(within(dialog).getByLabelText(/Source date/i), 'June 29, 2026')
     await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
 
@@ -614,15 +1017,12 @@ describe('AdminShell', () => {
     renderAdmin()
 
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
-    await userEvent.click(screen.getByRole('button', { name: /Upload document/i }))
-
-    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
     await userEvent.upload(
-      within(dialog).getByLabelText(/Document file/i),
+      getKnowledgeBaseUploadInput(),
       new File(['hello'], 'retry-me.pdf', { type: 'application/pdf' }),
     )
-    await userEvent.clear(within(dialog).getByLabelText(/Metadata tags/i))
-    await userEvent.type(within(dialog).getByLabelText(/Metadata tags/i), 'Retry, Compliance')
+    const dialog = screen.getByRole('dialog', { name: /Upload document/i })
+    await userEvent.click(within(dialog).getByRole('button', { name: /Add Compliance/i }))
     await userEvent.type(within(dialog).getByLabelText(/Source date/i), '2026-06-28')
     await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
 
@@ -633,11 +1033,9 @@ describe('AdminShell', () => {
     expect(uploadDocumentMutate).toHaveBeenCalledTimes(2)
     expect(uploadDocumentMutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        metadata_tags: {
-          collection: 'compliance',
-          topics: ['Retry', 'Compliance'],
-        },
+        collection_id: 'collection-compliance',
         source_date: '2026-06-28',
+        tag_slugs: ['compliance'],
         title: 'retry-me.pdf',
       }),
     )
@@ -662,10 +1060,11 @@ describe('AdminShell', () => {
 
     expect(screen.queryByRole('button', { name: /users & roles/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /New collection/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Manage tags/i })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
 
-    expect(screen.getByRole('button', { name: /Upload document/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Upload knowledge-base document to Compliance & NIL/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Retry RECRUITING_DEAD_PERIODS.PDF/i })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Actions for RECRUITING_DEAD_PERIODS.PDF/i }))
@@ -681,7 +1080,7 @@ describe('AdminShell', () => {
     await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
 
     expect(screen.getByRole('heading', { name: 'Compliance & NIL' })).toBeInTheDocument()
-    expect(screen.getByText(/2 documents · grounds athlete answers/i)).toBeInTheDocument()
+    expect(screen.getByText(/^2 documents$/i)).toBeInTheDocument()
     expect(screen.getByText('NIL_POLICY_2025.PDF')).toBeInTheDocument()
     expect(screen.getByText('RECRUITING_DEAD_PERIODS.PDF')).toBeInTheDocument()
     expect(screen.getByText(/Scanned PDF - no extractable text layer/i)).toBeInTheDocument()
@@ -697,7 +1096,7 @@ describe('AdminShell', () => {
     expect(screen.getByRole('heading', { name: 'Knowledge base' })).toBeInTheDocument()
   })
 
-  it('preserves collection metadata and clears source date when saving metadata', async () => {
+  it('saves preset tag slugs and clears source date when saving metadata', async () => {
     currentUser.role = 'admin'
     useUIStore.setState({ adminTab: 'kb' })
     renderAdmin()
@@ -707,19 +1106,14 @@ describe('AdminShell', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: /Edit metadata/i }))
 
     const dialog = screen.getByRole('dialog', { name: /Edit metadata/i })
-    await userEvent.clear(within(dialog).getByLabelText(/Metadata tags/i))
-    await userEvent.type(within(dialog).getByLabelText(/Metadata tags/i), 'Current NIL')
     await userEvent.clear(within(dialog).getByLabelText(/Source date/i))
     await userEvent.click(within(dialog).getByRole('button', { name: /Save changes/i }))
 
     expect(updateDocumentMutateAsync).toHaveBeenCalledWith({
       documentId: 'doc-nil-policy',
       metadata: {
-        metadata_tags: {
-          collection: 'compliance',
-          topics: ['Current NIL'],
-        },
         source_date: null,
+        tag_slugs: ['nil', 'compliance'],
       },
     })
     await waitFor(() =>

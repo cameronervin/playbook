@@ -1,16 +1,17 @@
 'use client'
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { FileText, Upload } from 'lucide-react'
+import { AdminKBTagSelector } from '@/src/components/features/admin/AdminKBTagSelector'
 import { Button, Dialog, Input } from '@/src/components/ui'
 import { validateUploadFile } from '@/src/lib/api/uploadValidation'
-import { SUPPORTED_UPLOAD_ACCEPT } from '@/src/lib/constants/uploads'
-import { collectionUploadMetadata } from '@/src/lib/fixtures/kbCollections'
 import type { AdminKBUploadRetryRequest } from '@/src/components/features/admin/kbFormatting'
-import type { KBCollectionViewModel } from '@/src/types/kb'
+import type { KBCollectionViewModel, KBMetadataTag } from '@/src/types/kb'
 
 interface AdminKBUploadDialogProps {
   collection: KBCollectionViewModel
+  initialFile: File | null
+  metadataTags: KBMetadataTag[]
   onOpenChange: (open: boolean) => void
   onSubmit: (request: AdminKBUploadRetryRequest) => void
   open: boolean
@@ -18,43 +19,42 @@ interface AdminKBUploadDialogProps {
 
 export function AdminKBUploadDialog({
   collection,
+  initialFile,
+  metadataTags,
   onOpenChange,
   onSubmit,
   open,
 }: AdminKBUploadDialogProps) {
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
-  const [tags, setTags] = useState(collection.name)
+  const [selectedTagSlugs, setSelectedTagSlugs] = useState<string[]>([])
   const [sourceDate, setSourceDate] = useState('')
   const [fileError, setFileError] = useState<string | null>(null)
   const [dateError, setDateError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
-      setFile(null)
-      setTitle('')
-      setTags(collection.name)
+      setSelectedTagSlugs([])
       setSourceDate('')
       setFileError(null)
       setDateError(null)
+      if (!initialFile) {
+        setFile(null)
+        setTitle('')
+        setFileError('Choose a supported file to upload.')
+        return
+      }
+      try {
+        const validated = validateUploadFile(initialFile)
+        setFile(initialFile)
+        setTitle(validated.filename)
+      } catch (error) {
+        setFile(null)
+        setTitle('')
+        setFileError(error instanceof Error ? error.message : 'Choose a supported file to upload.')
+      }
     }
-  }, [collection.name, open])
-
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0] ?? null
-    if (!selectedFile) return
-    try {
-      const validated = validateUploadFile(selectedFile)
-      setFile(selectedFile)
-      setTitle(validated.filename)
-      setFileError(null)
-    } catch (error) {
-      setFile(null)
-      setTitle('')
-      setFileError(error instanceof Error ? error.message : 'Choose a supported file to upload.')
-    }
-    event.target.value = ''
-  }
+  }, [initialFile, open])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -70,12 +70,10 @@ export function AdminKBUploadDialog({
     setDateError(null)
     validateUploadFile(file)
     onSubmit({
+      collection_id: collection.id,
       file,
-      metadata_tags: {
-        ...collectionUploadMetadata(collection),
-        topics: parseTags(tags),
-      },
       source_date: normalizedDate || null,
+      tag_slugs: selectedTagSlugs,
       title: title.trim() || file.name,
     })
     onOpenChange(false)
@@ -89,15 +87,9 @@ export function AdminKBUploadDialog({
       title="Upload document"
     >
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-        <label>
+        <div>
           <span className="pb-admin-kb-field-label block">Document file</span>
-          <input
-            accept={SUPPORTED_UPLOAD_ACCEPT}
-            className="sr-only"
-            onChange={handleFileChange}
-            type="file"
-          />
-          <span className="pb-focus-control flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-md border border-border-strong bg-surface px-3 py-2.5 text-left pb-ui-sm text-fg-1 transition hover:bg-surface-hover">
+          <span className="flex min-h-11 w-full items-center gap-3 rounded-md border border-border-strong bg-surface px-3 py-2.5 text-left pb-ui-sm text-fg-1">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-surface-hover text-brand">
               <FileText size={16} />
             </span>
@@ -105,7 +97,7 @@ export function AdminKBUploadDialog({
               {file ? file.name : 'Choose PDF, DOCX, PPTX, or XLSX'}
             </span>
           </span>
-        </label>
+        </div>
         {fileError && <p className="pb-ui-xs text-danger">{fileError}</p>}
 
         <label>
@@ -113,14 +105,11 @@ export function AdminKBUploadDialog({
           <Input onChange={(event) => setTitle(event.target.value)} value={title} />
         </label>
 
-        <label>
-          <span className="pb-admin-kb-field-label block">Metadata tags</span>
-          <Input
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="NIL, Compliance"
-            value={tags}
-          />
-        </label>
+        <AdminKBTagSelector
+          onChange={setSelectedTagSlugs}
+          selectedSlugs={selectedTagSlugs}
+          tags={metadataTags}
+        />
 
         <label>
           <span className="pb-admin-kb-field-label block">Source date</span>
@@ -148,14 +137,6 @@ export function AdminKBUploadDialog({
       </form>
     </Dialog>
   )
-}
-
-function parseTags(value: string): string[] {
-  const parsed = value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-  return parsed.length > 0 ? parsed : []
 }
 
 function isValidISODate(value: string): boolean {

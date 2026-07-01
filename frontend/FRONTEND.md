@@ -1,6 +1,6 @@
 # Frontend
 
-Playbook’s frontend is a Next.js App Router app: **Next.js 15 + React 19 + Tailwind CSS v4 + TanStack Query + Zustand + Radix primitives**, with strict TypeScript.
+Playbook’s frontend is a Next.js App Router app: **Next.js 15 + React 19 + Tailwind CSS v4 + TanStack Query + Zustand + Radix primitives**, with strict TypeScript. KB upload dropzones use `react-dropzone`.
 
 ## Getting Started
 
@@ -28,10 +28,10 @@ Set `NEXT_PUBLIC_API_URL` to the FastAPI backend, usually `http://localhost:8000
 | `/` | Auth-aware redirect |
 | `/login` | SSO-only login, Microsoft first then Google |
 | `/profile` | First-time athlete profile completion |
-| `/chat` | Athlete chat shell with conversation history and sources panel |
-| `/admin` | Admin shell with insights, KB management, and super-admin users |
+| `/chat` | Athlete-first chat shell with conversation history and sources panel; admins can enter explicitly from the account menu |
+| `/admin` | Default admin shell with insights, KB management, and super-admin users |
 
-The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callbacks redirect from the backend to `FRONTEND_URL + next_route` after the session cookie is set. Workspace activity calls the backend session-refresh endpoint on a five-minute throttle so active users receive sliding app-session renewal. A global TanStack Query/API-client auth handler clears local UI state and redirects to `/login?reason=session_expired` when the backend returns an expired/revoked 401. Do not add Auth.js/NextAuth for MVP auth.
+The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callbacks redirect from the backend to `FRONTEND_URL + next_route` after the session cookie is set: athletes land on `/chat` after profile completion, and admin-capable users land on `/admin`. Workspace activity calls the backend session-refresh endpoint on a five-minute throttle so active users receive sliding app-session renewal. A global TanStack Query/API-client auth handler clears local UI state and redirects to `/login?reason=session_expired` when the backend returns an expired/revoked 401. Do not add Auth.js/NextAuth for MVP auth.
 
 ## Design System
 
@@ -53,11 +53,13 @@ The visual source of truth is `backstage/design/`, especially `backstage/design/
 - Use local Playbook primitives in `src/components/ui/`.
 - `Button`, `IconButton`, `Input`, `Textarea`, and Radix wrappers own default focus and sizing behavior. Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions, and use `IconButton size="sm" variant="ghost"` for compact panel close/action buttons.
 - `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
-- `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`.
+- `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`. Admin and super-admin users default to `/admin`, but account-menu switchers use real links so they can explicitly move between `/admin` and `/chat`.
 - Admin Insights is fixture-backed until Phase 4 analytics APIs land, but the UI renders the full Claude dashboard hierarchy: header controls, AI summary, topic/risk modules, query volume, and the analytics chat side panel.
 - Admin pages share `AdminPageScaffold` for the Claude header, grid layer, toolbar band, content padding, and max-width rhythm across Insights, Knowledge base, and Users & roles.
-- Admin and super-admin users can manage KB documents from the Knowledge base view. Upload uses a dialog-backed direct-upload flow: choose a supported file, review/edit title, tags, and optional `YYYY-MM-DD` source date, then the browser requests a JSON upload intent, posts the file directly to storage, and completes the backend upload.
-- Super-admins additionally see Users & roles and the local New collection affordance. Department admins can upload, retry, edit metadata, and delete documents in existing collections, but do not see Users & roles.
+- Admin and super-admin users can manage KB documents from the Knowledge base view. Upload starts from an inline `pb-admin-kb-upload-panel` with a visible title and centered drag/drop tile powered by `react-dropzone`; the tile includes accepted file type guidance, and selecting a supported file opens the metadata review dialog, where admins edit title, choose preset metadata tags, and optionally set a `YYYY-MM-DD` source date. The browser then requests a JSON upload intent, posts the file directly to storage, and completes the backend upload.
+- Admin KB document rows must visibly represent every persisted ingestion status: `upload_pending` as Pending upload, `uploaded` as Queued, `processing` as Processing, `ready` as Ready, and `failed` as Failed. Failed rows show the backend failure reason when available and expose retry; local direct-upload failures show a safe error plus Try again with the original metadata.
+- KB collections and metadata tag presets are backend resources fetched through TanStack Query. Document upload and metadata update requests send `collection_id` and `tag_slugs`; frontend code must not author arbitrary `metadata_tags` for admin KB documents.
+- Super-admins additionally see Users & roles, New collection, collection delete actions, and Manage tags. New collection captures required title, required description, and icon. Empty collections can be archived after confirmation; collections with documents show a greyed-out delete action with a tooltip explaining that documents must be deleted first. Manage tags creates, renames, archives, unarchives, and permanently deletes unused archived global preset tags. Department admins can upload, retry, edit metadata, and delete documents in existing collections, but do not see Users & roles or catalog-management actions.
 - Super-admin Users & roles uses the design-backed table surface with search, role pills, locked current-user state, and Radix role-change menus wired to the existing admin user mutation.
 - Radix powers accessible dialog, dropdown menu, tabs, tooltip, and switch behavior.
 - Inline SVG is allowed only for the Playbook mark and SSO provider logos; use `lucide-react` for normal icons.

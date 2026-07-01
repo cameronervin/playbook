@@ -33,6 +33,7 @@ from app.services.auth_service import AuthService
 from app.services.conversations import ConversationService
 from app.services.dashboard_insights import DashboardInsightService
 from app.services.kb_documents import (
+    KBCatalogService,
     KBDocumentService,
     KBDocumentWebhookService,
 )
@@ -144,6 +145,11 @@ def get_kb_document_service(
     )
 
 
+def get_kb_catalog_service(session: SessionDep) -> KBCatalogService:
+    """Return KB catalog service dependency."""
+    return KBCatalogService(session)
+
+
 def get_kb_webhook_service(
     session: SessionDep,
     settings: SettingsDep,
@@ -186,6 +192,10 @@ AgentStreamServiceDep = Annotated[
 KBDocumentServiceDep = Annotated[
     KBDocumentService,
     Depends(get_kb_document_service),
+]
+KBCatalogServiceDep = Annotated[
+    KBCatalogService,
+    Depends(get_kb_catalog_service),
 ]
 KBDocumentWebhookServiceDep = Annotated[
     KBDocumentWebhookService,

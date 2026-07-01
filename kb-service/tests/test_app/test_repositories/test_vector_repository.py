@@ -15,6 +15,7 @@ import importlib.util
 import uuid
 from types import SimpleNamespace
 
+from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 
 from app.models.vector_embedding import VectorEmbedding
@@ -26,6 +27,7 @@ from app.repositories.vector_repo import (
     _deterministic_chunk_id,
     _map_search_row,
     _merge_hybrid_candidates,
+    _refreshed_cmetadata_value,
 )
 
 ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
@@ -58,6 +60,10 @@ def test_vector_repo_focused_modules_and_facade_exports_are_available() -> None:
         is vector_queries._build_lexical_search_statement
     )
     assert vector_repo._document_metadata_match is vector_queries._document_metadata_match
+    assert (
+        vector_repo._refreshed_cmetadata_value
+        is vector_queries._refreshed_cmetadata_value
+    )
     assert vector_repo._slice_iter is vector_sync_repo._slice_iter
 
     assert importlib.util.find_spec("app.repositories.vector_records") is None
@@ -66,6 +72,26 @@ def test_vector_repo_focused_modules_and_facade_exports_are_available() -> None:
     assert importlib.util.find_spec("app.repositories.vector_ranking") is None
     assert importlib.util.find_spec("app.repositories.vector_sync") is None
     assert importlib.util.find_spec("app.repositories.vector_async") is None
+
+
+def test_refreshed_cmetadata_value_removes_stale_keys_before_merge() -> None:
+    metadata = {
+        "collection": "compliance",
+        "metadata_tags": {"collection": "compliance"},
+    }
+    statement = update(VectorEmbedding).values(
+        cmetadata=_refreshed_cmetadata_value(
+            metadata,
+            {"collection", "legacy_topic", "metadata_tags"},
+        )
+    )
+
+    compiled = statement.compile(dialect=postgresql.dialect())
+
+    assert " - " in str(compiled)
+    assert " || " in str(compiled)
+    assert metadata in compiled.params.values()
+    assert ["collection", "legacy_topic", "metadata_tags"] in compiled.params.values()
 
 
 class _Result:

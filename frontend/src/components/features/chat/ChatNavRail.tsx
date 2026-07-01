@@ -1,12 +1,13 @@
 'use client'
 
 import { type ReactNode, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { ChevronsUpDown, LayoutDashboard, LogOut, Plus, Search, Settings, X } from 'lucide-react'
 import { ChatHistorySkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { BrandLockup } from '@/src/components/ui'
 import { ROUTES } from '@/src/lib/constants/config'
+import { isAdminRole } from '@/src/lib/authRouting'
 import { cn } from '@/src/lib/utils/cn'
 import type { CurrentUser } from '@/src/types/auth'
 import type { ConversationSummary } from '@/src/types/conversations'
@@ -37,7 +38,6 @@ export function ChatNavRail({
   onSelectConversation,
   user,
 }: ChatNavRailProps) {
-  const router = useRouter()
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
   const visibleGroups = useMemo(
@@ -55,7 +55,7 @@ export function ChatNavRail({
   const showActiveNewChat = !activeConversationId && (!normalizedQuery || 'new chat'.includes(normalizedQuery))
   const initials = getInitials(user?.name)
   const teamLabel = user?.sport_team ?? 'Athletics Department'
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
+  const isAdmin = user ? isAdminRole(user.role) : false
 
   return (
     <aside
@@ -183,9 +183,9 @@ export function ChatNavRail({
                 Settings
               </DropdownItem>
               {isAdmin && (
-                <DropdownItem icon={<LayoutDashboard className="h-4 w-4" />} onSelect={() => router.push(ROUTES.admin)}>
+                <DropdownLinkItem href={ROUTES.admin} icon={<LayoutDashboard className="h-4 w-4" />}>
                   Admin dashboard
-                </DropdownItem>
+                </DropdownLinkItem>
               )}
               <div className="mt-1 border-t border-border pt-1">
                 <DropdownItem danger disabled={isLoggingOut} icon={<LogOut className="h-4 w-4" />} onSelect={onLogout}>
@@ -224,6 +224,26 @@ function ConversationRow({ active, onClick, title }: ConversationRowProps) {
 
 function HistoryGroupLabel({ label }: { label: ConversationGroup['label'] }) {
   return <p className="pb-ui-xs px-[11px] pb-1.5 pt-3 font-semibold text-fg-3">{label}</p>
+}
+
+interface DropdownLinkItemProps {
+  children: ReactNode
+  href: string
+  icon: ReactNode
+}
+
+function DropdownLinkItem({ children, href, icon }: DropdownLinkItemProps) {
+  return (
+    <DropdownMenuPrimitive.Item asChild>
+      <Link
+        className="pb-focus-item pb-ui-sm mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 font-medium text-fg-2 transition"
+        href={href}
+      >
+        <span className="text-fg-3">{icon}</span>
+        {children}
+      </Link>
+    </DropdownMenuPrimitive.Item>
+  )
 }
 
 interface DropdownItemProps {

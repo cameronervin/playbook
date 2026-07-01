@@ -53,6 +53,15 @@ Example error response:
 | POST | `/conversations/{conversation_id}/files/{file_id}/upload-complete` | Verify direct-uploaded object metadata and queue private ingest handoff |
 | POST | `/conversations/{conversation_id}/messages` | Submit a follow-up user message, enqueue the Celery agent task, and return `202` with `task_id` stream metadata |
 | GET | `/conversations/{conversation_id}/messages/{message_id}/stream` | Stream validated assistant response events as SSE from the Valkey stream for `task_id` |
+| GET | `/admin/kb/collections` | List active organization KB collections |
+| POST | `/admin/kb/collections` | Create a KB collection with title, description, and icon; super-admin only |
+| DELETE | `/admin/kb/collections/{collection_id}` | Archive an empty KB collection; super-admin only; returns `409` while documents remain |
+| GET | `/admin/kb/metadata-tags` | List organization metadata tag presets; `include_archived=true` includes archived tags |
+| POST | `/admin/kb/metadata-tags` | Create a global metadata tag preset; super-admin only |
+| PATCH | `/admin/kb/metadata-tags/{tag_id}` | Rename a metadata tag preset label; super-admin only |
+| DELETE | `/admin/kb/metadata-tags/{tag_id}` | Archive a metadata tag preset while preserving existing document assignments; super-admin only |
+| POST | `/admin/kb/metadata-tags/{tag_id}/unarchive` | Restore an archived metadata tag preset to active suggestions; super-admin only |
+| DELETE | `/admin/kb/metadata-tags/{tag_id}/permanent` | Permanently delete an unused archived metadata tag preset; super-admin only |
 | GET | `/admin/kb/documents` | List KB documents and status |
 | POST | `/admin/kb/documents` | Create a KB document direct-upload request and return a presigned POST contract |
 | POST | `/admin/kb/documents/{document_id}/upload-complete` | Verify direct-uploaded object metadata and queue KB-service ingest handoff |
@@ -120,6 +129,18 @@ contract. The intent routes accept JSON metadata only, create an
   "expires_at": "2026-06-17T12:15:00Z"
 }
 ```
+
+Admin KB document intents use the backend-managed catalog contract:
+`collection_id` is required, and `tag_slugs` must reference active global
+metadata tag presets for the organization. Browser clients do not submit
+free-form `metadata_tags`; the backend composes KB-service-compatible
+`metadata_tags` from the collection and tag assignments.
+
+Admin KB metadata edits keep the same browser contract: clients PATCH only
+`tag_slugs` and/or `source_date`. If the backend document is already linked to a
+KB-service document, the backend also refreshes KB-service document metadata and
+existing vector metadata so search results and persisted citations return the
+updated tags, source date, and all-athletes visibility without re-embedding.
 
 Browser clients submit a multipart form POST directly to `upload.url` with every
 returned `field` and a final `file` part. After storage upload succeeds, clients

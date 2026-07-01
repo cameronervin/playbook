@@ -1,9 +1,11 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import Link from 'next/link'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { ChevronsUpDown, Database, LayoutDashboard, LogOut, MessageCircle, Settings, Users } from 'lucide-react'
 import { BrandLockup } from '@/src/components/ui'
+import { ROUTES } from '@/src/lib/constants/config'
 import { cn } from '@/src/lib/utils/cn'
 import type { CurrentUser } from '@/src/types/auth'
 
@@ -16,7 +18,6 @@ interface AdminNavProps {
   isSuperAdmin: boolean
   onLogout: () => void
   onNavigate: (tab: AdminTab) => void
-  onOpenChatWorkspace: () => void
   onOpenSettings: () => void
   user?: CurrentUser
 }
@@ -34,7 +35,6 @@ export function AdminNav({
   isSuperAdmin,
   onLogout,
   onNavigate,
-  onOpenChatWorkspace,
   onOpenSettings,
   user,
 }: AdminNavProps) {
@@ -107,9 +107,9 @@ export function AdminNav({
               <DropdownItem icon={<Settings className="h-4 w-4" />} onSelect={onOpenSettings}>
                 Settings
               </DropdownItem>
-              <DropdownItem icon={<MessageCircle className="h-4 w-4" />} onSelect={onOpenChatWorkspace}>
+              <DropdownLinkItem href={ROUTES.chat} icon={<MessageCircle className="h-4 w-4" />}>
                 Chat workspace
-              </DropdownItem>
+              </DropdownLinkItem>
               <div className="mt-1 border-t border-border pt-1">
                 <DropdownItem danger disabled={isLoggingOut} icon={<LogOut className="h-4 w-4" />} onSelect={onLogout}>
                   Sign out
@@ -120,6 +120,26 @@ export function AdminNav({
         </DropdownMenuPrimitive.Root>
       </div>
     </aside>
+  )
+}
+
+interface DropdownLinkItemProps {
+  children: ReactNode
+  href: string
+  icon: ReactNode
+}
+
+function DropdownLinkItem({ children, href, icon }: DropdownLinkItemProps) {
+  return (
+    <DropdownMenuPrimitive.Item asChild>
+      <Link
+        className="pb-focus-item mt-1 flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 pb-ui-sm font-medium text-fg-2 transition"
+        href={href}
+      >
+        <span className="text-fg-3">{icon}</span>
+        {children}
+      </Link>
+    </DropdownMenuPrimitive.Item>
   )
 }
 

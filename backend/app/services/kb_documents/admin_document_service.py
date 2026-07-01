@@ -13,8 +13,11 @@ from app.infrastructure.storage.provider import StorageProvider
 from app.models.identity import User
 from app.models.knowledge_base import KBDocument
 from app.repositories.knowledge_base import (
+    KBCollectionRepository,
     KBDocumentEventRepository,
     KBDocumentRepository,
+    KBDocumentTagRepository,
+    KBMetadataTagRepository,
 )
 from app.repositories.uploads import KBIngestOutboxRepository, UploadRequestRepository
 from app.schemas.kb_documents import (
@@ -23,15 +26,16 @@ from app.schemas.kb_documents import (
     KBDocumentUploadRequest,
     KBDocumentUploadRequestResponse,
 )
+from app.schemas.knowledgebase import KBDocumentMetadataRefreshRequest
 from app.schemas.uploads import UploadCompleteRequest
 from app.services.audit_service import AuditLogService
 from app.services.direct_uploads import DirectUploadSourceRef
+from app.services.kb_documents.catalog import KBCatalogService
 from app.services.kb_documents.mappers import kb_document_to_response
 from app.services.kb_documents.upload_service import (
     KBDocumentUpload,
     KBDocumentUploadService,
 )
-from app.services.upload_validation import validate_kb_metadata_tags
 from app.workers.dispatcher import (
     KbIngestOutboxTaskDispatcher,
     UploadRequestReconciliationTaskDispatcher,
@@ -63,6 +67,9 @@ class KBDocumentService:
         self.kb_provider = kb_provider
         self.document_repo = document_repo or KBDocumentRepository(session)
         self.event_repo = event_repo or KBDocumentEventRepository(session)
+        self.collection_repo = KBCollectionRepository(session)
+        self.tag_repo = KBMetadataTagRepository(session)
+        self.document_tag_repo = KBDocumentTagRepository(session)
         self.upload_request_repo = upload_request_repo or UploadRequestRepository(
             session
         )
@@ -74,12 +81,22 @@ class KBDocumentService:
         )
         self.audit_service = audit_service or AuditLogService(session)
         self.settings = settings
+        self.catalog_service = KBCatalogService(
+            session,
+            collection_repo=self.collection_repo,
+            tag_repo=self.tag_repo,
+            document_tag_repo=self.document_tag_repo,
+            audit_service=self.audit_service,
+        )
         self.upload_service = KBDocumentUploadService(
             session,
             storage=storage,
             kb_provider=kb_provider,
             document_repo=self.document_repo,
             event_repo=self.event_repo,
+            collection_repo=self.collection_repo,
+            tag_repo=self.tag_repo,
+            document_tag_repo=self.document_tag_repo,
             upload_request_repo=self.upload_request_repo,
             outbox_repo=self.outbox_repo,
             outbox_dispatcher=self.outbox_dispatcher,
@@ -161,14 +178,24 @@ class KBDocumentService:
         document = await self._get_document_or_404(actor, document_id)
         previous = {
             "metadata_tags": document.metadata_tags,
+            "tag_slugs": [link.tag.slug for link in document.tag_links],
             "source_date": document.source_date.isoformat()
             if document.source_date
             else None,
         }
         metadata_tags = document.metadata_tags
-        if request.metadata_tags is not None:
-            validate_kb_metadata_tags(request.metadata_tags)
-            metadata_tags = request.metadata_tags
+        if request.tag_slugs is not None:
+            if document.collection_id is None:
+                raise ValidationError("Document is missing a KB collection")
+            resolved_metadata = await self.catalog_service.resolve_document_metadata(
+                organization_id=actor.organization_id,
+                collection_id=document.collection_id,
+                tag_slugs=request.tag_slugs,
+                existing_metadata=document.metadata_tags,
+                existing_document=document,
+            )
+            metadata_tags = resolved_metadata.metadata_tags
+            await self.document_tag_repo.replace_tags(document, resolved_metadata.tags)
 
         source_date = document.source_date
         if "source_date" in request.model_fields_set:
@@ -179,6 +206,17 @@ class KBDocumentService:
             metadata_tags=metadata_tags,
             source_date=source_date,
         )
+        if updated.kb_service_document_id is not None:
+            await self.kb_provider.refresh_document_metadata(
+                str(updated.kb_service_document_id),
+                KBDocumentMetadataRefreshRequest(
+                    source_date=updated.source_date,
+                    is_official=True,
+                    priority=0,
+                    visibility_policy=updated.visibility_policy,
+                    metadata_tags=updated.metadata_tags,
+                ),
+            )
         await self.event_repo.create(
             document_id=document.id,
             event_type="document.metadata_updated",

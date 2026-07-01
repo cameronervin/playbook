@@ -15,8 +15,11 @@ EXPECTED_PLAYBOOK_TABLES = {
     "message_citations",
     "conversation_files",
     "upload_requests",
+    "kb_collections",
     "kb_documents",
+    "kb_document_tags",
     "kb_document_events",
+    "kb_metadata_tags",
     "kb_ingest_outbox",
     "dashboard_insight_runs",
     "dashboard_insights",
@@ -45,8 +48,11 @@ def test_domain_model_modules_export_registered_models() -> None:
         DashboardInsight,
         DashboardInsightRun,
         KBIngestOutbox,
+        KBCollection,
         KBDocument,
         KBDocumentEvent,
+        KBDocumentTag,
+        KBMetadataTag,
         MessageCitation,
         OAuthAccount,
         Organization,
@@ -69,8 +75,11 @@ def test_domain_model_modules_export_registered_models() -> None:
     from app.models.identity import OAuthAccount as IdentityOAuthAccount
     from app.models.identity import Organization as IdentityOrganization
     from app.models.identity import User as IdentityUser
+    from app.models.knowledge_base import KBCollection as KnowledgeBaseKBCollection
     from app.models.knowledge_base import KBDocument as KnowledgeBaseKBDocument
     from app.models.knowledge_base import KBDocumentEvent as KnowledgeBaseKBDocumentEvent
+    from app.models.knowledge_base import KBDocumentTag as KnowledgeBaseKBDocumentTag
+    from app.models.knowledge_base import KBMetadataTag as KnowledgeBaseKBMetadataTag
     from app.models.uploads import KBIngestOutbox as UploadsKBIngestOutbox
     from app.models.uploads import UploadRequest as UploadsUploadRequest
 
@@ -81,8 +90,11 @@ def test_domain_model_modules_export_registered_models() -> None:
     assert ConversationsConversationMessage is ConversationMessage
     assert ConversationsMessageCitation is MessageCitation
     assert ConversationsConversationFile is ConversationFile
+    assert KnowledgeBaseKBCollection is KBCollection
     assert KnowledgeBaseKBDocument is KBDocument
     assert KnowledgeBaseKBDocumentEvent is KBDocumentEvent
+    assert KnowledgeBaseKBDocumentTag is KBDocumentTag
+    assert KnowledgeBaseKBMetadataTag is KBMetadataTag
     assert UploadsUploadRequest is UploadRequest
     assert UploadsKBIngestOutbox is KBIngestOutbox
     assert AnalyticsDashboardInsightRun is DashboardInsightRun
@@ -189,6 +201,11 @@ def test_key_foreign_key_delete_behaviors_are_explicit() -> None:
         ("upload_requests", ("kb_document_id",)): "CASCADE",
         ("upload_requests", ("conversation_file_id",)): "CASCADE",
         ("kb_documents", ("organization_id",)): "CASCADE",
+        ("kb_documents", ("collection_id",)): "SET NULL",
+        ("kb_collections", ("organization_id",)): "CASCADE",
+        ("kb_metadata_tags", ("organization_id",)): "CASCADE",
+        ("kb_document_tags", ("document_id",)): "CASCADE",
+        ("kb_document_tags", ("tag_id",)): "CASCADE",
         ("kb_document_events", ("document_id",)): "CASCADE",
         ("kb_ingest_outbox", ("organization_id",)): "CASCADE",
         ("kb_ingest_outbox", ("kb_document_id",)): "CASCADE",
@@ -230,7 +247,11 @@ def test_operational_indexes_are_registered() -> None:
         "ix_upload_requests_kb_document_id",
         "ix_upload_requests_conversation_file_id",
         "ix_kb_documents_organization_id",
+        "ix_kb_documents_collection_id",
         "ix_kb_documents_processing_status",
+        "ix_kb_collections_organization_id",
+        "ix_kb_metadata_tags_organization_id",
+        "ix_kb_document_tags_tag_id",
         "ix_kb_ingest_outbox_status_next_attempt_at",
         "ix_kb_ingest_outbox_kb_document_id",
         "ix_kb_ingest_outbox_conversation_file_id",

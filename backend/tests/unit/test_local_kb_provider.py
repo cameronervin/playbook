@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -8,6 +9,7 @@ from app.infrastructure.knowledgebase.providers.local_kb import LocalKBProvider
 from app.schemas.knowledgebase import (
     KBConversationFileIngestRequest,
     KBDocumentIngestRequest,
+    KBDocumentMetadataRefreshRequest,
 )
 
 
@@ -15,6 +17,7 @@ class _RecordingLocalKBProvider(LocalKBProvider):
     def __init__(self, settings) -> None:
         super().__init__(settings)
         self.posts: list[tuple[str, dict]] = []
+        self.patches: list[tuple[str, dict]] = []
 
     async def resolve_configuration(self) -> str:
         return "config-123"
@@ -33,6 +36,18 @@ class _RecordingLocalKBProvider(LocalKBProvider):
             response["conversation_id"] = json_body["conversation_id"]
             response["conversation_file_id"] = json_body["conversation_file_id"]
         return response
+
+    async def _patch(self, path: str, json_body: dict) -> dict:
+        self.patches.append((path, json_body))
+        return {
+            "kb_service_document_id": path.removesuffix("/metadata").rsplit("/", 1)[
+                -1
+            ],
+            "source_type": "admin_upload",
+            "playbook_document_id": str(uuid4()),
+            "updated_embedding_count": 3,
+            "metadata": json_body,
+        }
 
 
 class _SearchRecordingLocalKBProvider(LocalKBProvider):
@@ -136,6 +151,53 @@ async def test_local_kb_provider_ingest_source_sends_conversation_file_payload(
     assert response.source_type == "conversation_file"
     assert response.conversation_id == request.conversation_id
     assert response.conversation_file_id == request.conversation_file_id
+
+
+@pytest.mark.asyncio
+async def test_local_kb_provider_refresh_document_metadata_sends_patch_payload(
+    test_settings,
+) -> None:
+    settings = test_settings.model_copy(
+        update={
+            "API_PUBLIC_URL": "http://backend.test",
+            "KB_LOCAL_BASE_URL": "http://kb.test",
+            "KB_API_SECRET": "test-kb-secret",
+        }
+    )
+    provider = _RecordingLocalKBProvider(settings)
+    kb_service_document_id = uuid4()
+    request = KBDocumentMetadataRefreshRequest(
+        source_date=date(2026, 2, 1),
+        is_official=True,
+        priority=0,
+        visibility_policy={"scope": "all_athletes"},
+        metadata_tags={
+            "collection": "Compliance",
+            "tag_slugs": ["compliance"],
+            "tags": ["Compliance"],
+        },
+    )
+
+    response = await provider.refresh_document_metadata(
+        str(kb_service_document_id),
+        request,
+    )
+
+    path, payload = provider.patches[0]
+    assert path == f"/api/kb/documents/{kb_service_document_id}/metadata"
+    assert payload == {
+        "source_date": "2026-02-01",
+        "is_official": True,
+        "priority": 0,
+        "visibility_policy": {"scope": "all_athletes"},
+        "metadata_tags": {
+            "collection": "Compliance",
+            "tag_slugs": ["compliance"],
+            "tags": ["Compliance"],
+        },
+    }
+    assert response.kb_service_document_id == kb_service_document_id
+    assert response.updated_embedding_count == 3
 
 
 @pytest.mark.asyncio

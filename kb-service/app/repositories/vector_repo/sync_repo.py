@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Integer, cast, delete, func, insert, select
+from sqlalchemy import Integer, cast, delete, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.configuration import Configuration
@@ -15,6 +15,7 @@ from app.repositories.vector_repo.queries import (
     _build_lexical_search_statement,
     _build_search_statement,
     _document_metadata_match,
+    _refreshed_cmetadata_value,
 )
 from app.repositories.vector_repo.ranking import (
     _dedupe_fetch_limit,
@@ -275,5 +276,25 @@ class VectorRepository:
         with self._pg_engine.begin() as conn:
             result = conn.execute(
                 delete(VectorEmbedding).where(_document_metadata_match(document_id))
+            )
+            return result.rowcount or 0
+
+    def refresh_document_metadata(
+        self,
+        document_id: uuid.UUID,
+        metadata: dict[str, Any],
+        stale_metadata_keys: set[str] | None = None,
+    ) -> int:
+        """Merge refreshed metadata into all vector embeddings for a document."""
+        with self._pg_engine.begin() as conn:
+            result = conn.execute(
+                update(VectorEmbedding)
+                .where(_document_metadata_match(document_id))
+                .values(
+                    cmetadata=_refreshed_cmetadata_value(
+                        metadata,
+                        stale_metadata_keys,
+                    )
+                )
             )
             return result.rowcount or 0

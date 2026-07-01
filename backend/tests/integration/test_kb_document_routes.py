@@ -2,24 +2,29 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import BinaryIO
 from uuid import UUID, uuid4
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
 from app.infrastructure.knowledgebase import get_kb_provider_dependency
 from app.infrastructure.storage import get_storage_provider_dependency
-from app.infrastructure.storage.provider import PresignedPostUpload, StoredObjectMetadata
+from app.infrastructure.storage.provider import (
+    ObjectVerificationResult,
+    PresignedPostUpload,
+    StoredObjectMetadata,
+)
 from app.models.audit import AuditLog
 from app.models.knowledge_base import KBDocument, KBDocumentEvent
 from app.models.uploads import KBIngestOutbox, UploadRequest
-from app.repositories.knowledge_base import KBDocumentRepository
 from app.repositories.identity import OrganizationRepository, UserRepository
+from app.repositories.knowledge_base import KBDocumentRepository
 from app.schemas.knowledgebase import (
     KBDocumentIngestRequest,
     KBDocumentIngestResponse,
+    KBDocumentMetadataRefreshRequest,
     KBDocumentStatusResponse,
     KnowledgebaseResult,
 )
@@ -79,8 +84,6 @@ class FakeStorageProvider:
         expected_size_bytes: int,
         expected_content_type: str,
     ):
-        from app.infrastructure.storage.provider import ObjectVerificationResult
-
         metadata = await self.get_object_metadata(key)
         if metadata is None:
             return ObjectVerificationResult(status="missing")
@@ -102,6 +105,7 @@ class FakeKnowledgebaseProvider:
 
     def __init__(self) -> None:
         self.ingest_requests: list[KBDocumentIngestRequest] = []
+        self.metadata_refresh_requests: list[tuple[str, KBDocumentMetadataRefreshRequest]] = []
         self.deleted_document_ids: list[str] = []
         self.retried_document_ids: list[str] = []
 
@@ -164,8 +168,15 @@ class FakeKnowledgebaseProvider:
     async def delete_document(self, kb_service_document_id: str) -> None:
         self.deleted_document_ids.append(kb_service_document_id)
 
+    async def refresh_document_metadata(
+        self,
+        kb_service_document_id: str,
+        request: KBDocumentMetadataRefreshRequest,
+    ) -> None:
+        self.metadata_refresh_requests.append((kb_service_document_id, request))
 
-async def _admin_user(db_session):
+
+async def _admin_user(db_session, *, role: str = "admin"):
     organization = await OrganizationRepository(db_session).create(
         name="Playbook Athletics",
         slug="playbook",
@@ -175,8 +186,8 @@ async def _admin_user(db_session):
         email="admin@example.com",
         name="Admin User",
         auth_provider="google",
-        provider_subject="admin-subject",
-        role="admin",
+        provider_subject=f"{role}-subject",
+        role=role,
     )
 
 
@@ -193,10 +204,240 @@ def _override_external_providers(route_client):
 
 
 @pytest.mark.asyncio
+async def test_kb_catalog_routes_seed_defaults_and_require_super_admin_for_writes(
+    route_client,
+    db_session,
+) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+
+    collections = await route_client.client.get("/api/v1/admin/kb/collections")
+    tags = await route_client.client.get("/api/v1/admin/kb/metadata-tags")
+    tag_id = tags.json()[0]["id"]
+    denied_collection = await route_client.client.post(
+        "/api/v1/admin/kb/collections",
+        json={
+            "title": "Sports Medicine",
+            "description": "Athletic training process documents.",
+            "icon": "database",
+        },
+        headers={"X-Request-ID": "req-kb-collection-denied"},
+    )
+    denied_collection_delete = await route_client.client.delete(
+        f"/api/v1/admin/kb/collections/{collections.json()[0]['id']}",
+        headers={"X-Request-ID": "req-kb-collection-delete-denied"},
+    )
+    denied_tag = await route_client.client.post(
+        "/api/v1/admin/kb/metadata-tags",
+        json={"label": "Medical"},
+        headers={"X-Request-ID": "req-kb-tag-denied"},
+    )
+    denied_unarchive = await route_client.client.post(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/unarchive",
+        headers={"X-Request-ID": "req-kb-tag-unarchive-denied"},
+    )
+    denied_permanent_delete = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/permanent",
+        headers={"X-Request-ID": "req-kb-tag-permanent-delete-denied"},
+    )
+
+    assert collections.status_code == 200
+    assert [item["slug"] for item in collections.json()] == [
+        "compliance",
+        "travel",
+        "academics",
+        "donor",
+    ]
+    assert collections.json()[0]["description"].startswith("NIL, eligibility")
+    assert tags.status_code == 200
+    assert {"nil", "compliance", "recruiting"}.issubset(
+        {item["slug"] for item in tags.json()}
+    )
+    assert denied_collection.status_code == 403
+    assert denied_collection_delete.status_code == 403
+    assert denied_tag.status_code == 403
+    assert denied_unarchive.status_code == 403
+    assert denied_permanent_delete.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_create_collections_and_manage_metadata_tags(
+    route_client,
+    db_session,
+) -> None:
+    super_admin = await _admin_user(db_session, role="super_admin")
+    route_client.authenticate_as(super_admin)
+
+    collection_response = await route_client.client.post(
+        "/api/v1/admin/kb/collections",
+        json={
+            "title": "Sports Medicine",
+            "description": "Athletic training process documents.",
+            "icon": "database",
+        },
+    )
+    tag_response = await route_client.client.post(
+        "/api/v1/admin/kb/metadata-tags",
+        json={"label": "Medical Referral"},
+    )
+
+    assert collection_response.status_code == 201
+    assert collection_response.json()["slug"] == "sports-medicine"
+    assert collection_response.json()["title"] == "Sports Medicine"
+    assert collection_response.json()["description"] == "Athletic training process documents."
+    collection_id = collection_response.json()["id"]
+    deleted_collection = await route_client.client.delete(
+        f"/api/v1/admin/kb/collections/{collection_id}",
+    )
+    collections_after_delete = await route_client.client.get(
+        "/api/v1/admin/kb/collections"
+    )
+    collection_audit = await db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.action == "kb.collection_archived",
+            AuditLog.target_id == UUID(collection_id),
+        )
+    )
+    assert deleted_collection.status_code == 204
+    assert "sports-medicine" not in {
+        item["slug"] for item in collections_after_delete.json()
+    }
+    assert collection_audit is not None
+    assert tag_response.status_code == 201
+    assert tag_response.json()["slug"] == "medical-referral"
+    tag_id = tag_response.json()["id"]
+
+    renamed = await route_client.client.patch(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}",
+        json={"label": "Medical referrals"},
+    )
+    active_delete = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/permanent"
+    )
+    archived = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}"
+    )
+    active_tags = await route_client.client.get("/api/v1/admin/kb/metadata-tags")
+    all_tags = await route_client.client.get(
+        "/api/v1/admin/kb/metadata-tags?include_archived=true"
+    )
+    restored = await route_client.client.post(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/unarchive"
+    )
+    rearchived = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}"
+    )
+    permanent_deleted = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{tag_id}/permanent"
+    )
+    all_tags_after_delete = await route_client.client.get(
+        "/api/v1/admin/kb/metadata-tags?include_archived=true"
+    )
+
+    assert renamed.status_code == 200
+    assert renamed.json()["slug"] == "medical-referral"
+    assert renamed.json()["label"] == "Medical referrals"
+    assert active_delete.status_code == 409
+    assert active_delete.json()["error"]["details"]["assigned_document_count"] == 0
+    assert "medical-referral" not in {item["slug"] for item in active_tags.json()}
+    archived_row = next(item for item in all_tags.json() if item["slug"] == "medical-referral")
+    assert archived_row["is_active"] is False
+    assert restored.status_code == 200
+    assert restored.json()["slug"] == "medical-referral"
+    assert restored.json()["is_active"] is True
+    assert archived.status_code == 204
+    assert rearchived.status_code == 204
+    assert permanent_deleted.status_code == 204
+    assert "medical-referral" not in {
+        item["slug"] for item in all_tags_after_delete.json()
+    }
+
+
+@pytest.mark.asyncio
+async def test_super_admin_cannot_delete_collection_with_documents(
+    route_client,
+    db_session,
+) -> None:
+    super_admin = await _admin_user(db_session, role="super_admin")
+    route_client.authenticate_as(super_admin)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    await KBDocumentRepository(db_session).create(
+        organization_id=super_admin.organization_id,
+        uploaded_by=super_admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        collection_id=UUID(collection["id"]),
+    )
+    await db_session.commit()
+
+    response = await route_client.client.delete(
+        f"/api/v1/admin/kb/collections/{collection['id']}",
+    )
+    collections_after_delete = await route_client.client.get(
+        "/api/v1/admin/kb/collections"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["details"]["document_count"] == 1
+    assert "compliance" in {item["slug"] for item in collections_after_delete.json()}
+
+
+@pytest.mark.asyncio
+async def test_super_admin_cannot_permanently_delete_assigned_archived_metadata_tag(
+    route_client,
+    db_session,
+) -> None:
+    super_admin = await _admin_user(db_session, role="super_admin")
+    route_client.authenticate_as(super_admin)
+    _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    tags_response = await route_client.client.get("/api/v1/admin/kb/metadata-tags")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    nil_tag = next(item for item in tags_response.json() if item["slug"] == "nil")
+
+    upload = await route_client.client.post(
+        "/api/v1/admin/kb/documents",
+        json={
+            "filename": "assigned-nil.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 10,
+            "collection_id": collection["id"],
+            "tag_slugs": [nil_tag["slug"]],
+            "title": "Assigned NIL",
+        },
+    )
+    archived = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{nil_tag['id']}"
+    )
+    permanent_deleted = await route_client.client.delete(
+        f"/api/v1/admin/kb/metadata-tags/{nil_tag['id']}/permanent"
+    )
+
+    assert upload.status_code == 201
+    assert archived.status_code == 204
+    assert permanent_deleted.status_code == 409
+    assert permanent_deleted.json()["error"]["details"]["assigned_document_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> None:
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     storage, kb_provider = _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    tags_response = await route_client.client.get("/api/v1/admin/kb/metadata-tags")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    nil_tag = next(item for item in tags_response.json() if item["slug"] == "nil")
 
     upload = await route_client.client.post(
         "/api/v1/admin/kb/documents",
@@ -204,8 +445,9 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
             "filename": "nil-handbook.pdf",
             "content_type": "application/pdf",
             "size_bytes": 10,
+            "collection_id": collection["id"],
+            "tag_slugs": [nil_tag["slug"]],
             "title": "NIL Handbook",
-            "metadata_tags": {"topic": "nil"},
             "source_date": "2026-01-15",
         },
     )
@@ -217,7 +459,15 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     upload_request_id = UUID(uploaded["upload"]["upload_request_id"])
     storage_key = uploaded["upload"]["fields"]["key"]
     assert document["processing_status"] == "upload_pending"
-    assert document["metadata_tags"] == {"topic": "nil"}
+    assert document["collection_id"] == collection["id"]
+    assert document["tag_slugs"] == ["nil"]
+    assert document["metadata_tags"] == {
+        "collection": "compliance",
+        "collection_title": "Compliance & NIL",
+        "tag_slugs": ["nil"],
+        "tags": ["NIL"],
+        "topics": ["Compliance & NIL", "NIL"],
+    }
     assert "is_official" not in document
     assert "priority" not in document
     assert storage.uploads == []
@@ -246,7 +496,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     assert complete_response.status_code == 200
     completed = complete_response.json()
     assert completed["processing_status"] == "uploaded"
-    assert completed["metadata_tags"] == {"topic": "nil"}
+    assert completed["tag_slugs"] == ["nil"]
     assert "storage_key" not in completed
     assert kb_provider.ingest_requests == []
     outbox_rows = list((await db_session.scalars(select(KBIngestOutbox))).all())
@@ -269,7 +519,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     )
     update_response = await route_client.client.patch(
         f"/api/v1/admin/kb/documents/{document_id}/metadata",
-        json={"metadata_tags": {"topic": "compliance"}},
+        json={"tag_slugs": ["compliance"]},
     )
     retry_response = await route_client.client.post(
         f"/api/v1/admin/kb/documents/{document_id}/retry"
@@ -282,7 +532,8 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
     assert "is_official" not in get_response.json()
     assert "priority" not in get_response.json()
     assert update_response.status_code == 200
-    assert update_response.json()["metadata_tags"] == {"topic": "compliance"}
+    assert update_response.json()["tag_slugs"] == ["compliance"]
+    assert update_response.json()["metadata_tags"]["tags"] == ["Compliance"]
     assert "is_official" not in update_response.json()
     assert "priority" not in update_response.json()
     assert retry_response.status_code == 200
@@ -337,7 +588,7 @@ async def test_admin_kb_document_lifecycle_routes(route_client, db_session) -> N
 
 
 @pytest.mark.asyncio
-async def test_kb_upload_rejects_reserved_metadata_keys(
+async def test_kb_upload_rejects_client_authored_metadata_tags(
     route_client,
     db_session,
 ) -> None:
@@ -356,17 +607,12 @@ async def test_kb_upload_rejects_reserved_metadata_keys(
         headers={"X-Request-ID": "req-kb-reserved"},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"] == {
-        "code": "VALIDATION_ERROR",
-        "message": "metadata_tags contains reserved keys: source_type",
-        "retryable": False,
-        "details": {"request_id": "req-kb-reserved"},
-    }
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.asyncio
-async def test_kb_metadata_patch_rejects_reserved_metadata_keys(
+async def test_kb_metadata_patch_rejects_client_authored_metadata_tags(
     route_client,
     db_session,
 ) -> None:
@@ -391,13 +637,8 @@ async def test_kb_metadata_patch_rejects_reserved_metadata_keys(
         headers={"X-Request-ID": "req-kb-patch-reserved"},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"] == {
-        "code": "VALIDATION_ERROR",
-        "message": "metadata_tags contains reserved keys: source_type",
-        "retryable": False,
-        "details": {"request_id": "req-kb-patch-reserved"},
-    }
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     await db_session.refresh(document)
     assert document.metadata_tags == {"topic": "nil"}
 
@@ -410,6 +651,10 @@ async def test_kb_metadata_patch_preserves_omitted_source_date_and_clears_null(
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
     document = await KBDocumentRepository(db_session).create(
         organization_id=admin.organization_id,
         uploaded_by=admin.id,
@@ -418,6 +663,7 @@ async def test_kb_metadata_patch_preserves_omitted_source_date_and_clears_null(
         content_type="application/pdf",
         size_bytes=10,
         storage_key="kb/originals/nil-handbook.pdf",
+        collection_id=UUID(collection["id"]),
         metadata_tags={"topic": "nil"},
         source_date=datetime(2026, 1, 15, tzinfo=UTC).date(),
     )
@@ -425,7 +671,7 @@ async def test_kb_metadata_patch_preserves_omitted_source_date_and_clears_null(
 
     preserved = await route_client.client.patch(
         f"/api/v1/admin/kb/documents/{document.id}/metadata",
-        json={"metadata_tags": {"topic": "compliance"}},
+        json={"tag_slugs": ["compliance"]},
     )
     cleared = await route_client.client.patch(
         f"/api/v1/admin/kb/documents/{document.id}/metadata",
@@ -434,10 +680,74 @@ async def test_kb_metadata_patch_preserves_omitted_source_date_and_clears_null(
 
     assert preserved.status_code == 200
     assert preserved.json()["source_date"] == "2026-01-15"
-    assert preserved.json()["metadata_tags"] == {"topic": "compliance"}
+    assert preserved.json()["tag_slugs"] == ["compliance"]
     assert cleared.status_code == 200
     assert cleared.json()["source_date"] is None
-    assert cleared.json()["metadata_tags"] == {"topic": "compliance"}
+    assert cleared.json()["tag_slugs"] == ["compliance"]
+
+
+@pytest.mark.asyncio
+async def test_kb_metadata_patch_refreshes_linked_kb_service_metadata(
+    route_client,
+    db_session,
+) -> None:
+    admin = await _admin_user(db_session)
+    route_client.authenticate_as(admin)
+    _storage, kb_provider = _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
+    linked_id = uuid4()
+    document = await KBDocumentRepository(db_session).create(
+        organization_id=admin.organization_id,
+        uploaded_by=admin.id,
+        title="NIL Handbook",
+        filename="nil-handbook.pdf",
+        content_type="application/pdf",
+        size_bytes=10,
+        storage_key="kb/originals/nil-handbook.pdf",
+        processing_status="ready",
+        collection_id=UUID(collection["id"]),
+        metadata_tags={"collection": "compliance", "tag_slugs": ["nil"]},
+        source_date=datetime(2026, 1, 15, tzinfo=UTC).date(),
+        is_official=True,
+        priority=0,
+    )
+    await KBDocumentRepository(db_session).link_kb_service_document(
+        document,
+        kb_service_document_id=linked_id,
+    )
+    await db_session.commit()
+
+    response = await route_client.client.patch(
+        f"/api/v1/admin/kb/documents/{document.id}/metadata",
+        json={"tag_slugs": ["compliance"], "source_date": "2026-02-01"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["tag_slugs"] == ["compliance"]
+    assert response.json()["source_date"] == "2026-02-01"
+    assert kb_provider.metadata_refresh_requests == [
+        (
+            str(linked_id),
+            KBDocumentMetadataRefreshRequest(
+                source_date=datetime(2026, 2, 1, tzinfo=UTC).date(),
+                is_official=True,
+                priority=0,
+                visibility_policy={"scope": "all_athletes"},
+                metadata_tags={
+                    "collection": "compliance",
+                    "collection_title": "Compliance & NIL",
+                    "tag_slugs": ["compliance"],
+                    "tags": ["Compliance"],
+                    "topics": ["Compliance & NIL", "Compliance"],
+                },
+            ),
+        )
+    ]
+    assert "priority" not in response.json()
+    assert "is_official" not in response.json()
 
 
 @pytest.mark.asyncio
@@ -483,10 +793,14 @@ async def test_kb_retry_and_delete_call_kb_service_when_document_is_linked(
 
 
 @pytest.mark.asyncio
-async def test_kb_upload_rejects_metadata_array(route_client, db_session) -> None:
+async def test_kb_upload_rejects_unknown_tag_slug(route_client, db_session) -> None:
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
 
     response = await route_client.client.post(
         "/api/v1/admin/kb/documents",
@@ -494,12 +808,13 @@ async def test_kb_upload_rejects_metadata_array(route_client, db_session) -> Non
             "filename": "nil-handbook.pdf",
             "content_type": "application/pdf",
             "size_bytes": 10,
-            "metadata_tags": ["nil"],
+            "collection_id": collection["id"],
+            "tag_slugs": ["made-up-tag"],
         },
         headers={"X-Request-ID": "req-kb-array"},
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 400
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert response.json()["error"]["details"]["request_id"] == "req-kb-array"
 
@@ -517,7 +832,9 @@ async def test_kb_upload_openapi_documents_use_json_direct_upload(
     upload_response_properties = response.json()["components"]["schemas"][
         "KBDocumentUploadRequestResponse"
     ]["properties"]
-    assert "metadata_tags" in upload_properties
+    assert "collection_id" in upload_properties
+    assert "tag_slugs" in upload_properties
+    assert "metadata_tags" not in upload_properties
     assert "filename" in upload_properties
     assert "content_type" in upload_properties
     assert "size_bytes" in upload_properties
@@ -541,6 +858,10 @@ async def test_kb_upload_rejects_unsupported_content_type(
     admin = await _admin_user(db_session)
     route_client.authenticate_as(admin)
     _override_external_providers(route_client)
+    collections_response = await route_client.client.get("/api/v1/admin/kb/collections")
+    collection = next(
+        item for item in collections_response.json() if item["slug"] == "compliance"
+    )
 
     response = await route_client.client.post(
         "/api/v1/admin/kb/documents",
@@ -548,6 +869,7 @@ async def test_kb_upload_rejects_unsupported_content_type(
             "filename": "notes.txt",
             "content_type": "text/plain",
             "size_bytes": 5,
+            "collection_id": collection["id"],
         },
         headers={"X-Request-ID": "req-kb-type"},
     )
