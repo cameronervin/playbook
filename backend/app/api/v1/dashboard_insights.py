@@ -6,15 +6,20 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 
-from app.api.v1.dependencies import AdminUserDep, DashboardInsightServiceDep
+from app.api.v1.dependencies import (
+    AdminUserDep,
+    DashboardInsightServiceDep,
+    RateLimitServiceDep,
+)
 from app.schemas.admin_analytics import (
     DashboardInsightResponse,
     DashboardInsightRunCreateRequest,
     DashboardInsightRunResponse,
     DashboardInsightRunStartResponse,
 )
+from app.services.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/admin/dashboard-insights", tags=["Dashboard Insights"])
 
@@ -38,12 +43,19 @@ async def get_current_dashboard_insight(
 
 @router.get("/outputs", response_model=list[DashboardInsightResponse])
 async def list_dashboard_insight_outputs(
+    http_request: Request,
     actor: AdminUserDep,
     service: DashboardInsightServiceDep,
+    rate_limiter: RateLimitServiceDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DashboardInsightResponse]:
     """List generated dashboard insight outputs."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.LIST,
+        request=http_request,
+        user=actor,
+    )
     return await service.list_outputs(actor=actor, limit=limit, offset=offset)
 
 
@@ -59,13 +71,20 @@ async def get_dashboard_insight_output(
 
 @router.get("/runs", response_model=list[DashboardInsightRunResponse])
 async def list_dashboard_insight_runs(
+    http_request: Request,
     actor: AdminUserDep,
     service: DashboardInsightServiceDep,
+    rate_limiter: RateLimitServiceDep,
     run_status: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DashboardInsightRunResponse]:
     """List dashboard insight generation runs."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.LIST,
+        request=http_request,
+        user=actor,
+    )
     return await service.list_runs(
         actor=actor,
         status=run_status,
@@ -80,12 +99,19 @@ async def list_dashboard_insight_runs(
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_dashboard_insight_run(
-    request: DashboardInsightRunCreateRequest,
+    payload: DashboardInsightRunCreateRequest,
+    http_request: Request,
     actor: AdminUserDep,
     service: DashboardInsightServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> DashboardInsightRunStartResponse:
     """Start manual dashboard insight generation."""
-    return await service.create_manual_run(actor=actor, request=request)
+    await rate_limiter.enforce(
+        RateLimitPolicy.INSIGHT_RUN,
+        request=http_request,
+        user=actor,
+    )
+    return await service.create_manual_run(actor=actor, request=payload)
 
 
 @router.get("/runs/{run_id}", response_model=DashboardInsightRunResponse)

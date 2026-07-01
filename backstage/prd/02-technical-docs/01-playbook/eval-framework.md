@@ -60,6 +60,9 @@ Minimum MVP release gate:
 4. NIL/compliance answers do not answer without KB support.
 5. Dashboard insights identify seeded top topics and risk labels.
 6. Admin chat answers reference only authorized analytics or dashboard insight records.
+7. Deterministic release checks pass for dataset validity, LiteLLM budget/rate
+   policy shape, runtime affiliation copy, observability anchors, and production
+   rate-limit env posture.
 
 ## Implementation Notes
 
@@ -67,4 +70,7 @@ Minimum MVP release gate:
 - Use LLM-as-judge only for qualitative scoring that cannot be checked structurally.
 - Store eval datasets in `backend/evals/datasets/`.
 - Store rubrics in `backend/evals/rubrics/`.
-- Add a documented command for release validation once the implementation exists.
+- Run offline gates with
+  `uv run --group evals python -m evals.cli release-checks`.
+- Run the broader local/CI wrapper with `./deploy/scripts/release-validate.sh`;
+  add `--live-evals` only when Langfuse, LiteLLM, and KB-service are configured.

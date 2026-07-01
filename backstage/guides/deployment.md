@@ -23,6 +23,7 @@ deploy/
 │   └── .env.prod.example   # copy to .env.prod with real values (never committed)
 └── scripts/
     ├── deploy.sh
+    ├── release-validate.sh
     └── validate-db.sh
 ```
 
@@ -69,6 +70,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
 | DB ports | exposed | exposed | internal only |
 | Secrets | `.env` file | `.env` file | secrets manager |
 | Agent stream Valkey URL | `redis://valkey:6379/2` | `redis://valkey:6379/2` | internal Valkey DB 2 |
+| App rate limiting | Disabled by default | optional | `RATE_LIMIT_ENABLED=true`, shared Valkey DB 3 |
 | Runtime tracing | Disabled unless `TRACING_ENABLED` and Langfuse env are set | optional approved Langfuse project | approved Langfuse project, secrets manager |
 
 ## Production Notes
@@ -93,6 +95,11 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
   workers. Treat `LANGFUSE_SECRET_KEY` as a secret-manager value. Do not inject
   Langfuse credentials into the frontend, KB-service, LiteLLM proxy, or reranker
   services unless those services gain their own approved tracing integration.
+- **Rate limiting**: production enables backend app-level sliding-window limits
+  with `RATE_LIMIT_ENABLED=true`, `RATE_LIMIT_STORE_MODE=valkey`, and
+  `RATE_LIMIT_VALKEY_URL` on a shared Valkey DB. These limits complement edge/WAF
+  controls and LiteLLM virtual-key budgets; rate-limit logs include request,
+  organization, and user IDs without prompts, files, tokens, secrets, or raw IPs.
 
 ## LiteLLM Proxy
 
@@ -140,6 +147,14 @@ model aliases:
 | `playbook-embed` | `LITELLM_PLAYBOOK_EMBED_MODEL` | KB embeddings and retrieval evals |
 | `playbook-ocr` | `LITELLM_PLAYBOOK_OCR_MODEL` | opt-in scanned PDF OCR when `OCR_PROVIDER=vlm` |
 | `playbook-rerank` | `LITELLM_PLAYBOOK_RERANK_MODEL` | Infinity reranker alias for KB-service hybrid/rerank phases |
+
+Create environment-specific LiteLLM virtual/service keys that follow the
+non-secret policy manifest at
+`backend/evals/release/litellm_virtual_key_policy.yaml`: backend and KB-service
+keys have budget duration, `max_budget`, `rpm_limit`, and model allowlists, and
+the eval key is lower-budget for release/nightly runs. The release checks
+validate the manifest shape, while actual generated key values stay in LiteLLM
+and the secrets manager.
 
 The reranker container is enabled with the `reranker` profile. Local Compose
 overrides the image to `michaelf34/infinity:0.0.75` for Apple Silicon ARM64
@@ -197,10 +212,12 @@ curl http://<host-or-internal-reranker>:7997/health
 cd kb-service
 uv run python scripts/smoke_kb_service.py --check-litellm-rerank
 
-# Eval dataset and release-gate smoke, from the backend environment
-cd ../backend
-uv run --group evals python -m evals.cli validate-datasets
-uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
+# Deterministic Phase 5 release validation from the repo root
+cd ..
+./deploy/scripts/release-validate.sh
+
+# Include strict Langfuse-backed evals when credentials/services are available
+./deploy/scripts/release-validate.sh --live-evals
 
 # Optional runtime tracing smoke, when Langfuse is enabled for backend + workers:
 # confirm startup logs show ready=true, then trigger admin chat or dashboard

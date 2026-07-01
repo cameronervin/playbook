@@ -37,6 +37,7 @@ from app.services.kb_documents import (
     KBDocumentService,
     KBDocumentWebhookService,
 )
+from app.services.rate_limit import RateLimitService, get_rate_limit_store
 from app.services.user_service import UserAdminService, UserProfileService
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
@@ -158,6 +159,14 @@ def get_kb_webhook_service(
     return KBDocumentWebhookService(session, settings=settings)
 
 
+def get_rate_limit_service(settings: SettingsDep) -> RateLimitService:
+    """Return app-level rate-limit service dependency."""
+    return RateLimitService(
+        settings=settings,
+        store=get_rate_limit_store(settings),
+    )
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserProfileServiceDep = Annotated[
     UserProfileService,
@@ -201,3 +210,4 @@ KBDocumentWebhookServiceDep = Annotated[
     KBDocumentWebhookService,
     Depends(get_kb_webhook_service),
 ]
+RateLimitServiceDep = Annotated[RateLimitService, Depends(get_rate_limit_service)]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, status
+from fastapi import APIRouter, Header, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.v1.dependencies import (
@@ -13,6 +13,7 @@ from app.api.v1.dependencies import (
     AthleteUserDep,
     ConversationFileUploadServiceDep,
     ConversationServiceDep,
+    RateLimitServiceDep,
 )
 from app.core.exceptions import ValidationError
 from app.schemas.conversations import (
@@ -28,18 +29,26 @@ from app.schemas.conversations import (
 )
 from app.schemas.uploads import UploadCompleteRequest
 from app.services.agent_stream_service import AgentStreamService, format_sse_record
+from app.services.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
 
 @router.get("", response_model=list[ConversationSummaryResponse])
 async def list_conversations(
+    http_request: Request,
     athlete: AthleteUserDep,
     service: ConversationServiceDep,
+    rate_limiter: RateLimitServiceDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ConversationSummaryResponse]:
     """List current athlete conversations."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.LIST,
+        request=http_request,
+        user=athlete,
+    )
     return await service.list_for_athlete(
         athlete=athlete,
         limit=limit,
@@ -53,12 +62,19 @@ async def list_conversations(
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_conversation(
-    request: ConversationCreateRequest,
+    payload: ConversationCreateRequest,
+    http_request: Request,
     athlete: AthleteUserDep,
     service: ConversationServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> ConversationStartResponse:
     """Start a current-athlete conversation and enqueue assistant generation."""
-    return await service.create(athlete=athlete, request=request)
+    await rate_limiter.enforce(
+        RateLimitPolicy.ATHLETE_CHAT,
+        request=http_request,
+        user=athlete,
+    )
+    return await service.create(athlete=athlete, request=payload)
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)
@@ -83,15 +99,22 @@ async def get_conversation(
 )
 async def create_conversation_file_upload_request(
     conversation_id: UUID,
-    request: ConversationFileUploadRequest,
+    payload: ConversationFileUploadRequest,
+    http_request: Request,
     athlete: AthleteUserDep,
     service: ConversationFileUploadServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> ConversationFileUploadRequestResponse:
     """Create a direct-upload request for a current-athlete conversation file."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.UPLOAD,
+        request=http_request,
+        user=athlete,
+    )
     return await service.create_file_upload_request(
         athlete=athlete,
         conversation_id=conversation_id,
-        request=request,
+        request=payload,
     )
 
 
@@ -102,16 +125,23 @@ async def create_conversation_file_upload_request(
 async def complete_conversation_file_upload(
     conversation_id: UUID,
     file_id: UUID,
-    request: UploadCompleteRequest,
+    payload: UploadCompleteRequest,
+    http_request: Request,
     athlete: AthleteUserDep,
     service: ConversationFileUploadServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> ConversationFileSummaryResponse:
     """Verify a direct-uploaded conversation file and queue private ingest."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.UPLOAD,
+        request=http_request,
+        user=athlete,
+    )
     return await service.complete_file_upload(
         athlete=athlete,
         conversation_id=conversation_id,
         file_id=file_id,
-        request=request,
+        request=payload,
     )
 
 
@@ -122,15 +152,22 @@ async def complete_conversation_file_upload(
 )
 async def submit_message(
     conversation_id: UUID,
-    request: MessageSubmitRequest,
+    payload: MessageSubmitRequest,
+    http_request: Request,
     athlete: AthleteUserDep,
     service: ConversationServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> MessageSubmitResponse:
     """Submit a follow-up message and enqueue assistant generation."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.ATHLETE_CHAT,
+        request=http_request,
+        user=athlete,
+    )
     return await service.submit_message(
         athlete=athlete,
         conversation_id=conversation_id,
-        request=request,
+        request=payload,
     )
 
 

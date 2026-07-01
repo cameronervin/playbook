@@ -30,6 +30,7 @@ Author or update the dataset + rubric YAMLs first (see `datasets/README.md`,
 
 ```bash
 cd backend
+uv run --group evals python -m evals.cli release-checks     # deterministic release gates
 uv run --group evals python -m evals.cli validate-datasets
 uv run --group evals python -m evals.cli sync-datasets  # mirror datasets into Langfuse
 uv run --group evals python -m evals.cli run --agent athlete_chat --max-concurrency 5
@@ -45,6 +46,16 @@ LLM/KB load stays bounded; each spec's items run concurrently.
 
 `--agent` choices: `athlete_chat`, `admin_chat`, `dashboard_insights`,
 `conversation_title`.
+
+`release-checks` is offline and does not initialize Langfuse. It validates
+dataset YAML, the non-secret LiteLLM virtual-key budget/rate policy manifest,
+runtime copy for protected university affiliation claims, observability/redaction
+anchors, and production rate-limit env posture. The broader release wrapper is:
+
+```bash
+./deploy/scripts/release-validate.sh
+./deploy/scripts/release-validate.sh --live-evals   # also run strict Langfuse evals
+```
 
 `athlete_chat` runs deterministic retrieval/citation/behavior/privacy release
 gates, LLM answer-quality judging, and Ragas metrics. `admin_chat` runs

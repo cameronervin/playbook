@@ -180,6 +180,25 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
 
+    # --- Rate limiting ---------------------------------------------------------
+    # Disabled by default for host-run local development; deployed environments
+    # should enable this with the Valkey store.
+    RATE_LIMIT_ENABLED: bool = False
+    RATE_LIMIT_STORE_MODE: Literal["memory", "valkey"] = "valkey"
+    RATE_LIMIT_VALKEY_URL: str = Field(default="redis://localhost:6379/3", repr=False)
+    RATE_LIMIT_AUTH_MAX_REQUESTS: int = Field(default=20, ge=1)
+    RATE_LIMIT_AUTH_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    RATE_LIMIT_ATHLETE_CHAT_MAX_REQUESTS: int = Field(default=20, ge=1)
+    RATE_LIMIT_ATHLETE_CHAT_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    RATE_LIMIT_ADMIN_CHAT_MAX_REQUESTS: int = Field(default=30, ge=1)
+    RATE_LIMIT_ADMIN_CHAT_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    RATE_LIMIT_INSIGHT_RUN_MAX_REQUESTS: int = Field(default=10, ge=1)
+    RATE_LIMIT_INSIGHT_RUN_WINDOW_SECONDS: int = Field(default=3600, ge=1)
+    RATE_LIMIT_UPLOAD_MAX_REQUESTS: int = Field(default=20, ge=1)
+    RATE_LIMIT_UPLOAD_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    RATE_LIMIT_LIST_MAX_REQUESTS: int = Field(default=120, ge=1)
+    RATE_LIMIT_LIST_WINDOW_SECONDS: int = Field(default=60, ge=1)
+
     # --- Validators ------------------------------------------------------------
 
     @field_validator("CORS_ORIGINS", mode="before")

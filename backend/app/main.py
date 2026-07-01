@@ -47,6 +47,7 @@ from app.infrastructure.streaming import cleanup_agent_stream_provider
 from app.middleware import setup_cors, setup_request_context, setup_session_refresh
 from app.observability.agent_trace import verify_tracing_configuration
 from app.observability.langfuse_init import init_langfuse, shutdown_langfuse
+from app.services.rate_limit import cleanup_rate_limit_stores
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -133,6 +134,12 @@ async def _shutdown_infrastructure(checkpointer_pool: object, kb_provider: objec
         logger.info("Agent stream provider cleaned up")
     except Exception as e:  # noqa: BLE001
         logger.warning("Error cleaning up agent stream provider", error=str(e))
+
+    try:
+        await cleanup_rate_limit_stores()
+        logger.info("Rate limit stores cleaned up")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Error cleaning up rate limit stores", error=str(e))
 
     try:
         cleanup_storage_provider()

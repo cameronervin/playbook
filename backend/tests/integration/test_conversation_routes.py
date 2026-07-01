@@ -32,6 +32,7 @@ from app.schemas.knowledgebase import (
     KBDocumentIngestResponse,
 )
 from app.services.agent_stream_service import AgentStreamService
+from app.services.rate_limit import clear_rate_limit_store_cache
 from app.workers import tasks as worker_tasks
 
 
@@ -291,6 +292,60 @@ async def test_athlete_conversation_routes_create_list_and_get_detail(
     ]
     assert "storage_key" not in detail_response.json()["files"][0]
     assert "extracted_text_ref" not in detail_response.json()["files"][0]
+
+
+@pytest.mark.asyncio
+async def test_create_conversation_rate_limit_returns_429_before_dispatch(
+    route_client,
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(test_settings, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(test_settings, "RATE_LIMIT_STORE_MODE", "memory")
+    monkeypatch.setattr(test_settings, "RATE_LIMIT_ATHLETE_CHAT_MAX_REQUESTS", 1)
+    monkeypatch.setattr(test_settings, "RATE_LIMIT_ATHLETE_CHAT_WINDOW_SECONDS", 60)
+    clear_rate_limit_store_cache()
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-rate-limit",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-rate-limit@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-rate-limit",
+        sport_team="Basketball",
+    )
+    route_client.authenticate_as(athlete)
+    dispatched: list[str] = []
+
+    def fake_apply_async(*, kwargs: dict[str, object], task_id: str) -> SimpleNamespace:
+        dispatched.append(task_id)
+        return SimpleNamespace(id=task_id)
+
+    monkeypatch.setattr(
+        worker_tasks.run_athlete_chat_task,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    first = await route_client.client.post(
+        "/api/v1/conversations",
+        json={"content": "Can I accept this NIL deal?"},
+    )
+    second = await route_client.client.post(
+        "/api/v1/conversations",
+        json={"content": "Can I accept this second NIL deal?"},
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 429
+    assert second.headers["Retry-After"] == "60"
+    assert second.json()["error"]["code"] == "RATE_LIMIT_EXCEEDED"
+    assert len(dispatched) == 1
+    clear_rate_limit_store_cache()
 
 
 @pytest.mark.asyncio

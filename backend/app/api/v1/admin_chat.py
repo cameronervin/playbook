@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, status
+from fastapi import APIRouter, Header, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.v1.dependencies import (
     AdminChatServiceDep,
     AdminUserDep,
     AgentStreamServiceDep,
+    RateLimitServiceDep,
 )
 from app.core.exceptions import ValidationError
 from app.schemas.admin_chat import (
@@ -22,18 +23,26 @@ from app.schemas.admin_chat import (
     AdminChatSessionResponse,
 )
 from app.services.agent_stream_service import AgentStreamService, format_sse_record
+from app.services.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/admin/chat", tags=["Admin Chat"])
 
 
 @router.get("/sessions", response_model=list[AdminChatSessionResponse])
 async def list_admin_chat_sessions(
+    http_request: Request,
     admin: AdminUserDep,
     service: AdminChatServiceDep,
+    rate_limiter: RateLimitServiceDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminChatSessionResponse]:
     """List current admin's analytics chat sessions."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.LIST,
+        request=http_request,
+        user=admin,
+    )
     return await service.list_sessions(actor=admin, limit=limit, offset=offset)
 
 
@@ -43,12 +52,19 @@ async def list_admin_chat_sessions(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_admin_chat_session(
-    request: AdminChatSessionCreateRequest,
+    payload: AdminChatSessionCreateRequest,
+    http_request: Request,
     admin: AdminUserDep,
     service: AdminChatServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> AdminChatSessionResponse:
     """Create an admin analytics chat session."""
-    return await service.create_session(actor=admin, request=request)
+    await rate_limiter.enforce(
+        RateLimitPolicy.ADMIN_CHAT,
+        request=http_request,
+        user=admin,
+    )
+    return await service.create_session(actor=admin, request=payload)
 
 
 @router.get(
@@ -76,15 +92,22 @@ async def get_admin_chat_session(
 )
 async def submit_admin_chat_message(
     session_id: UUID,
-    request: AdminChatMessageSubmitRequest,
+    payload: AdminChatMessageSubmitRequest,
+    http_request: Request,
     admin: AdminUserDep,
     service: AdminChatServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> AdminChatMessageSubmitResponse:
     """Submit an admin analytics question and enqueue assistant generation."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.ADMIN_CHAT,
+        request=http_request,
+        user=admin,
+    )
     return await service.submit_message(
         actor=admin,
         session_id=session_id,
-        request=request,
+        request=payload,
     )
 
 

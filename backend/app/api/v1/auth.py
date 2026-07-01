@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import RedirectResponse
 
-from app.api.v1.dependencies import AuthServiceDep, CurrentUserDep
+from app.api.v1.dependencies import AuthServiceDep, CurrentUserDep, RateLimitServiceDep
 from app.auth.dev_personas import DevAuthPersona
 from app.schemas.users import (
     AuthProvidersResponse,
@@ -14,6 +14,7 @@ from app.schemas.users import (
     SessionResponse,
 )
 from app.services.auth_service import ProviderName
+from app.services.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -38,9 +39,11 @@ async def login(
     request: Request,
     response: Response,
     service: AuthServiceDep,
+    rate_limiter: RateLimitServiceDep,
     persona: DevAuthPersona | None = None,
 ) -> OAuthLoginResponse:
     """Return an OAuth authorization URL."""
+    await rate_limiter.enforce(RateLimitPolicy.AUTH, request=request)
     return await service.login_url(
         provider=provider,
         request=request,
@@ -57,8 +60,10 @@ async def callback(
     request: Request,
     response: Response,
     service: AuthServiceDep,
+    rate_limiter: RateLimitServiceDep,
 ) -> SessionResponse | RedirectResponse:
     """Complete OAuth login and create an app session."""
+    await rate_limiter.enforce(RateLimitPolicy.AUTH, request=request)
     session = await service.callback(
         provider=provider,
         code=code,

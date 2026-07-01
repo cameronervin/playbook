@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 
 import click
 
+from evals.core.release_checks import run_release_checks
 from evals.core.runner import DEFAULT_MAX_CONCURRENCY, run_spec
 from evals.core.sync import sync_dataset_to_langfuse
 from evals.specs import REGISTRY
@@ -190,6 +191,19 @@ def validate_datasets(agent: str | None) -> None:
         message = getattr(issue, "message", str(issue))
         click.echo(f"{severity}: {path}: {message}")
     raise click.ClickException(f"{len(issues)} dataset validation issue(s)")
+
+
+@cli.command(name="release-checks")
+def release_checks() -> None:
+    """Run deterministic release checks without Langfuse credentials."""
+    result = run_release_checks()
+    click.echo(result.summary())
+
+    for issue in result.issues:
+        click.echo(f"{issue.severity}: {issue.path}: {issue.message}")
+
+    if not result.passed:
+        raise click.ClickException("release checks failed")
 
 
 if __name__ == "__main__":

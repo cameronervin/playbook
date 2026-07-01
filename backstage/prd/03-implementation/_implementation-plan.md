@@ -11,6 +11,10 @@ product goals. Each row should be concrete enough to drive implementation across
 models, schemas, repositories, services, API routes, frontend surfaces,
 infrastructure, tests, and docs.
 
+Production hardening work should also use
+[_production-readiness-playbook.md](_production-readiness-playbook.md) as the
+concise gate checklist.
+
 ## Current Implementation Snapshot
 
 As of 2026-07-01:

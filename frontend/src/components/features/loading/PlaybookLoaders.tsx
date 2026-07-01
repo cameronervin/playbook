@@ -8,6 +8,22 @@ import { BrandLockup, Button, PlaybookMark, Skeleton, SkeletonAvatar, SkeletonBu
 
 type AdminSkeletonTab = 'insights' | 'kb' | 'users'
 
+export function PlaybookRouteLoader() {
+  return (
+    <section className="pb-route-loader-stage">
+      <div
+        aria-label="Loading Playbook"
+        className="pb-route-loader-content"
+        data-testid="playbook-brand-loader"
+        role="status"
+      >
+        <PlaybookMark className="pb-route-loader-mark" size={96} />
+        <span className="pb-route-loader-text">Loading</span>
+      </div>
+    </section>
+  )
+}
+
 export function AuthLoginSkeleton() {
   return (
     <AuthCard className="flex flex-col items-center text-center" data-testid="auth-loading-skeleton">

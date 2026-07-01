@@ -32,6 +32,15 @@ Example error response:
 }
 ```
 
+## Rate Limiting
+
+Production can enable shared sliding-window limits for auth, athlete chat, admin
+chat, dashboard insight runs, direct uploads, and list/query endpoints. A limited
+request returns HTTP `429` with the normal error envelope, code
+`RATE_LIMIT_EXCEEDED`, and a `Retry-After` header in seconds. Limit telemetry is
+logged with request, organization, and user IDs plus a hashed subject; prompts,
+files, tokens, secrets, and raw IP addresses are not logged.
+
 ## Implemented
 
 | Method | Endpoint | Description |

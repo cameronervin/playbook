@@ -415,18 +415,28 @@ The Phase 5 eval harness has an offline validation path that does not require
 Langfuse or model credentials:
 
 ```bash
+./deploy/scripts/release-validate.sh --skip-frontend --skip-kb
+```
+
+The deterministic release checks can also be run directly from the backend:
+
+```bash
 cd backend
+uv run --group evals python -m evals.cli release-checks
 uv run --group evals python -m evals.cli validate-datasets
-uv run pytest tests/unit/evals -q
 ```
 
 To run the live release evals, configure Langfuse and LiteLLM in the backend
-environment, then sync and run the registered Playbook specs:
+environment, then sync and run the registered Playbook specs or use the release
+wrapper's live flag:
 
 ```bash
 cd backend
 uv run --group evals python -m evals.cli sync-datasets
 uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
+
+cd ..
+./deploy/scripts/release-validate.sh --live-evals
 ```
 
 Use `KB_PROVIDER_MODE=local` when validating real retrieval and citation

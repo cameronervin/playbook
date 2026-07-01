@@ -8,11 +8,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 
-from app.api.v1.dependencies import AdminAnalyticsServiceDep, AdminUserDep
+from app.api.v1.dependencies import (
+    AdminAnalyticsServiceDep,
+    AdminUserDep,
+    RateLimitServiceDep,
+)
 from app.schemas.admin_analytics import (
     AdminAnalyticsQueryListResponse,
     AdminAnalyticsSummaryResponse,
 )
+from app.services.rate_limit import RateLimitPolicy
 
 router = APIRouter(prefix="/admin/analytics", tags=["Admin Analytics"])
 QUERY_FILTER_ALLOWED_PARAMS = {
@@ -90,8 +95,10 @@ async def get_summary(
     dependencies=[Depends(reject_unsupported_query_params)],
 )
 async def list_queries(
+    request: Request,
     actor: AdminUserDep,
     service: AdminAnalyticsServiceDep,
+    rate_limiter: RateLimitServiceDep,
     window: Annotated[str | None, Query(pattern=r"^[1-9][0-9]*d$")] = None,
     window_start: datetime | None = None,
     window_end: datetime | None = None,
@@ -101,6 +108,11 @@ async def list_queries(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> AdminAnalyticsQueryListResponse:
     """Return anonymized athlete query text for admin review."""
+    await rate_limiter.enforce(
+        RateLimitPolicy.LIST,
+        request=request,
+        user=actor,
+    )
     source_filters = _normalized_source_filters(
         topic_labels=topic_labels,
         risk_labels=risk_labels,

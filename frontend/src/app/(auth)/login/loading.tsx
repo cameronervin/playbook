@@ -1,5 +1,5 @@
-import { AuthLoginSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
+import { PlaybookRouteLoader } from '@/src/components/features/loading/PlaybookLoaders'
 
 export default function Loading() {
-  return <AuthLoginSkeleton />
+  return <PlaybookRouteLoader />
 }
