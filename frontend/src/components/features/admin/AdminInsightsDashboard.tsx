@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { AlertTriangle, ChevronDown, LoaderCircle, RefreshCw, Sparkles, Zap } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, RefreshCw, Sparkles, Zap } from 'lucide-react'
 import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
+import { AdminQueryReview } from '@/src/components/features/admin/AdminQueryReview'
 import {
   dashboardKpis,
   dashboardRiskItems,
@@ -19,10 +20,11 @@ import {
   type DashboardUnansweredItem,
   type DashboardVolumePoint,
 } from '@/src/components/features/admin/adminInsightsView'
-import { Button } from '@/src/components/ui'
+import { Button, IconButton } from '@/src/components/ui'
 import { cn } from '@/src/lib/utils/cn'
 import type {
   AdminAnalyticsQuery,
+  AdminAnalyticsQueryFilters,
   AdminAnalyticsSummary,
   AdminTimeWindow,
   DashboardInsight,
@@ -32,35 +34,54 @@ import type {
 interface AdminInsightsDashboardProps {
   currentInsight: DashboardInsight | null
   currentRun: DashboardInsightRun | null
+  isChatOpen: boolean
   isError: boolean
+  isQueryReviewFetching: boolean
   isGenerating: boolean
   isLoading: boolean
   onGenerate: () => void
   onOpenChat: () => void
+  onQueryPageChange: (page: number) => void
+  onQueryFiltersChange: (filters: Required<AdminAnalyticsQueryFilters>) => void
   onTimeWindowChange: (window: AdminTimeWindow) => void
   queries: AdminAnalyticsQuery[]
+  queryHasNextPage: boolean
+  queryFilters: Required<AdminAnalyticsQueryFilters>
+  queryPage: number
+  queryPageSize: number
   summary: AdminAnalyticsSummary | null
   timeWindow: AdminTimeWindow
 }
 
-const timeWindowLabels: Record<AdminTimeWindow, string> = {
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  custom: 'Custom range',
-}
+const timeWindowOptions: Array<{ label: string; value: AdminTimeWindow }> = [
+  { label: 'Last 7 days', value: '7d' },
+  { label: 'Last 30 days', value: '30d' },
+]
+
+const timeWindowLabels = Object.fromEntries(
+  timeWindowOptions.map((option) => [option.value, option.label]),
+) as Record<AdminTimeWindow, string>
 
 const headerControlClassName = 'pb-admin-header-control pb-ui-sm'
 
 export function AdminInsightsDashboard({
   currentInsight,
   currentRun,
+  isChatOpen,
   isError,
+  isQueryReviewFetching,
   isGenerating,
   isLoading,
   onGenerate,
   onOpenChat,
+  onQueryPageChange,
+  onQueryFiltersChange,
   onTimeWindowChange,
   queries,
+  queryHasNextPage,
+  queryFilters,
+  queryPage,
+  queryPageSize,
   summary,
   timeWindow,
 }: AdminInsightsDashboardProps) {
@@ -69,7 +90,7 @@ export function AdminInsightsDashboard({
   const topics = dashboardTopics(summary)
   const risks = dashboardRiskItems(summary, insight)
   const kpis = dashboardKpis(summary)
-  const volumeSeries = dashboardVolumeSeries(summary, queries)
+  const volumeSeries = dashboardVolumeSeries(summary)
 
   return (
     <AdminPageScaffold
@@ -77,8 +98,8 @@ export function AdminInsightsDashboard({
         <>
           <TimeWindowMenu onChange={onTimeWindowChange} value={timeWindow} />
           <Button
-            className={headerControlClassName}
-            disabled={isGenerating || timeWindow === 'custom'}
+            className={cn(headerControlClassName, 'pb-admin-insights-regenerate-control')}
+            disabled={isGenerating}
             onClick={onGenerate}
             size="sm"
             variant="secondary"
@@ -86,7 +107,7 @@ export function AdminInsightsDashboard({
             {isGenerating ? <LoaderCircle className="h-[15px] w-[15px] pb-spin" /> : <RefreshCw className="h-[15px] w-[15px]" />}
             {isGenerating ? 'Regenerating...' : 'Regenerate'}
           </Button>
-          <Button className={headerControlClassName} onClick={onOpenChat} size="sm">
+          <Button className={headerControlClassName} disabled={isChatOpen} onClick={onOpenChat} size="sm">
             <Zap className="h-[15px] w-[15px]" />
             Explore with AI
           </Button>
@@ -104,22 +125,38 @@ export function AdminInsightsDashboard({
         failedMessage={hasFailedRun ? currentRun?.error_message ?? 'Dashboard insight generation failed.' : null}
         generatedMeta={`${generatedLabel(insight)} · ${windowLabel(summary)}`}
         insight={insight}
-        isGenerating={isGenerating}
         isLoading={isLoading}
         kpis={kpis}
         unanswered={unansweredItems(insight)}
       />
-      <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.55fr_1fr]">
-        <DashboardCard title="Common topics">
-          <TopicBars items={topics} />
+      <div className="mt-3.5 grid items-stretch gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <DashboardCard className="h-full" title="Common topics">
+          <div className="pb-dashboard-breakdown-scroll">
+            <TopicBars items={topics} />
+          </div>
         </DashboardCard>
-        <DashboardCard title="Risk flags">
-          <RiskFlags items={risks} />
+        <DashboardCard className="h-full" title="Risk flags">
+          <div className="pb-dashboard-breakdown-scroll">
+            <RiskFlags items={risks} />
+          </div>
         </DashboardCard>
       </div>
-      <DashboardCard className="mt-3.5" title="Query volume" titleAside={`${summary?.query_volume ?? 0} in window`}>
-        <QueryVolumeChart series={volumeSeries} />
-      </DashboardCard>
+      <QueryVolumePanel
+        queryVolume={summary?.query_volume ?? 0}
+        series={volumeSeries}
+        timeWindow={timeWindow}
+      />
+      <AdminQueryReview
+        filters={queryFilters}
+        hasNextPage={queryHasNextPage}
+        isFetching={isQueryReviewFetching}
+        onPageChange={onQueryPageChange}
+        onFiltersChange={onQueryFiltersChange}
+        page={queryPage}
+        pageSize={queryPageSize}
+        queries={queries}
+        summary={summary}
+      />
     </AdminPageScaffold>
   )
 }
@@ -136,7 +173,7 @@ function TimeWindowMenu({ onChange, value }: TimeWindowMenuProps) {
         <button
           className={cn(
             headerControlClassName,
-            'inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface px-3 font-semibold text-fg-1 transition hover:bg-surface-hover',
+            'inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface font-semibold text-fg-1 transition hover:bg-surface-hover',
           )}
           type="button"
         >
@@ -150,14 +187,13 @@ function TimeWindowMenu({ onChange, value }: TimeWindowMenuProps) {
           className="pb-ui-sm z-50 min-w-[172px] rounded-md border border-border-strong bg-surface-raised p-1.5 text-fg-2 shadow-lg"
           sideOffset={8}
         >
-          {(Object.keys(timeWindowLabels) as AdminTimeWindow[]).map((window) => (
+          {timeWindowOptions.map((option) => (
             <DropdownMenuPrimitive.Item
               className="pb-focus-item cursor-pointer rounded-sm px-2.5 py-2 transition"
-              disabled={window === 'custom'}
-              key={window}
-              onSelect={() => onChange(window)}
+              key={option.value}
+              onSelect={() => onChange(option.value)}
             >
-              {timeWindowLabels[window]}
+              {option.label}
             </DropdownMenuPrimitive.Item>
           ))}
         </DropdownMenuPrimitive.Content>
@@ -170,7 +206,6 @@ interface AISummaryCardProps {
   failedMessage: string | null
   generatedMeta: string
   insight: DashboardInsight | null
-  isGenerating: boolean
   isLoading: boolean
   kpis: DashboardInsightKpi[]
   unanswered: DashboardUnansweredItem[]
@@ -180,13 +215,12 @@ function AISummaryCard({
   failedMessage,
   generatedMeta,
   insight,
-  isGenerating,
   isLoading,
   kpis,
   unanswered,
 }: AISummaryCardProps) {
   const [open, setOpen] = useState(false)
-  const loading = isLoading || isGenerating
+  const loading = isLoading
 
   return (
     <section className="pb-dashboard-summary-card">
@@ -202,10 +236,7 @@ function AISummaryCard({
               Failed
             </>
           ) : loading ? (
-            <>
-              <LoaderCircle className="h-3.5 w-3.5 pb-spin text-info" />
-              Generating...
-            </>
+            'Loading summary'
           ) : (
             <>
               <span className="pb-pulse h-1.5 w-1.5 rounded-full bg-success [--pulse-color:rgba(63,182,139,0.4)]" />
@@ -300,15 +331,15 @@ interface DashboardCardProps {
   children: React.ReactNode
   className?: string
   title: string
-  titleAside?: string
+  titleAside?: React.ReactNode
 }
 
 function DashboardCard({ children, className, title, titleAside }: DashboardCardProps) {
   return (
     <section className={cn('pb-dashboard-card', className)}>
-      <div className="mb-3 flex items-baseline">
+      <div className="mb-3 flex items-center">
         <h2 className="pb-card-title">{title}</h2>
-        {titleAside && <span className="pb-ui-xs ml-auto text-fg-3">{titleAside}</span>}
+        {titleAside && <div className="ml-auto">{titleAside}</div>}
       </div>
       {children}
     </section>
@@ -361,7 +392,58 @@ function RiskFlags({ items }: { items: DashboardRiskItem[] }) {
   )
 }
 
-function QueryVolumeChart({ series }: { series: DashboardVolumePoint[] }) {
+const QUERY_VOLUME_PAGE_SIZE = 7
+
+interface QueryVolumePanelProps {
+  queryVolume: number
+  series: DashboardVolumePoint[]
+  timeWindow: AdminTimeWindow
+}
+
+function QueryVolumePanel({ queryVolume, series, timeWindow }: QueryVolumePanelProps) {
+  const pages = useMemo(() => volumeWeekPages(series), [series])
+  const latestPageIndex = Math.max(pages.length - 1, 0)
+  const [pageIndex, setPageIndex] = useState(latestPageIndex)
+  const hasPagination = timeWindow === '30d' && pages.length > 1
+
+  useEffect(() => {
+    setPageIndex(latestPageIndex)
+  }, [latestPageIndex, timeWindow])
+
+  const visibleSeries = hasPagination
+    ? pages[pageIndex] ?? []
+    : series.slice(-QUERY_VOLUME_PAGE_SIZE)
+  const titleAside = hasPagination ? (
+    <div className="flex items-center gap-1.5">
+      <IconButton
+        aria-label="Previous query-volume week"
+        disabled={pageIndex === 0}
+        onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+        size="sm"
+        variant="ghost"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </IconButton>
+      <IconButton
+        aria-label="Next query-volume week"
+        disabled={pageIndex >= pages.length - 1}
+        onClick={() => setPageIndex((current) => Math.min(pages.length - 1, current + 1))}
+        size="sm"
+        variant="ghost"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </IconButton>
+    </div>
+  ) : null
+
+  return (
+    <DashboardCard className="mt-3.5" title="Query volume" titleAside={titleAside}>
+      <QueryVolumeChart queryVolume={queryVolume} series={visibleSeries} />
+    </DashboardCard>
+  )
+}
+
+function QueryVolumeChart({ queryVolume, series }: { queryVolume: number; series: DashboardVolumePoint[] }) {
   if (series.length === 0) {
     return <p className="pb-admin-table-text text-fg-3">No query volume data for this window.</p>
   }
@@ -373,7 +455,7 @@ function QueryVolumeChart({ series }: { series: DashboardVolumePoint[] }) {
           const height = Math.round((point.total / max) * 100) + 4
           const unansweredHeight = Math.round((point.unanswered / max) * 100)
           return (
-            <div className="flex flex-1 flex-col items-center gap-2" key={point.date}>
+            <div className="flex flex-1 flex-col items-center gap-2" key={point.key}>
               <span
                 aria-label={`${point.date}: ${point.total} questions`}
                 className="relative w-full max-w-10 overflow-hidden rounded-t bg-brand"
@@ -389,9 +471,18 @@ function QueryVolumeChart({ series }: { series: DashboardVolumePoint[] }) {
       <div className="mt-2.5 flex items-center gap-4 border-t border-border pt-2.5">
         <Legend colorClass="bg-brand" label="Answered" />
         <Legend colorClass="bg-warning" label="Unanswered / declined" />
+        <span className="pb-ui-xs ml-auto text-fg-3">{queryVolume} in window</span>
       </div>
     </div>
   )
+}
+
+function volumeWeekPages(series: DashboardVolumePoint[]): DashboardVolumePoint[][] {
+  const pages: DashboardVolumePoint[][] = []
+  for (let end = series.length; end > 0; end -= QUERY_VOLUME_PAGE_SIZE) {
+    pages.unshift(series.slice(Math.max(0, end - QUERY_VOLUME_PAGE_SIZE), end))
+  }
+  return pages
 }
 
 function Legend({ colorClass, label }: { colorClass: string; label: string }) {

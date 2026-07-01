@@ -85,15 +85,24 @@ window, and an allowed-reference list. The middleware appends a compact context
 message with:
 
 - session ID, organization ID, and window bounds;
-- sanitized analytics summary counts and bounded anonymized query examples;
-- completed dashboard insight summaries for the selected window;
-- allowed `metric`, `dashboard_insight`, and anonymized `query` references.
+- `Question` containing the active user turn;
+- `Available Snapshot Facts` containing sanitized analytics summary counts and
+  bounded anonymized query examples;
+- `Completed Dashboard Insights` containing stored insight summaries for the
+  selected window;
+- `Allowed References` containing valid `metric`, `dashboard_insight`, and
+  anonymized `query` references;
+- `Tool Guidance Reminder` telling the model that data tools are optional, which
+  data type each tool is for, and that it should stop after a relevant tool
+  result rather than repeating equivalent calls.
 
 It must not inject athlete names, emails, raw athlete IDs, teams, provider
 subjects, storage keys, or arbitrary database rows. Admin chat tools inspect
 only `AdminChatRuntimeContext`, and `save_response` filters model-requested
 references against IDs prepared by `build_context` before persistence and
-stream completion.
+stream completion. Data-tool calls log sanitized arguments and task/session
+metadata for loop telemetry, but the workflow still preserves autonomous tool
+choice and does not impose hard per-tool call limits.
 
 ## 4. Conversation-File Scope Preparation
 
@@ -185,9 +194,13 @@ def get_serializer(field_name: str, tier: str):
   loading, `build_context` owns sanitized analytics/dashboard context, and
   `scope_check` deterministically refuses identity-reveal and action-taking
   requests before model generation. The chain receives the stable admin chat
-  prompt plus compact runtime context. References returned in structured output
-  are filtered against allowed IDs before the assistant placeholder is marked
-  complete and streamed.
+  prompt plus compact runtime context. The prompt includes a dedicated
+  `tool_use_policy` section that distinguishes admin-chat data tools from the
+  LangChain `ToolStrategy` final structured response tool, tells the model to
+  answer from context when enough evidence is already present, and instructs it
+  to stop after a relevant data-tool result. References returned in structured
+  output are filtered against allowed IDs before the assistant placeholder is
+  marked complete and streamed.
 
 ## Prompt Caching
 

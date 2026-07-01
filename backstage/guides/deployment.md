@@ -89,7 +89,7 @@ requires a real `.env.prod` (copy from `.env.prod.example`).
   insight runs; manual insight runs enqueue directly from the API.
 - **Runtime tracing**: Langfuse tracing is off unless `TRACING_ENABLED=true`,
   `LANGFUSE_ENABLED=true`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and
-  `LANGFUSE_HOST` are provided to both the backend API and backend Celery
+  `LANGFUSE_BASE_URL` are provided to both the backend API and backend Celery
   workers. Treat `LANGFUSE_SECRET_KEY` as a secret-manager value. Do not inject
   Langfuse credentials into the frontend, KB-service, LiteLLM proxy, or reranker
   services unless those services gain their own approved tracing integration.
@@ -108,7 +108,7 @@ Recommended deployment shape:
 | `reranker` service | Optional Infinity reranker profile on the internal network, port `7997` |
 | LiteLLM config file | Defines model aliases such as `playbook-chat`, `playbook-fast`, `playbook-embed`, optional `playbook-ocr`, and `playbook-rerank` |
 | LiteLLM database | Stores LiteLLM-managed virtual keys, model config, spend, budgets, and audit metadata |
-| Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200`; when runtime tracing is enabled, backend API and backend workers also receive `TRACING_ENABLED`, `LANGFUSE_ENABLED`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` |
+| Backend env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LLM_CHAT_MODEL=playbook-chat`, and `CONVERSATION_FILE_MAX_UPLOAD_MB=200`; when runtime tracing is enabled, backend API and backend workers also receive `TRACING_ENABLED`, `LANGFUSE_ENABLED`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` |
 | KB-service env | `LLM_PROVIDER_MODE=litellm`, `LITELLM_BASE_URL=http://litellm:4000`, `LITELLM_API_KEY=<service key>`, `LITELLM_EMBED_MODEL=playbook-embed`, `LITELLM_SUMMARY_MODEL=playbook-fast`, `LITELLM_RERANK_MODEL=playbook-rerank`; keep `KB_SEARCH_STRATEGY=semantic` and `KB_RERANK_ENABLED=false` by default, then enable `KB_SEARCH_STRATEGY=hybrid` plus `KB_RERANK_ENABLED=true` for reranked retrieval |
 | LiteLLM env | Provider API keys, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `LITELLM_DATABASE_URL`, `LITELLM_PLAYBOOK_RERANK_MODEL`, `INFINITY_API_BASE`, and `INFINITY_API_KEY` |
 | Reranker env | `INFINITY_API_KEY` and Infinity runtime settings only, copied from `deploy/envs/.env.reranker.example` to the environment-specific untracked file; do not include LiteLLM provider keys, master keys, or app service secrets |
@@ -196,6 +196,11 @@ curl http://<host-or-internal-reranker>:7997/health
 # KB-service rerank smoke, from an environment with KB-service env loaded
 cd kb-service
 uv run python scripts/smoke_kb_service.py --check-litellm-rerank
+
+# Eval dataset and release-gate smoke, from the backend environment
+cd ../backend
+uv run --group evals python -m evals.cli validate-datasets
+uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
 
 # Optional runtime tracing smoke, when Langfuse is enabled for backend + workers:
 # confirm startup logs show ready=true, then trigger admin chat or dashboard

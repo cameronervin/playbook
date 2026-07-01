@@ -305,6 +305,21 @@ class OAuthAccountRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_user_provider(
+        self,
+        *,
+        user_id: UUID,
+        oauth_name: str,
+    ) -> OAuthAccount | None:
+        """Return an OAuth account for a user and provider."""
+        result = await self.session.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.user_id == user_id,
+                OAuthAccount.oauth_name == oauth_name,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         *,
@@ -339,8 +354,11 @@ class OAuthAccountRepository:
         account_email: str,
         expires_at: int | None = None,
         refresh_token: str | None = None,
+        account_id: str | None = None,
     ) -> OAuthAccount:
-        """Update OAuth account token metadata without committing."""
+        """Update OAuth account identity and token metadata without committing."""
+        if account_id is not None:
+            account.account_id = account_id
         account.access_token = access_token
         account.account_email = account_email
         account.expires_at = expires_at

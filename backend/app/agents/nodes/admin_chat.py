@@ -18,7 +18,7 @@ from app.agents.states.admin_chat_state import (
     AdminChatState,
     AdminChatStructuredResponse,
 )
-from app.core.exceptions import ForbiddenError, NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.models.analytics import DashboardInsight
 from app.repositories.admin_chat import (
     AdminChatMessageRepository,
@@ -47,6 +47,7 @@ ACTION_REFUSAL_RESPONSE = (
     "I can only read analytics and existing dashboard insights from this chat. "
     "Use the relevant admin section for document, role, or insight-run actions."
 )
+LOOP_GUARD_FALLBACK_RESPONSE = "I could not generate an answer in time. Please try asking a narrower analytics question."
 
 IDENTITY_RE = re.compile(
     r"\b("
@@ -243,30 +244,54 @@ def create_admin_chat_nodes(*, chains: dict[str, Any]) -> dict[str, Any]:
             }
 
         await context.stream_service.publish_progress(task_id, status="running_agent")
-        result = await chains["admin_chat"].ainvoke(
-            {
-                "messages": state["messages"],
-                "task_id": task_id,
-                "session_id": state["session_id"],
-                "organization_id": state["organization_id"],
-                "window_start": state["window_start"],
-                "window_end": state["window_end"],
-                "question": state.get("question", ""),
-                "snapshot_context": state.get("snapshot_context", ""),
-                "dashboard_insight_context": state.get(
-                    "dashboard_insight_context",
-                    "",
+        try:
+            result = await chains["admin_chat"].ainvoke(
+                {
+                    "messages": state["messages"],
+                    "task_id": task_id,
+                    "session_id": state["session_id"],
+                    "organization_id": state["organization_id"],
+                    "window_start": state["window_start"],
+                    "window_end": state["window_end"],
+                    "question": state.get("question", ""),
+                    "snapshot_context": state.get("snapshot_context", ""),
+                    "dashboard_insight_context": state.get(
+                        "dashboard_insight_context",
+                        "",
+                    ),
+                    "allowed_references": state.get("allowed_references", []),
+                },
+                config=_agent_chain_config(state),
+                context=context,
+            )
+        except ValidationError as exc:
+            if not _is_admin_chat_loop_guard(exc):
+                raise
+            logger.warning(
+                "admin_chat_agent_loop_guard_fallback",
+                task_id=task_id,
+                session_id=state["session_id"],
+                message_count=exc.details.get("message_count"),
+                max_messages=exc.details.get("max_messages"),
+                tool_names=exc.details.get("tool_names", []),
+                repeated_tool_call_count=exc.details.get(
+                    "repeated_tool_call_count",
                 ),
-                "allowed_references": state.get("allowed_references", []),
-            },
-            config=_agent_chain_config(state),
-            context=context,
-        )
+                ai_tool_call_count=exc.details.get("ai_tool_call_count"),
+                tool_message_count=exc.details.get("tool_message_count"),
+            )
+            return {
+                "answer": LOOP_GUARD_FALLBACK_RESPONSE,
+                "answer_type": "unsupported",
+                "references": [],
+            }
         structured = _structured_response(result)
         return {
             "answer": structured.answer.strip(),
             "answer_type": structured.answer_type,
-            "references": [reference.model_dump() for reference in structured.references],
+            "references": [
+                reference.model_dump() for reference in structured.references
+            ],
         }
 
     async def save_response(
@@ -285,7 +310,9 @@ def create_admin_chat_nodes(*, chains: dict[str, Any]) -> dict[str, Any]:
 
         assistant_message = await message_repo.get(assistant_message_id)
         if assistant_message is None:
-            raise NotFoundError("Admin chat assistant message", str(assistant_message_id))
+            raise NotFoundError(
+                "Admin chat assistant message", str(assistant_message_id)
+            )
 
         answer = state.get("answer", "").strip()
         answer_type = state.get("answer_type", "unsupported")
@@ -373,6 +400,14 @@ def _structured_response(result: Any) -> AdminChatStructuredResponse:
     return AdminChatStructuredResponse.model_validate(result)
 
 
+def _is_admin_chat_loop_guard(exc: ValidationError) -> bool:
+    return (
+        exc.details.get("phase") == "admin_chat"
+        and "message_count" in exc.details
+        and "max_messages" in exc.details
+    )
+
+
 async def _publish_answer_chunks(
     stream_service: AgentStreamService,
     *,
@@ -393,7 +428,9 @@ def _answer_chunks(answer: str) -> list[str]:
     return chunks or ([answer] if answer else [])
 
 
-def _allowed_references(*, snapshot: Any, insights: list[DashboardInsight]) -> list[dict[str, str]]:
+def _allowed_references(
+    *, snapshot: Any, insights: list[DashboardInsight]
+) -> list[dict[str, str]]:
     allowed: list[dict[str, str]] = [{"type": "metric", "id": "analytics.summary"}]
     for query in getattr(snapshot, "queries", []):
         message_id = getattr(query, "message_id", None)

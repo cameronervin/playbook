@@ -157,11 +157,14 @@ class AuthService:
                 code=code,
                 redirect_uri=self._redirect_uri(provider, request),
             )
-        except (
-            OAuthProviderCallbackError,
-            HTTPXOAuthError,
-            OAuth2Error,
-        ):
+        except OAuthProviderCallbackError as exc:
+            self._log_oauth_callback_failure(provider=provider, exc=exc)
+            raise OAuthError(
+                "OAuth provider callback failed",
+                details={"provider": provider},
+            ) from None
+        except (HTTPXOAuthError, OAuth2Error) as exc:
+            self._log_oauth_callback_failure(provider=provider, exc=exc)
             raise OAuthError(
                 "OAuth provider callback failed",
                 details={"provider": provider},
@@ -313,6 +316,11 @@ class AuthService:
                 organization_id=organization.id,
                 email=identity.email,
             )
+        if account is None and user is not None:
+            account = await self.oauth_repo.get_by_user_provider(
+                user_id=user.id,
+                oauth_name=identity.provider,
+            )
         if user is None:
             user = await self.user_repo.create(
                 organization_id=organization.id,
@@ -362,6 +370,7 @@ class AuthService:
                 access_token=identity.access_token,
                 expires_at=identity.expires_at,
                 refresh_token=identity.refresh_token,
+                account_id=identity.subject,
                 account_email=identity.email,
             )
         return user
@@ -374,7 +383,31 @@ class AuthService:
     def _resolved_name(self, user: User, identity: OAuthIdentity) -> str:
         if identity.provider == "dev" and identity.name:
             return identity.name
+        if identity.name and self._should_replace_name_from_provider(user, identity):
+            return identity.name
         return user.name or identity.name or self._default_name(identity.email)
+
+    def _should_replace_name_from_provider(self, user: User, identity: OAuthIdentity) -> bool:
+        if not user.name:
+            return True
+        return user.name in {
+            self._default_name(user.email),
+            self._default_name(identity.email),
+        }
+
+    @staticmethod
+    def _log_oauth_callback_failure(
+        *,
+        provider: ProviderName,
+        exc: Exception,
+    ) -> None:
+        logger.warning(
+            "auth_oauth_provider_callback_failed",
+            provider=provider,
+            phase=getattr(exc, "phase", "callback"),
+            error_type=getattr(exc, "error_type", type(exc).__name__),
+            status_code=getattr(exc, "status_code", None),
+        )
 
     @staticmethod
     def _default_name(email: str) -> str:

@@ -48,20 +48,20 @@ export function ProfileScreen() {
       <p className="pb-auth-copy mt-3 max-w-[28ch]">
         We just need a few more details before getting started.
       </p>
-      <form className="mt-7 grid w-full gap-5 text-left" onSubmit={handleSubmit}>
-        <label className="pb-auth-label grid gap-2">
+      <form className="pb-auth-profile-form" onSubmit={handleSubmit}>
+        <label className="pb-auth-label pb-auth-profile-field">
           Name
           <Input
-            className="pb-auth-control pb-auth-input"
+            className="pb-auth-profile-input"
             onChange={(event) => setName(event.target.value)}
             required
             value={name}
           />
         </label>
-        <label className="pb-auth-label grid gap-2">
+        <label className="pb-auth-label pb-auth-profile-field">
           Sport or team
           <Input
-            className="pb-auth-control pb-auth-input"
+            className="pb-auth-profile-input"
             onChange={(event) => setSportTeam(event.target.value)}
             placeholder="Basketball"
             required
@@ -70,7 +70,7 @@ export function ProfileScreen() {
         </label>
         {updateProfile.error && <p className="pb-auth-copy text-danger">{updateProfile.error.message}</p>}
         <Button
-          className="pb-auth-control w-full"
+          className="pb-auth-profile-submit"
           disabled={updateProfile.isPending}
           size="lg"
           type="submit"

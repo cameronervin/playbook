@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sys
+from collections.abc import Iterator
 from types import ModuleType
 from typing import Any
 
@@ -25,11 +27,19 @@ def _settings(**overrides: object) -> Settings:
 
 
 @pytest.fixture(autouse=True)
-def reset_langfuse_state(monkeypatch: pytest.MonkeyPatch) -> None:
+def reset_langfuse_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    env_names = (
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_BASE_URL",
+    )
     monkeypatch.setattr(langfuse_init, "_initialized", False)
     monkeypatch.setattr(langfuse_init, "_client", None, raising=False)
-    for env_name in ("LANGFUSE_SECRET_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_HOST"):
+    for env_name in env_names:
         monkeypatch.delenv(env_name, raising=False)
+    yield
+    for env_name in env_names:
+        os.environ.pop(env_name, None)
 
 
 def test_init_langfuse_noops_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -79,7 +89,7 @@ def test_init_langfuse_creates_client_with_mask(monkeypatch: pytest.MonkeyPatch)
             LANGFUSE_ENABLED=True,
             LANGFUSE_PUBLIC_KEY="pk-test",
             LANGFUSE_SECRET_KEY="sk-test",
-            LANGFUSE_HOST="https://langfuse.test",
+            LANGFUSE_BASE_URL="https://langfuse.test",
         )
     )
 
@@ -89,7 +99,7 @@ def test_init_langfuse_creates_client_with_mask(monkeypatch: pytest.MonkeyPatch)
         {
             "public_key": "pk-test",
             "secret_key": "sk-test",
-            "host": "https://langfuse.test",
+            "base_url": "https://langfuse.test",
             "environment": "test",
             "mask": langfuse_init.mask_langfuse_data,
         }

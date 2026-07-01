@@ -9,6 +9,10 @@ unbounded tool/repair loop.
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Hashable
+from typing import Any
+
 import structlog
 from langchain_core.messages import (
     AIMessage,
@@ -32,7 +36,9 @@ _DEFAULT_MAX_MESSAGES = 60
 
 def _max_messages_per_call(settings: Settings | None = None) -> int:
     app_settings = settings or get_settings()
-    return getattr(app_settings, "AGENT_MAX_MESSAGES_PER_LLM_CALL", _DEFAULT_MAX_MESSAGES)
+    return getattr(
+        app_settings, "AGENT_MAX_MESSAGES_PER_LLM_CALL", _DEFAULT_MAX_MESSAGES
+    )
 
 
 def scope_messages_to_current_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -90,12 +96,17 @@ def assert_message_loop_bounded(
     if len(messages) <= max_messages:
         return
 
+    tool_summary = summarize_tool_calls(messages)
     logger.error(
         "agent_message_loop_guard_triggered",
         phase=phase,
         run_id=run_id,
         message_count=len(messages),
         max_allowed=max_messages,
+        tool_names=tool_summary["tool_names"],
+        repeated_tool_call_count=tool_summary["repeated_tool_call_count"],
+        ai_tool_call_count=tool_summary["ai_tool_call_count"],
+        tool_message_count=tool_summary["tool_message_count"],
     )
     raise ValidationError(
         message=(
@@ -107,6 +118,7 @@ def assert_message_loop_bounded(
             "run_id": run_id,
             "message_count": len(messages),
             "max_messages": max_messages,
+            **tool_summary,
         },
     )
 
@@ -123,3 +135,54 @@ def count_ai_tool_calls(messages: list[BaseMessage]) -> int:
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
             total += len(msg.tool_calls)
     return total
+
+
+def summarize_tool_calls(messages: list[BaseMessage]) -> dict[str, Any]:
+    """Summarize tool activity without exposing raw user/tool arguments."""
+    signatures: list[tuple[str, Hashable]] = []
+    names: set[str] = set()
+    for msg in messages:
+        if not isinstance(msg, AIMessage) or not getattr(msg, "tool_calls", None):
+            continue
+        for tool_call in msg.tool_calls:
+            name = _tool_call_name(tool_call)
+            if not name:
+                continue
+            names.add(name)
+            signatures.append((name, _normalized_tool_args(tool_call)))
+
+    counts = Counter(signatures)
+    repeated_count = sum(count - 1 for count in counts.values() if count > 1)
+    return {
+        "tool_names": sorted(names),
+        "repeated_tool_call_count": repeated_count,
+        "ai_tool_call_count": count_ai_tool_calls(messages),
+        "tool_message_count": count_tool_messages(messages),
+    }
+
+
+def _tool_call_name(tool_call: Any) -> str:
+    if isinstance(tool_call, dict):
+        return str(tool_call.get("name") or "").strip()
+    return str(getattr(tool_call, "name", "") or "").strip()
+
+
+def _normalized_tool_args(tool_call: Any) -> Hashable:
+    args = tool_call.get("args") if isinstance(tool_call, dict) else None
+    if args is None and not isinstance(tool_call, dict):
+        args = getattr(tool_call, "args", None)
+    return _freeze_value(args)
+
+
+def _freeze_value(value: Any) -> Hashable:
+    if isinstance(value, dict):
+        return tuple(
+            sorted((str(key), _freeze_value(item)) for key, item in value.items())
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    if isinstance(value, set):
+        return tuple(sorted((_freeze_value(item) for item in value), key=repr))
+    if isinstance(value, Hashable):
+        return value
+    return str(value)

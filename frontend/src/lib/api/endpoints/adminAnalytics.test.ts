@@ -28,7 +28,7 @@ describe('admin analytics endpoints', () => {
       .mockResolvedValueOnce({ queries: [] })
 
     await getAdminAnalyticsSummary({ window: '7d' })
-    await listAdminAnalyticsQueries({ window: '7d', limit: 50 })
+    await listAdminAnalyticsQueries({ window: '7d', limit: 11, offset: 10 })
     await listAdminAnalyticsQueries({
       window: '7d',
       topic_labels: ['nil', 'compliance'],
@@ -41,7 +41,7 @@ describe('admin analytics endpoints', () => {
     )
     expect(apiClient).toHaveBeenNthCalledWith(
       2,
-      '/api/v1/admin/analytics/queries?window=7d&limit=50',
+      '/api/v1/admin/analytics/queries?window=7d&limit=11&offset=10',
     )
     expect(apiClient).toHaveBeenNthCalledWith(
       3,

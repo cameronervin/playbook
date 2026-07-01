@@ -1,8 +1,12 @@
-import { Database, LayoutDashboard, Paperclip, Plus, RefreshCw, Search, Send, Sparkles, Zap } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Database, LayoutDashboard, Paperclip, Plus, RefreshCw, Search, Send, Sparkles, Users, Zap } from 'lucide-react'
+import { AdminPageScaffold } from '@/src/components/features/admin/AdminPageScaffold'
 import { AuthCard } from '@/src/components/features/auth/AuthLayout'
 import { HorizonBackground } from '@/src/components/features/common/HorizonBackground'
 import { WorkspaceShell } from '@/src/components/features/workspace/WorkspaceShell'
 import { BrandLockup, Button, PlaybookMark, Skeleton, SkeletonAvatar, SkeletonButton, SkeletonText } from '@/src/components/ui'
+
+type AdminSkeletonTab = 'insights' | 'kb' | 'users'
 
 export function AuthLoginSkeleton() {
   return (
@@ -35,16 +39,16 @@ export function ProfileCardSkeleton() {
       <h1 className="pb-auth-heading mt-6">
         Complete your profile
       </h1>
-      <div className="mt-7 grid w-full gap-5 text-left">
-        <div className="pb-auth-label grid gap-2">
+      <div className="pb-auth-profile-form">
+        <div className="pb-auth-label pb-auth-profile-field">
           Name
-          <div aria-hidden="true" className="pb-auth-control w-full rounded-md border border-border-strong bg-surface" />
+          <div aria-hidden="true" className="pb-auth-profile-input" />
         </div>
-        <div className="pb-auth-label grid gap-2">
+        <div className="pb-auth-label pb-auth-profile-field">
           Sport or team
-          <div aria-hidden="true" className="pb-auth-control w-full rounded-md border border-border-strong bg-surface" />
+          <div aria-hidden="true" className="pb-auth-profile-input" />
         </div>
-        <div aria-hidden="true" className="pb-auth-control inline-flex w-full items-center justify-center rounded-md bg-brand px-4 pb-auth-input font-semibold text-fg-on-brand opacity-70">
+        <div aria-hidden="true" className="pb-auth-profile-submit pb-auth-profile-skeleton-submit">
           {"I'm ready"}
         </div>
       </div>
@@ -207,25 +211,45 @@ export function ChatThreadSkeleton({ label = 'Loading conversation' }: { label?:
   )
 }
 
-export function AdminWorkspaceSkeleton() {
+interface AdminWorkspaceSkeletonProps {
+  activeTab?: AdminSkeletonTab
+  isSuperAdmin?: boolean
+}
+
+export function AdminWorkspaceSkeleton({
+  activeTab = 'insights',
+  isSuperAdmin = false,
+}: AdminWorkspaceSkeletonProps = {}) {
+  const safeActiveTab = activeTab === 'users' && !isSuperAdmin ? 'insights' : activeTab
+
   return (
     <WorkspaceShell
-      leftRail={<AdminNavSkeleton />}
+      leftRail={<AdminNavSkeleton activeTab={safeActiveTab} isSuperAdmin={isSuperAdmin} />}
       main={
         <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-base" data-testid="admin-workspace-skeleton">
           <div className="admin-grid opacity-70" aria-hidden="true" />
-          <AdminInsightsSkeleton />
+          {safeActiveTab === 'users' && isSuperAdmin ? <AdminUsersPageSkeleton /> : <AdminInsightsSkeleton />}
         </section>
       }
     />
   )
 }
 
-export function AdminNavSkeleton() {
+interface AdminNavSkeletonProps {
+  activeTab?: AdminSkeletonTab
+  isSuperAdmin?: boolean
+}
+
+export function AdminNavSkeleton({
+  activeTab = 'insights',
+  isSuperAdmin = false,
+}: AdminNavSkeletonProps = {}) {
+  const safeActiveTab = activeTab === 'users' && !isSuperAdmin ? 'insights' : activeTab
   const navItems = [
-    { icon: LayoutDashboard, label: 'Insights', active: true },
-    { icon: Database, label: 'Knowledge base', active: false },
-  ]
+    { icon: LayoutDashboard, id: 'insights', label: 'Insights' },
+    { icon: Database, id: 'kb', label: 'Knowledge base' },
+    ...(isSuperAdmin ? [{ icon: Users, id: 'users', label: 'Users & roles' }] : []),
+  ] as Array<{ icon: typeof LayoutDashboard; id: AdminSkeletonTab; label: string }>
 
   return (
     <aside className="pb-workspace-admin-rail flex h-dvh shrink-0 flex-col border-r border-border bg-bg-void text-fg-1" aria-label="Admin sidebar loading">
@@ -237,12 +261,13 @@ export function AdminNavSkeleton() {
       <nav className="flex-1 px-3 py-0.5" aria-label="Admin navigation loading">
         {navItems.map((item) => {
           const Icon = item.icon
+          const active = item.id === safeActiveTab
           return (
             <div
-              className={`pb-focus-control pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm border border-transparent px-[11px] py-2.5 font-medium ${item.active ? 'bg-brand-soft text-brand' : 'text-fg-2'}`}
+              className={`pb-focus-control pb-admin-nav-item relative mb-0.5 flex w-full items-center gap-2.5 rounded-sm border border-transparent px-[11px] py-2.5 font-medium ${active ? 'bg-brand-soft text-brand' : 'text-fg-2'}`}
               key={item.label}
             >
-              {item.active && <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-sm bg-brand" />}
+              {active && <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-sm bg-brand" />}
               <Icon className="pb-admin-nav-icon" />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
             </div>
@@ -257,51 +282,70 @@ export function AdminNavSkeleton() {
 export function AdminInsightsSkeleton() {
   return (
     <div className="relative z-10 min-h-0 flex-1 overflow-y-auto" data-testid="admin-insights-skeleton">
-      <header className="relative shrink-0 border-b border-border bg-bg-base px-7">
-        <div className="admin-grid" aria-hidden="true" />
-        <div className="relative z-10 flex min-h-[68px] items-center gap-5">
-          <div className="min-w-0 flex-1">
-            <h1 className="pb-page-title">Insights</h1>
+      <AdminPageScaffold
+        actions={
+          <>
+            <span className="pb-admin-header-control pb-ui-sm hidden items-center gap-2 rounded-md border border-border-strong bg-surface font-semibold text-fg-1 sm:inline-flex">
+              Last 7 days
+            </span>
+            <span className="pb-admin-header-control pb-admin-insights-regenerate-control pb-ui-sm hidden items-center gap-2 rounded-md border border-border-strong bg-surface font-semibold text-fg-2 sm:inline-flex">
+              <RefreshCw className="h-[15px] w-[15px]" />
+              Regenerate
+            </span>
+            <span className="pb-admin-header-control pb-ui-sm hidden items-center gap-2 rounded-md border border-transparent bg-brand font-semibold text-fg-on-brand opacity-80 sm:inline-flex">
+              <Zap className="h-[15px] w-[15px]" />
+              Explore with AI
+            </span>
+          </>
+        }
+        subtitle="AI generated insights from user queries"
+        title="Insights"
+      >
+        <section className="pb-dashboard-summary-card">
+          <div className="mb-3 flex items-center gap-2.5">
+            <span className="pb-dashboard-section-label inline-flex items-center gap-2 font-bold text-brand">
+              <Sparkles className="h-4 w-4" />
+              AI summary
+            </span>
+            <span className="pb-dashboard-meta ml-auto">Loading summary</span>
           </div>
-          <span className="pb-admin-header-control pb-ui-sm hidden items-center gap-2 rounded-md border border-border-strong bg-surface px-3 font-semibold text-fg-1 sm:inline-flex">
-            Last 7 days
-          </span>
-          <span className="pb-admin-header-control pb-ui-sm hidden items-center gap-2 rounded-md border border-border-strong bg-surface px-3 font-semibold text-fg-2 sm:inline-flex">
-            <RefreshCw className="h-[15px] w-[15px]" />
-            Regenerate
-          </span>
-          <span className="pb-admin-header-control pb-ui-sm hidden items-center gap-2 rounded-md bg-brand px-3 font-semibold text-fg-on-brand opacity-80 sm:inline-flex">
-            <Zap className="h-[15px] w-[15px]" />
-            Explore with AI
-          </span>
-        </div>
-      </header>
-      <div className="px-7 py-4">
-        <div className="pb-admin-content-width mx-auto w-full">
-          <section className="pb-dashboard-summary-card">
-            <div className="mb-3 flex items-center gap-2.5">
-              <span className="pb-dashboard-section-label inline-flex items-center gap-2 font-bold text-brand">
-                <Sparkles className="h-4 w-4" />
-                AI summary
-              </span>
-            </div>
-            <SkeletonText lines={3} widths={['92%', '100%', '70%']} />
-            <div className="mt-3.5 grid border-t border-border pt-3.5 md:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div className={index > 0 ? 'mt-4 border-t border-border pt-4 md:mt-0 md:border-l md:border-t-0 md:pl-6 md:pt-0' : ''} key={index}>
-                  <Skeleton className="h-7 w-16 rounded-sm" />
-                  <Skeleton className="mt-2 h-3 w-28 rounded-pill" />
-                </div>
-              ))}
-            </div>
-          </section>
-          <div className="mt-3.5 grid gap-4 lg:grid-cols-[1.55fr_1fr]">
-            <AdminDashboardCardSkeleton title="Common topics" />
-            <AdminDashboardCardSkeleton title="Risk flags" />
+          <SkeletonText lines={3} widths={['92%', '100%', '70%']} />
+          <div className="mt-3.5 grid border-t border-border pt-3.5 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div className={index > 0 ? 'mt-4 border-t border-border pt-4 md:mt-0 md:border-l md:border-t-0 md:pl-6 md:pt-0' : ''} key={index}>
+                <Skeleton className="h-7 w-16 rounded-sm" />
+                <Skeleton className="mt-2 h-3 w-28 rounded-pill" />
+              </div>
+            ))}
           </div>
-          <AdminDashboardCardSkeleton className="mt-3.5" title="Query volume" />
+        </section>
+        <div className="mt-3.5 grid items-stretch gap-4 lg:grid-cols-[1.55fr_1fr]">
+          <AdminDashboardCardSkeleton title="Common topics">
+            <TopicBarsSkeleton />
+          </AdminDashboardCardSkeleton>
+          <AdminDashboardCardSkeleton title="Risk flags">
+            <RiskFlagsSkeleton />
+          </AdminDashboardCardSkeleton>
         </div>
-      </div>
+        <AdminDashboardCardSkeleton className="mt-3.5" title="Query volume">
+          <QueryVolumeSkeleton />
+        </AdminDashboardCardSkeleton>
+        <AdminQueryReviewSkeleton />
+      </AdminPageScaffold>
+    </div>
+  )
+}
+
+function AdminUsersPageSkeleton() {
+  return (
+    <div className="relative z-10 min-h-0 flex-1 overflow-y-auto" data-testid="admin-users-page-skeleton">
+      <AdminPageScaffold
+        contentClassName="py-[18px]"
+        contentMaxWidthClassName="pb-admin-content-narrow"
+        title="Users & roles"
+      >
+        <AdminUsersSkeleton />
+      </AdminPageScaffold>
     </div>
   )
 }
@@ -351,13 +395,122 @@ export function AdminUsersSkeleton() {
   )
 }
 
-function AdminDashboardCardSkeleton({ className, title }: { className?: string; title: string }) {
+function AdminDashboardCardSkeleton({
+  children,
+  className,
+  title,
+}: {
+  children: ReactNode
+  className?: string
+  title: string
+}) {
   return (
     <section className={`pb-dashboard-card ${className ?? ''}`}>
-      <div className="mb-3 flex items-baseline">
+      <div className="mb-3 flex items-center">
         <h2 className="pb-card-title">{title}</h2>
       </div>
-      <Skeleton className="h-[116px] rounded-md" />
+      {children}
+    </section>
+  )
+}
+
+function TopicBarsSkeleton() {
+  return (
+    <div className="pb-dashboard-breakdown-scroll">
+      <div className="grid gap-2.5">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div className="grid grid-cols-[92px_1fr_34px] items-center gap-3" key={index}>
+            <Skeleton className="h-3 w-16 rounded-pill" />
+            <Skeleton className="h-[9px] rounded-pill" />
+            <Skeleton className="h-3 w-7 rounded-pill justify-self-end" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RiskFlagsSkeleton() {
+  return (
+    <div className="pb-dashboard-breakdown-scroll">
+      <div className="grid gap-0.5">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div className={`flex items-center gap-3 px-1 py-3.5 ${index < 2 ? 'border-b border-border' : ''}`} key={index}>
+            <Skeleton className="h-2 w-2 shrink-0 rounded-full" />
+            <Skeleton className="h-3 flex-1 rounded-pill" />
+            <Skeleton className="h-4 w-14 rounded-pill" />
+            <Skeleton className="h-5 w-8 rounded-sm" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QueryVolumeSkeleton() {
+  return (
+    <div>
+      <div className="flex h-[116px] items-end gap-3 px-0.5">
+        {[64, 82, 94, 50, 70, 100, 76].map((height, index) => (
+          <div className="flex flex-1 flex-col items-center gap-2" key={index}>
+            <Skeleton className="w-full max-w-10 rounded-t" style={{ height }} />
+            <Skeleton className="h-3 w-6 rounded-pill" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2.5 flex items-center gap-4 border-t border-border pt-2.5">
+        <Skeleton className="h-3 w-20 rounded-pill" />
+        <Skeleton className="h-3 w-32 rounded-pill" />
+        <Skeleton className="ml-auto h-3 w-20 rounded-pill" />
+      </div>
+    </div>
+  )
+}
+
+function AdminQueryReviewSkeleton() {
+  return (
+    <section aria-labelledby="admin-query-review-skeleton-title" className="pb-dashboard-card mt-3.5">
+      <div className="mb-3 flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="pb-card-title" id="admin-query-review-skeleton-title">Query review</h2>
+          <p className="pb-dashboard-meta mt-1 text-fg-3">
+            Anonymized athlete questions in the selected window.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="pb-dashboard-section-label mr-1 text-fg-3">Topics</span>
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton className="h-[24px] w-20 rounded-pill" key={index} />
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="pb-dashboard-section-label mr-1 text-fg-3">Risks</span>
+        {Array.from({ length: 3 }).map((_, index) => (
+          <Skeleton className="h-[24px] w-24 rounded-pill" key={index} />
+        ))}
+      </div>
+      <div className="mt-4 overflow-hidden rounded-md border border-border">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div className={`bg-bg-base px-3 py-3 ${index < 2 ? 'border-b border-border' : ''}`} key={index}>
+            <div className="flex items-start gap-3">
+              <Skeleton className="mt-0.5 h-4 w-4 shrink-0 rounded-sm" />
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-3.5 w-[82%] rounded-pill" />
+                <Skeleton className="mt-2 h-3 w-[48%] rounded-pill" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Skeleton className="h-3 w-16 rounded-pill" />
+        <div className="ml-auto flex items-center gap-2">
+          <SkeletonButton className="h-8 w-[86px]" />
+          <span className="pb-dashboard-meta min-w-12 text-center text-fg-3">Page 1</span>
+          <SkeletonButton className="h-8 w-[62px]" />
+        </div>
+      </div>
     </section>
   )
 }

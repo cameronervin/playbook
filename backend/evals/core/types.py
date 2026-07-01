@@ -71,6 +71,7 @@ class RunResult:
     mean_scores: dict[str, float]
     passed: bool
     failures: list[str]
+    metadata: dict[str, Any] = field(default_factory=dict)
     # Per-item/per-rubric judging failures that were isolated (not raised), e.g. a
     # judge model rejecting an oversized prompt. The run still completes; these are
     # recorded so they surface in the summary instead of aborting the whole suite.

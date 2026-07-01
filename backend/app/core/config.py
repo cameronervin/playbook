@@ -178,7 +178,7 @@ class Settings(BaseSettings):
     LANGFUSE_ENABLED: bool = False
     LANGFUSE_SECRET_KEY: str = Field(default="", repr=False)
     LANGFUSE_PUBLIC_KEY: str = ""
-    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
 
     # --- Validators ------------------------------------------------------------
 

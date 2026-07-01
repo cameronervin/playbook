@@ -143,7 +143,7 @@ cp ../deploy/envs/.env.local .env
 # LANGFUSE_ENABLED=true
 # LANGFUSE_PUBLIC_KEY=<public key>
 # LANGFUSE_SECRET_KEY=<secret key>
-# LANGFUSE_HOST=https://cloud.langfuse.com
+# LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 # Apply database migrations
 uv run alembic upgrade head
@@ -408,6 +408,29 @@ Then smoke the implemented browser path:
 
 5. If seeded local retrieval data is available, ask a question that should use a
    ready conversation file and confirm the answer cites that file.
+
+### Eval Harness Smoke
+
+The Phase 5 eval harness has an offline validation path that does not require
+Langfuse or model credentials:
+
+```bash
+cd backend
+uv run --group evals python -m evals.cli validate-datasets
+uv run pytest tests/unit/evals -q
+```
+
+To run the live release evals, configure Langfuse and LiteLLM in the backend
+environment, then sync and run the registered Playbook specs:
+
+```bash
+cd backend
+uv run --group evals python -m evals.cli sync-datasets
+uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
+```
+
+Use `KB_PROVIDER_MODE=local` when validating real retrieval and citation
+behavior against KB-service. `mock` mode only validates harness plumbing.
 
 ## Common Issues
 

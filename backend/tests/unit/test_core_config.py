@@ -1,9 +1,9 @@
 """Tests for Playbook backend settings."""
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -82,6 +82,7 @@ def test_settings_use_playbook_local_defaults() -> None:
     assert settings.CORS_ORIGINS == ["http://localhost:3000"]
     assert settings.LLM_PROVIDER_MODE == "direct"
     assert settings.LLM_CHAT_MODEL
+    assert settings.LANGFUSE_BASE_URL == "https://cloud.langfuse.com"
     assert not hasattr(settings, "LLM_RESEARCH_MODEL")
     assert not hasattr(settings, "RESEARCH_PROVIDER")
     assert not hasattr(settings, "ADVANCED_MODEL")

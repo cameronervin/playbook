@@ -2,6 +2,7 @@ import { ApiError, apiClient } from '@/src/lib/api/client'
 import { API_VERSION } from '@/src/lib/constants/config'
 import type {
   AdminAnalyticsQueryList,
+  AdminAnalyticsQueryFilters,
   AdminAnalyticsSummary,
   AdminAnalyticsWindowParams,
   DashboardInsight,
@@ -14,11 +15,9 @@ const ADMIN_PATH = `/api/${API_VERSION}/admin`
 const ANALYTICS_PATH = `${ADMIN_PATH}/analytics`
 const DASHBOARD_INSIGHTS_PATH = `${ADMIN_PATH}/dashboard-insights`
 
-interface QueryListParams extends AdminAnalyticsWindowParams {
+interface QueryListParams extends AdminAnalyticsWindowParams, AdminAnalyticsQueryFilters {
   limit?: number
   offset?: number
-  topic_labels?: string[]
-  risk_labels?: string[]
 }
 
 export const getAdminAnalyticsSummary = (

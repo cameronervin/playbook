@@ -1,5 +1,5 @@
 import type {
-  AdminAnalyticsQuery,
+  AdminAnalyticsQueryFilters,
   AdminAnalyticsSummary,
   DashboardInsight,
   DashboardInsightHeadlineCard,
@@ -24,6 +24,7 @@ export interface DashboardTopicItem {
 }
 
 export interface DashboardVolumePoint {
+  key: string
   day: string
   date: string
   total: number
@@ -36,9 +37,21 @@ export interface DashboardUnansweredItem {
   reason: string
 }
 
+export interface QueryReviewFilterOption {
+  key: string
+  label: string
+  count: number
+}
+
+export interface QueryReviewFilterOptions {
+  topics: QueryReviewFilterOption[]
+  risks: QueryReviewFilterOption[]
+}
+
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: 'numeric',
+  timeZone: 'UTC',
 })
 
 const GENERATED_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
@@ -89,7 +102,7 @@ export function dashboardRiskItems(
   Object.entries(summary?.risk_counts ?? {}).forEach(([label, count]) => {
     riskCounts.set(label, count)
   })
-  insight?.risk_breakdown.forEach((item) => {
+  recordList(insight?.risk_breakdown).forEach((item) => {
     const label = stringField(item, 'label')
     const count = numberField(item, 'count')
     if (label && count !== null) riskCounts.set(label, count)
@@ -105,34 +118,18 @@ export function dashboardRiskItems(
 
 export function dashboardVolumeSeries(
   summary: AdminAnalyticsSummary | null,
-  queries: AdminAnalyticsQuery[],
 ): DashboardVolumePoint[] {
   if (!summary) return []
-  const start = new Date(summary.window_start)
-  const end = new Date(summary.window_end)
-  const points: DashboardVolumePoint[] = []
-  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()))
-  const endDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()))
-  const countsByDay = countQueriesByDay(queries)
-  while (cursor <= endDay && points.length < 31) {
-    const key = dateKey(cursor)
-    const counts = countsByDay.get(key)
-    points.push({
-      day: cursor.toLocaleDateString('en-US', { weekday: 'short' }),
-      date: SHORT_DATE_FORMATTER.format(cursor),
-      total: counts?.total ?? 0,
-      unanswered: counts?.unanswered ?? 0,
-    })
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-  if (queries.length === 0 && summary.query_volume > 0 && points.length > 0) {
-    points[points.length - 1] = {
-      ...points[points.length - 1],
-      total: summary.query_volume,
-      unanswered: summary.unanswered_count,
+  return summary.volume_series.map((point) => {
+    const date = new Date(`${point.date}T00:00:00Z`)
+    return {
+      key: point.date,
+      day: date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+      date: SHORT_DATE_FORMATTER.format(date),
+      total: point.total,
+      unanswered: point.unanswered,
     }
-  }
-  return points
+  })
 }
 
 export function generatedLabel(insight: DashboardInsight | null): string {
@@ -148,45 +145,66 @@ export function windowLabel(summary: AdminAnalyticsSummary | null): string {
 }
 
 export function unansweredItems(insight: DashboardInsight | null): DashboardUnansweredItem[] {
-  return (insight?.unanswered_questions ?? []).map((item, index) => ({
-    id: stringField(item, 'message_id') || `unanswered-${index}`,
-    text: stringField(item, 'text') || 'Unanswered query',
-    reason: stringField(item, 'reason') || 'needs_review',
-  }))
+  return (insight?.unanswered_questions ?? []).flatMap((item, index) => {
+    const record = recordField(item)
+    if (!record) {
+      return [{
+        id: `unanswered-${index}`,
+        text: 'Unanswered query',
+        reason: 'needs_review',
+      }]
+    }
+    const text = stringField(record, 'text')
+    const reason = stringField(record, 'reason')
+    const id = stringField(record, 'message_id')
+    if (!text && !reason && !id) return []
+    return [{
+      id: id || `unanswered-${index}`,
+      text: text || 'Unanswered query',
+      reason: reason || 'needs_review',
+    }]
+  })
 }
 
 export function headlineCards(
   insight: DashboardInsight | null,
 ): DashboardInsightHeadlineCard[] {
-  return (insight?.headline_cards ?? []).map((card) => ({
-    title: card.title,
-    value: card.value,
-    severity: card.severity ?? 'medium',
-    note: card.note,
-  }))
+  return recordList(insight?.headline_cards).flatMap((card) => {
+    const title = stringField(card, 'title')
+    const value = stringField(card, 'value')
+    if (!title || !value) return []
+    return [{
+      title,
+      value,
+      severity: severityField(card, 'severity') ?? 'medium',
+      note: stringField(card, 'note') ?? undefined,
+    }]
+  })
 }
 
-function countQueriesByDay(
-  queries: AdminAnalyticsQuery[],
-): Map<string, { total: number; unanswered: number }> {
-  const counts = new Map<string, { total: number; unanswered: number }>()
-  queries.forEach((query) => {
-    const key = dateKey(new Date(query.created_at))
-    const current = counts.get(key) ?? { total: 0, unanswered: 0 }
-    current.total += 1
-    if (query.unanswered_reason) current.unanswered += 1
-    counts.set(key, current)
+export function queryReviewFilterOptions(
+  summary: AdminAnalyticsSummary | null,
+  filters: AdminAnalyticsQueryFilters,
+): QueryReviewFilterOptions {
+  const topicCounts = new Map<string, number>()
+  const riskCounts = new Map<string, number>()
+  summary?.top_topics.forEach((topic) => {
+    topicCounts.set(topic.label, topic.count)
   })
-  return counts
+  Object.entries(summary?.risk_counts ?? {}).forEach(([label, count]) => {
+    riskCounts.set(label, count)
+  })
+  filters.topic_labels?.forEach((label) => seedMissingLabel(topicCounts, label))
+  filters.risk_labels?.forEach((label) => seedMissingLabel(riskCounts, label))
+  return {
+    topics: mapFilterOptions(topicCounts),
+    risks: mapFilterOptions(riskCounts),
+  }
 }
 
 function highestRisk(summary: AdminAnalyticsSummary | null): DashboardRiskItem | null {
   const risk = dashboardRiskItems(summary, null)[0]
   return risk ?? null
-}
-
-function dateKey(date: Date): string {
-  return date.toISOString().slice(0, 10)
 }
 
 function percentage(value: number, total: number): string {
@@ -207,6 +225,21 @@ function formatLabel(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function recordList(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const record = recordField(item)
+        return record ? [record] : []
+      })
+    : []
+}
+
+function recordField(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
 function stringField(item: Record<string, unknown>, key: string): string | null {
   const value = item[key]
   return typeof value === 'string' && value.trim() ? value : null
@@ -215,4 +248,31 @@ function stringField(item: Record<string, unknown>, key: string): string | null 
 function numberField(item: Record<string, unknown>, key: string): number | null {
   const value = item[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function severityField(
+  item: Record<string, unknown>,
+  key: string,
+): DashboardInsightHeadlineCard['severity'] | null {
+  const value = item[key]
+  return value === 'low' || value === 'medium' || value === 'high' ? value : null
+}
+
+function seedMissingLabel(
+  counts: Map<string, number>,
+  label: string,
+): void {
+  const key = label.trim()
+  if (!key || counts.has(key)) return
+  counts.set(key, 0)
+}
+
+function mapFilterOptions(counts: Map<string, number>): QueryReviewFilterOption[] {
+  return [...counts.entries()]
+    .sort((first, second) => second[1] - first[1] || first[0].localeCompare(second[0]))
+    .map(([key, count]) => ({
+      key,
+      label: formatLabel(key),
+      count,
+    }))
 }

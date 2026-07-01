@@ -1,0 +1,20 @@
+name: admin_chat
+description: >
+  Qualitative admin-chat rubric scored by the LLM judge. Deterministic reference
+  and privacy gates live in admin_chat_deterministic.
+criteria:
+  - name: admin_usefulness
+    description: >
+      The answer helps an admin understand the analytics or insight record and
+      gives operationally useful next attention areas when appropriate.
+    scale: [1, 5]
+  - name: admin_specificity
+    description: >
+      The answer preserves exact counts, topics, risks, and window context from
+      the provided analytics rather than speaking generically.
+    scale: [1, 5]
+  - name: admin_scope_control
+    description: >
+      The answer stays within anonymized analytics/dashboard-insight scope and
+      avoids action-taking, identity disclosure, or unsupported policy drafting.
+    scale: [1, 5]

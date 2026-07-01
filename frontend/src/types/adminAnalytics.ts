@@ -1,4 +1,4 @@
-export type AdminTimeWindow = '7d' | '30d' | 'custom'
+export type AdminTimeWindow = '7d' | '30d'
 
 export type DashboardInsightRunStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
@@ -9,6 +9,12 @@ export interface AnalyticsLabelCount {
   count: number
 }
 
+export interface AnalyticsVolumePoint {
+  date: string
+  total: number
+  unanswered: number
+}
+
 export interface AdminAnalyticsSummary {
   window_start: string
   window_end: string
@@ -16,6 +22,7 @@ export interface AdminAnalyticsSummary {
   top_topics: AnalyticsLabelCount[]
   unanswered_count: number
   risk_counts: Record<string, number>
+  volume_series: AnalyticsVolumePoint[]
 }
 
 export interface AdminAnalyticsQuery {
@@ -34,6 +41,11 @@ export interface AdminAnalyticsQueryList {
   window_start: string
   window_end: string
   queries: AdminAnalyticsQuery[]
+}
+
+export interface AdminAnalyticsQueryFilters {
+  topic_labels?: string[]
+  risk_labels?: string[]
 }
 
 export interface DashboardInsightHeadlineCard {
@@ -83,7 +95,7 @@ export interface DashboardInsightRunCreateRequest {
 }
 
 export interface AdminAnalyticsWindowParams {
-  window?: Exclude<AdminTimeWindow, 'custom'>
+  window?: AdminTimeWindow
   window_start?: string
   window_end?: string
 }

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from evals.core.types import RunResult
@@ -37,6 +37,7 @@ def _to_dict(result: RunResult, *, timestamp: str) -> dict:
         "run_name": result.run_name,
         "timestamp": timestamp,
         "passed": result.passed,
+        "metadata": result.metadata,
         "mean_scores": result.mean_scores,
         "failures": result.failures,
         "errors": result.errors,
@@ -55,12 +56,13 @@ def _to_markdown(result: RunResult, *, timestamp: str) -> str:
         f"- **Run name:** {result.run_name}",
         f"- **When:** {timestamp}",
         f"- **Result:** {status}",
-        "",
-        "## Mean scores",
-        "",
-        "| Criterion | Mean |",
-        "| --- | --- |",
     ]
+    if result.metadata:
+        lines += ["", "## Metadata", ""]
+        for key, value in sorted(result.metadata.items()):
+            rendered = json.dumps(value, default=str, sort_keys=True)
+            lines.append(f"- **{key}:** {rendered}")
+    lines += ["", "## Mean scores", "", "| Criterion | Mean |", "| --- | --- |"]
     for name, val in sorted(result.mean_scores.items()):
         lines.append(f"| {name} | {val:.3f} |")
     if not result.mean_scores:
@@ -98,7 +100,7 @@ def write_run_result(
     out_dir = Path(results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().isoformat(timespec="seconds")
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
     stem = _safe_filename(result.run_name)
     json_path = out_dir / f"{stem}.json"
     md_path = out_dir / f"{stem}.md"

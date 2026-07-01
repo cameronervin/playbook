@@ -126,13 +126,13 @@ def init_langfuse(settings: Settings | None = None) -> bool:
 
     os.environ["LANGFUSE_SECRET_KEY"] = app_settings.LANGFUSE_SECRET_KEY
     os.environ["LANGFUSE_PUBLIC_KEY"] = app_settings.LANGFUSE_PUBLIC_KEY
-    os.environ["LANGFUSE_HOST"] = app_settings.LANGFUSE_HOST
+    os.environ["LANGFUSE_BASE_URL"] = app_settings.LANGFUSE_BASE_URL
 
     try:
         _client = Langfuse(
             public_key=app_settings.LANGFUSE_PUBLIC_KEY,
             secret_key=app_settings.LANGFUSE_SECRET_KEY,
-            host=app_settings.LANGFUSE_HOST,
+            base_url=app_settings.LANGFUSE_BASE_URL,
             environment=app_settings.ENVIRONMENT,
             mask=mask_langfuse_data,
         )
@@ -144,7 +144,7 @@ def init_langfuse(settings: Settings | None = None) -> bool:
     _initialized = True
     logger.info(
         "langfuse_tracing_initialized",
-        host=app_settings.LANGFUSE_HOST,
+        base_url=app_settings.LANGFUSE_BASE_URL,
         environment=app_settings.ENVIRONMENT,
     )
     return True

@@ -24,6 +24,7 @@ from app.schemas.admin_analytics import (
     AdminAnalyticsSnapshot,
     AdminAnalyticsSummaryResponse,
     LabelCount,
+    VolumeSeriesPoint,
 )
 
 DEFAULT_ANALYTICS_WINDOW_DAYS = 7
@@ -261,7 +262,43 @@ def _summary_from_records(
         risk_counts=dict(
             sorted(risk_counts.items(), key=lambda item: (-item[1], item[0]))
         ),
+        volume_series=_volume_series_from_records(
+            records,
+            window_start=window_start,
+            window_end=window_end,
+        ),
     )
+
+
+def _volume_series_from_records(
+    records: list[AnalyticsQueryRecord],
+    *,
+    window_start: datetime,
+    window_end: datetime,
+) -> list[VolumeSeriesPoint]:
+    totals: Counter[str] = Counter()
+    unanswered: Counter[str] = Counter()
+    for record in records:
+        key = _aware_utc(record.created_at).date().isoformat()
+        totals[key] += 1
+        if record.unanswered_reason:
+            unanswered[key] += 1
+
+    start_day = _aware_utc(window_start).date()
+    end_day = (_aware_utc(window_end) - timedelta(microseconds=1)).date()
+    points: list[VolumeSeriesPoint] = []
+    cursor = start_day
+    while cursor <= end_day:
+        key = cursor.isoformat()
+        points.append(
+            VolumeSeriesPoint(
+                date=key,
+                total=totals[key],
+                unanswered=unanswered[key],
+            )
+        )
+        cursor += timedelta(days=1)
+    return points
 
 
 def _query_response(

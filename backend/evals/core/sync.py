@@ -136,7 +136,7 @@ def resolve_blob_refs(input_obj: object, *, base_dir: Path) -> object:
 
 def sync_dataset_to_langfuse(yaml_path: str, dataset_name: str) -> int:
     """Create the dataset (if absent) and upsert every item. Returns item count."""
-    from langfuse import get_client
+    from langfuse import get_client  # noqa: PLC0415
 
     langfuse = get_client()
     langfuse.create_dataset(name=dataset_name)  # idempotent: no-op if it exists

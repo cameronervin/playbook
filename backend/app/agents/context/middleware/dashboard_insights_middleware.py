@@ -9,6 +9,7 @@ import structlog
 from langchain.agents.middleware import ModelRequest, wrap_model_call
 from langchain.agents.middleware.types import ModelResponse
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -68,6 +69,9 @@ def _filter_blank_messages(
     valid_messages: list[BaseMessage] = []
     filtered_count = 0
     for message in messages:
+        if isinstance(message, AIMessage) and getattr(message, "tool_calls", None):
+            valid_messages.append(message)
+            continue
         if isinstance(message, (SystemMessage, ToolMessage)):
             valid_messages.append(message)
             continue

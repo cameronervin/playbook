@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -161,6 +161,15 @@ async def test_get_summary_counts_topics_risks_and_unanswered_without_cap(
     ]
     assert summary.risk_counts == {"compliance": 2, "recruiting": 1}
     assert summary.unanswered_count == 1
+    assert [point.model_dump() for point in summary.volume_series] == [
+        {"date": "2026-06-01", "total": 0, "unanswered": 0},
+        {"date": "2026-06-02", "total": 1, "unanswered": 0},
+        {"date": "2026-06-03", "total": 1, "unanswered": 1},
+        {"date": "2026-06-04", "total": 1, "unanswered": 0},
+        {"date": "2026-06-05", "total": 0, "unanswered": 0},
+        {"date": "2026-06-06", "total": 0, "unanswered": 0},
+        {"date": "2026-06-07", "total": 0, "unanswered": 0},
+    ]
     assert repo.calls[0]["limit"] is None
 
 
@@ -276,8 +285,8 @@ async def test_build_snapshot_limits_examples_but_keeps_full_summary_and_sources
 def test_resolve_analytics_window_accepts_explicit_naive_datetimes(test_settings) -> None:
     window_start, window_end = resolve_analytics_window(
         window=None,
-        window_start=datetime(2026, 6, 1),
-        window_end=datetime(2026, 6, 8),
+        window_start=datetime(2026, 6, 1),  # noqa: DTZ001 - verifies naive input normalization
+        window_end=datetime(2026, 6, 8),  # noqa: DTZ001 - verifies naive input normalization
         settings=test_settings,
     )
 

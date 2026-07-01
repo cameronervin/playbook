@@ -22,6 +22,8 @@ classes are never used by the metrics above. Remove the shim once ragas drops th
 hard import. Imports are lazy so the harness still loads when ragas is absent.
 """
 
+# ruff: noqa: PLC0415
+
 from __future__ import annotations
 
 import sys
@@ -48,7 +50,7 @@ def _install_ragas_compat_shim() -> None:
     ):
         try:
             __import__(mod_name)
-        except Exception:  # ModuleNotFoundError on langchain-community >= 0.4
+        except ImportError:  # ModuleNotFoundError on langchain-community >= 0.4
             stub = types.ModuleType(mod_name)
             setattr(stub, attr, type(attr, (), {}))
             sys.modules[mod_name] = stub
@@ -58,7 +60,7 @@ def _install_ragas_compat_shim() -> None:
 
         if not hasattr(_llms, "VertexAI"):
             _llms.VertexAI = type("VertexAI", (), {})  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover - langchain_community always present with ragas
+    except ImportError:  # pragma: no cover - langchain_community always present with ragas
         pass
 
 
@@ -186,7 +188,7 @@ class RagasJudge:
                 continue
             try:
                 value = await metric.single_turn_ascore(sample)
-            except Exception as exc:  # one bad metric shouldn't sink the whole run
+            except Exception as exc:  # noqa: BLE001 - isolate one bad metric from the full run
                 logger.warning("ragas_metric_error", metric=name, error=str(exc), exc_info=True)
                 scores.append(
                     Score(name=name, value="error", data_type="CATEGORICAL", comment=f"ragas error: {exc}")

@@ -1,0 +1,429 @@
+---
+- input:
+    source_id: src:nil-disclosure-2026#chunk-1
+    document_id: kb-doc-nil-disclosure-2026
+    chunk_id: kb-chunk-nil-disclosure-001
+    source_type: admin_upload
+    source_title: NIL Disclosure and Approval Guide
+    source_date: '2026-04-15'
+    text: Athletes must disclose NIL activity in Playbook before public promotion, services, appearances, posts, or product fulfillment begin. Same-day opportunities should still be submitted before the athlete acts, then flagged to Compliance as time-sensitive.
+  expected_output:
+    supports_topics:
+    - nil
+    - compliance
+    key_facts:
+    - Disclosure is required before public promotion or fulfillment.
+    - Same-day NIL opportunities still require pre-activity submission.
+    should_retrieve_for:
+    - Do I need to disclose before posting a sponsor video?
+    - What if the deal starts tonight?
+  metadata:
+    category: nil_process
+    id: fixture_kb_001
+  source_id: src:nil-disclosure-2026#chunk-1
+  title: NIL Disclosure and Approval Guide
+  text: Athletes must disclose NIL activity in Playbook before public promotion, services, appearances, posts, or product fulfillment begin. Same-day opportunities should still be submitted before the athlete acts, then flagged to Compliance as time-sensitive.
+- input:
+    source_id: src:nil-disclosure-2026#chunk-2
+    document_id: kb-doc-nil-disclosure-2026
+    chunk_id: kb-chunk-nil-disclosure-002
+    source_type: admin_upload
+    source_title: NIL Disclosure and Approval Guide
+    source_date: '2026-04-15'
+    text: Required NIL disclosure fields include the brand or person paying, activity description, dates, compensation type or value, platform, and any contract or screenshot. Athletes should update the existing disclosure if a date, payment amount, or deliverable changes.
+  expected_output:
+    supports_topics:
+    - nil
+    - process
+    key_facts:
+    - Disclosure fields include payer, activity, dates, value, platform, and attachments.
+    - Changed dates, payment, or deliverables should be updated on the existing disclosure.
+    should_retrieve_for:
+    - What details go in a disclosure?
+    - Do I refile if the amount changed?
+  metadata:
+    category: nil_process
+    id: fixture_kb_002
+  source_id: src:nil-disclosure-2026#chunk-2
+  title: NIL Disclosure and Approval Guide
+  text: Required NIL disclosure fields include the brand or person paying, activity description, dates, compensation type or value, platform, and any contract or screenshot. Athletes should update the existing disclosure if a date, payment amount, or deliverable changes.
+- input:
+    source_id: src:nil-compensation-2026#chunk-1
+    document_id: kb-doc-nil-compensation-2026
+    chunk_id: kb-chunk-nil-compensation-001
+    source_type: admin_upload
+    source_title: NIL Compensation Review Checklist
+    source_date: '2026-03-28'
+    text: NIL compensation can be cash, free product, discounts, gift cards, travel, services, or barter. Athletes should not treat a small dollar value as an exception. Compensation from family businesses is still disclosed when the athlete's name, image, or likeness is used.
+  expected_output:
+    supports_topics:
+    - nil
+    - compliance
+    key_facts:
+    - Non-cash benefits and small-value items can still be NIL compensation.
+    - Family business NIL activity is still disclosed.
+    should_retrieve_for:
+    - Do I disclose free product instead of cash?
+    - My parent's business wants to use my photo.
+  metadata:
+    category: nil_process
+    id: fixture_kb_003
+  source_id: src:nil-compensation-2026#chunk-1
+  title: NIL Compensation Review Checklist
+  text: NIL compensation can be cash, free product, discounts, gift cards, travel, services, or barter. Athletes should not treat a small dollar value as an exception. Compensation from family businesses is still disclosed when the athlete's name, image, or likeness is used.
+- input:
+    source_id: src:nil-prohibited-2026#chunk-1
+    document_id: kb-doc-nil-prohibited-2026
+    chunk_id: kb-chunk-nil-prohibited-001
+    source_type: admin_upload
+    source_title: NIL Prohibited Terms and High-Risk Deals
+    source_date: '2026-04-20'
+    text: Do not accept NIL terms requiring secrecy from the athletic department, payment for athletic performance, recruiting inducements, banned product promotion, or use of department marks without written approval. Escalate any deal that asks the athlete not to disclose it.
+  expected_output:
+    supports_topics:
+    - nil
+    - compliance
+    - recruiting
+    key_facts:
+    - Secrecy, pay-for-performance, recruiting inducements, and banned products are high-risk.
+    - Deals asking the athlete not to disclose should be escalated.
+    should_retrieve_for:
+    - A sponsor said do not tell Compliance.
+    - Can a deal pay more if I score?
+  metadata:
+    category: nil_process
+    id: fixture_kb_004
+  source_id: src:nil-prohibited-2026#chunk-1
+  title: NIL Prohibited Terms and High-Risk Deals
+  text: Do not accept NIL terms requiring secrecy from the athletic department, payment for athletic performance, recruiting inducements, banned product promotion, or use of department marks without written approval. Escalate any deal that asks the athlete not to disclose it.
+- input:
+    source_id: src:nil-conflict-old-2025#chunk-1
+    document_id: kb-doc-nil-disclosure-2025
+    chunk_id: kb-chunk-nil-conflict-old-001
+    source_type: admin_upload
+    source_title: Archived NIL Disclosure FAQ
+    source_date: '2025-08-10'
+    text: Archived guidance allowed athletes to report certain low-value local promotional posts within seven days after the activity. This archived FAQ is retained for reference and should not be used when newer 2026 NIL disclosure guidance applies.
+  expected_output:
+    supports_topics:
+    - nil
+    key_facts:
+    - This source is archived and older than the 2026 disclosure guide.
+    - It should not govern current 2026 NIL disclosure timing.
+    should_retrieve_for:
+    - Old NIL FAQ says report after posting.
+  metadata:
+    category: conflict_old
+    id: fixture_kb_005
+  source_id: src:nil-conflict-old-2025#chunk-1
+  title: Archived NIL Disclosure FAQ
+  text: Archived guidance allowed athletes to report certain low-value local promotional posts within seven days after the activity. This archived FAQ is retained for reference and should not be used when newer 2026 NIL disclosure guidance applies.
+- input:
+    source_id: src:nil-conflict-new-2026#chunk-1
+    document_id: kb-doc-nil-disclosure-update-2026
+    chunk_id: kb-chunk-nil-conflict-new-001
+    source_type: admin_upload
+    source_title: May 2026 NIL Disclosure Timing Update
+    source_date: '2026-05-01'
+    text: Effective May 1, 2026, all NIL activity must be disclosed before the athlete posts, appears, signs deliverables, or receives compensation. This timing update supersedes prior FAQs that allowed after-the-fact reporting for low-value promotions.
+  expected_output:
+    supports_topics:
+    - nil
+    - conflict
+    key_facts:
+    - All NIL activity must be disclosed before action or compensation.
+    - The May 2026 update supersedes older after-the-fact reporting guidance.
+    should_retrieve_for:
+    - Which source wins on NIL disclosure timing?
+  metadata:
+    category: conflict_newer_source
+    id: fixture_kb_006
+  source_id: src:nil-conflict-new-2026#chunk-1
+  title: May 2026 NIL Disclosure Timing Update
+  text: Effective May 1, 2026, all NIL activity must be disclosed before the athlete posts, appears, signs deliverables, or receives compensation. This timing update supersedes prior FAQs that allowed after-the-fact reporting for low-value promotions.
+- input:
+    source_id: src:teamworks-travel-2026#chunk-1
+    document_id: kb-doc-teamworks-travel-2026
+    chunk_id: kb-chunk-teamworks-travel-001
+    source_type: admin_upload
+    source_title: Teamworks Travel and Per Diem Quick Guide
+    source_date: '2026-02-11'
+    text: Travel itineraries, bus changes, hotel arrival notes, and per diem acknowledgements are posted in Teamworks. Athletes should check the trip card first, then message the operations contact listed on that card if a travel detail is missing or wrong.
+  expected_output:
+    supports_topics:
+    - process
+    - teamworks
+    key_facts:
+    - Travel details are in the Teamworks trip card.
+    - Missing or wrong travel details go to the operations contact listed on the card.
+    should_retrieve_for:
+    - Where is my travel itinerary?
+    - Who do I tell about a wrong bus time?
+  metadata:
+    category: internal_process
+    id: fixture_kb_007
+  source_id: src:teamworks-travel-2026#chunk-1
+  title: Teamworks Travel and Per Diem Quick Guide
+  text: Travel itineraries, bus changes, hotel arrival notes, and per diem acknowledgements are posted in Teamworks. Athletes should check the trip card first, then message the operations contact listed on that card if a travel detail is missing or wrong.
+- input:
+    source_id: src:teamworks-absence-2026#chunk-1
+    document_id: kb-doc-teamworks-absence-2026
+    chunk_id: kb-chunk-teamworks-absence-001
+    source_type: admin_upload
+    source_title: Class Absence Letter Process
+    source_date: '2026-01-22'
+    text: Athletes can download class absence letters from Teamworks after the travel roster is final. If a professor requests confirmation before the letter appears, the athlete should contact Academic Services rather than creating a letter themselves.
+  expected_output:
+    supports_topics:
+    - process
+    - academics
+    - teamworks
+    key_facts:
+    - Class absence letters appear in Teamworks after the travel roster is final.
+    - Academic Services handles early professor confirmation.
+    should_retrieve_for:
+    - Where do I get a class excuse letter?
+  metadata:
+    category: internal_process
+    id: fixture_kb_008
+  source_id: src:teamworks-absence-2026#chunk-1
+  title: Class Absence Letter Process
+  text: Athletes can download class absence letters from Teamworks after the travel roster is final. If a professor requests confirmation before the letter appears, the athlete should contact Academic Services rather than creating a letter themselves.
+- input:
+    source_id: src:opendorse-setup-2026#chunk-1
+    document_id: kb-doc-opendorse-setup-2026
+    chunk_id: kb-chunk-opendorse-setup-001
+    source_type: admin_upload
+    source_title: Opendorse Account Setup Guide
+    source_date: '2026-03-05'
+    text: Athletes should use their department email for Opendorse account setup. If verification fails, they should capture the error, confirm the email address, and send the screenshot through the NIL support channel. Do not create a second account unless NIL staff instructs it.
+  expected_output:
+    supports_topics:
+    - process
+    - opendorse
+    - nil
+    key_facts:
+    - Use department email for Opendorse setup.
+    - Send verification errors through the NIL support channel; do not create duplicate accounts unless instructed.
+    should_retrieve_for:
+    - Opendorse will not verify me.
+  metadata:
+    category: internal_process
+    id: fixture_kb_009
+  source_id: src:opendorse-setup-2026#chunk-1
+  title: Opendorse Account Setup Guide
+  text: Athletes should use their department email for Opendorse account setup. If verification fails, they should capture the error, confirm the email address, and send the screenshot through the NIL support channel. Do not create a second account unless NIL staff instructs it.
+- input:
+    source_id: src:nilgo-international-2026#chunk-1
+    document_id: kb-doc-nilgo-international-2026
+    chunk_id: kb-chunk-nilgo-international-001
+    source_type: admin_upload
+    source_title: NILGO and International Athlete Review
+    source_date: '2026-04-02'
+    text: International athletes should submit NIL opportunities through NILGO and wait for Compliance to review immigration-sensitive questions. Playbook can explain the department process, but it cannot provide legal advice on visa status, work authorization, or tax treatment.
+  expected_output:
+    supports_topics:
+    - nil
+    - process
+    - legal
+    key_facts:
+    - International athlete NIL opportunities go through NILGO and Compliance review.
+    - Playbook cannot give visa, work authorization, or tax legal advice.
+    should_retrieve_for:
+    - International athlete NIL process
+  metadata:
+    category: internal_process
+    id: fixture_kb_010
+  source_id: src:nilgo-international-2026#chunk-1
+  title: NILGO and International Athlete Review
+  text: International athletes should submit NIL opportunities through NILGO and wait for Compliance to review immigration-sensitive questions. Playbook can explain the department process, but it cannot provide legal advice on visa status, work authorization, or tax treatment.
+- input:
+    source_id: src:complimentary-admissions-2026#chunk-1
+    document_id: kb-doc-complimentary-admissions-2026
+    chunk_id: kb-chunk-complimentary-admissions-001
+    source_type: admin_upload
+    source_title: Complimentary Admissions Rules
+    source_date: '2026-02-18'
+    text: Complimentary admissions are limited to the approved pass list process. Athletes may not sell, trade, or transfer complimentary admissions for value, and high school or club coaches should not receive passes unless Compliance confirms the specific scenario.
+  expected_output:
+    supports_topics:
+    - compliance
+    - tickets
+    - recruiting
+    key_facts:
+    - Complimentary admissions cannot be sold, traded, or transferred for value.
+    - High school or club coach pass questions require Compliance confirmation.
+    should_retrieve_for:
+    - Can I give a comp ticket to a high school coach?
+  metadata:
+    category: compliance
+    id: fixture_kb_011
+  source_id: src:complimentary-admissions-2026#chunk-1
+  title: Complimentary Admissions Rules
+  text: Complimentary admissions are limited to the approved pass list process. Athletes may not sell, trade, or transfer complimentary admissions for value, and high school or club coaches should not receive passes unless Compliance confirms the specific scenario.
+- input:
+    source_id: src:extra-benefits-meals-2026#chunk-1
+    document_id: kb-doc-extra-benefits-meals-2026
+    chunk_id: kb-chunk-extra-benefits-meals-001
+    source_type: admin_upload
+    source_title: Extra Benefits, Meals, and Local Supporters
+    source_date: '2026-02-26'
+    text: Athletes should not accept free or discounted meals, gas cards, memberships, lodging, services, or transportation from boosters, alumni, local businesses, or fans unless the benefit is already approved by Compliance. When unsure, do not accept it before asking Compliance.
+  expected_output:
+    supports_topics:
+    - compliance
+    - benefits
+    key_facts:
+    - Unapproved meals, gas cards, memberships, lodging, services, and transportation can be extra benefits.
+    - When unsure, do not accept before asking Compliance.
+    should_retrieve_for:
+    - Can a booster buy dinner?
+    - Can I take a free gym membership?
+  metadata:
+    category: compliance
+    id: fixture_kb_012
+  source_id: src:extra-benefits-meals-2026#chunk-1
+  title: Extra Benefits, Meals, and Local Supporters
+  text: Athletes should not accept free or discounted meals, gas cards, memberships, lodging, services, or transportation from boosters, alumni, local businesses, or fans unless the benefit is already approved by Compliance. When unsure, do not accept it before asking Compliance.
+- input:
+    source_id: src:equipment-apparel-2026#chunk-1
+    document_id: kb-doc-equipment-apparel-2026
+    chunk_id: kb-chunk-equipment-apparel-001
+    source_type: admin_upload
+    source_title: Team Equipment and Apparel Policy
+    source_date: '2026-01-30'
+    text: Team-issued apparel and equipment remain department property unless staff confirms the item is released to the athlete. Athletes should not sell, trade, donate, or use team-issued gear in paid promotions without written approval.
+  expected_output:
+    supports_topics:
+    - compliance
+    - equipment
+    - nil
+    key_facts:
+    - Team-issued gear is department property unless released.
+    - Selling, trading, donating, or using team gear in paid promotions requires approval.
+    should_retrieve_for:
+    - Can I sell team shoes?
+  metadata:
+    category: compliance
+    id: fixture_kb_013
+  source_id: src:equipment-apparel-2026#chunk-1
+  title: Team Equipment and Apparel Policy
+  text: Team-issued apparel and equipment remain department property unless staff confirms the item is released to the athlete. Athletes should not sell, trade, donate, or use team-issued gear in paid promotions without written approval.
+- input:
+    source_id: src:recruiting-contact-2026#chunk-1
+    document_id: kb-doc-recruiting-contact-2026
+    chunk_id: kb-chunk-recruiting-contact-001
+    source_type: admin_upload
+    source_title: Athlete Recruiting Contact Guardrails
+    source_date: '2026-03-18'
+    text: Athletes should not initiate recruiting conversations with prospects on behalf of staff, promise roster spots, discuss scholarships, or relay coach messages. If a prospect contacts an athlete directly, the athlete should keep the response friendly and direct the prospect to the coaching staff's public contact path.
+  expected_output:
+    supports_topics:
+    - recruiting
+    - compliance
+    key_facts:
+    - Athletes should not initiate recruiting conversations or relay coach messages.
+    - Direct prospects to the public coaching staff contact path.
+    should_retrieve_for:
+    - Can I DM a recruit for coach?
+  metadata:
+    category: recruiting
+    id: fixture_kb_014
+  source_id: src:recruiting-contact-2026#chunk-1
+  title: Athlete Recruiting Contact Guardrails
+  text: Athletes should not initiate recruiting conversations with prospects on behalf of staff, promise roster spots, discuss scholarships, or relay coach messages. If a prospect contacts an athlete directly, the athlete should keep the response friendly and direct the prospect to the coaching staff's public contact path.
+- input:
+    source_id: src:recruiting-social-2026#chunk-1
+    document_id: kb-doc-recruiting-social-2026
+    chunk_id: kb-chunk-recruiting-social-001
+    source_type: admin_upload
+    source_title: Social Media and Prospects
+    source_date: '2026-03-21'
+    text: Athletes should avoid public posts that appear to recruit a specific prospect, celebrate a prospect's commitment before staff approval, or provide recruiting instructions. A generic camp photo or public event repost may be allowed only if it does not target a prospect or include recruiting claims.
+  expected_output:
+    supports_topics:
+    - recruiting
+    - social_media
+    key_facts:
+    - Avoid public posts that recruit or celebrate a specific prospect without approval.
+    - Generic camp or public event reposts must not target prospects or make recruiting claims.
+    should_retrieve_for:
+    - Can I repost a recruit?
+  metadata:
+    category: recruiting
+    id: fixture_kb_015
+  source_id: src:recruiting-social-2026#chunk-1
+  title: Social Media and Prospects
+  text: Athletes should avoid public posts that appear to recruit a specific prospect, celebrate a prospect's commitment before staff approval, or provide recruiting instructions. A generic camp photo or public event repost may be allowed only if it does not target a prospect or include recruiting claims.
+- input:
+    source_id: src:reporting-conduct-2026#chunk-1
+    document_id: kb-doc-reporting-conduct-2026
+    chunk_id: kb-chunk-reporting-conduct-001
+    source_type: admin_upload
+    source_title: Reporting Harassment and Team Conduct Concerns
+    source_date: '2026-02-05'
+    text: Athletes who need to report harassment, discrimination, hazing, retaliation, or team conduct concerns may contact the department reporting line, the Title IX office, or campus police for urgent safety concerns. Playbook should provide the reporting path and avoid investigating or judging facts.
+  expected_output:
+    supports_topics:
+    - harassment
+    - reporting
+    - safety
+    key_facts:
+    - Reporting paths include department reporting line, Title IX office, and campus police for urgent safety.
+    - Playbook should not investigate or judge facts.
+    should_retrieve_for:
+    - How do I report harassment?
+  metadata:
+    category: sensitive_reporting
+    id: fixture_kb_016
+  source_id: src:reporting-conduct-2026#chunk-1
+  title: Reporting Harassment and Team Conduct Concerns
+  text: Athletes who need to report harassment, discrimination, hazing, retaliation, or team conduct concerns may contact the department reporting line, the Title IX office, or campus police for urgent safety concerns. Playbook should provide the reporting path and avoid investigating or judging facts.
+- input:
+    source_id: src:emergency-support-card-2026#chunk-1
+    document_id: kb-doc-emergency-support-card-2026
+    chunk_id: kb-chunk-emergency-support-001
+    source_type: admin_upload
+    source_title: Emergency and Crisis Support Card
+    source_date: '2026-01-10'
+    text: For immediate danger or a medical emergency, call 911 or local emergency services now. For mental-health crisis support in the United States, call or text 988. Athletes should also contact athletic training, team staff, or campus police after emergency services when it is safe to do so.
+  expected_output:
+    supports_topics:
+    - emergency
+    - mental_health
+    - medical
+    key_facts:
+    - Immediate danger or medical emergencies require 911 or local emergency services.
+    - US mental-health crisis support is 988.
+    should_retrieve_for:
+    - My teammate might hurt themselves.
+    - I am having chest pain at practice.
+  metadata:
+    category: emergency
+    id: fixture_kb_017
+  source_id: src:emergency-support-card-2026#chunk-1
+  title: Emergency and Crisis Support Card
+  text: For immediate danger or a medical emergency, call 911 or local emergency services now. For mental-health crisis support in the United States, call or text 988. Athletes should also contact athletic training, team staff, or campus police after emergency services when it is safe to do so.
+- input:
+    source_id: src:academic-support-2026#chunk-1
+    document_id: kb-doc-academic-support-2026
+    chunk_id: kb-chunk-academic-support-001
+    source_type: admin_upload
+    source_title: Academic Support and Tutoring Requests
+    source_date: '2026-01-17'
+    text: Athletes can request tutoring, study hall schedule changes, and academic support appointments through Academic Services. Playbook can explain the process but should not access grades, diagnose learning needs, or promise accommodations.
+  expected_output:
+    supports_topics:
+    - process
+    - academics
+    key_facts:
+    - Tutoring and study hall changes go through Academic Services.
+    - Playbook should not access grades or promise accommodations.
+    should_retrieve_for:
+    - How do I ask for tutoring?
+  metadata:
+    category: internal_process
+    id: fixture_kb_018
+  source_id: src:academic-support-2026#chunk-1
+  title: Academic Support and Tutoring Requests
+  text: Athletes can request tutoring, study hall schedule changes, and academic support appointments through Academic Services. Playbook can explain the process but should not access grades, diagnose learning needs, or promise accommodations.

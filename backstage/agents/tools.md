@@ -100,18 +100,22 @@ Admin chat tools live in `backend/app/agents/tools/admin_chat.py`. They are
 read-only and inspect only `AdminChatRuntimeContext`, which is built by the
 admin chat graph before model generation:
 
-- `inspect_admin_metric` returns exact query volume, unanswered, top-topic, and
-  risk-count metrics for the selected window.
+- `inspect_admin_metric` returns exact query volume, unanswered, top-topic,
+  risk-count, or full summary metrics for the selected window. Use it for counts
+  and summary metrics only, not examples or recommendations.
 - `list_anonymized_queries` returns bounded anonymized query examples filtered
   by topic/risk/unanswered status with `message_id`, labels, answer type, and
-  text.
+  text. Use it for examples, confusion themes, and unanswered gaps.
 - `list_dashboard_insights` returns completed dashboard insight summaries whose
-  run windows overlap the chat window.
+  run windows overlap the chat window. Use it for stored generated insights,
+  recommendations, and attention areas.
 
 Admin chat references are filtered after model output against allowed
 `metric`, `dashboard_insight`, and anonymized `query` IDs. The tools must never
 expose athlete names, emails, raw user IDs, teams, provider subjects, storage
-keys, or arbitrary database rows.
+keys, or arbitrary database rows. Their Pydantic argument schemas include
+field-level descriptions for model-facing arguments; hidden `ToolRuntime`
+context remains backend-injected and is not a model-selectable scope.
 
 ## Adding a Tool
 

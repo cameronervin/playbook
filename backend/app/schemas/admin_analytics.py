@@ -19,6 +19,14 @@ class LabelCount(BaseModel):
     count: int
 
 
+class VolumeSeriesPoint(BaseModel):
+    """Daily query volume for one UTC calendar bucket."""
+
+    date: str
+    total: int
+    unanswered: int
+
+
 class AdminAnalyticsSummaryResponse(BaseModel):
     """Admin dashboard analytics summary."""
 
@@ -28,6 +36,7 @@ class AdminAnalyticsSummaryResponse(BaseModel):
     top_topics: list[LabelCount] = Field(default_factory=list)
     unanswered_count: int = 0
     risk_counts: dict[str, int] = Field(default_factory=dict)
+    volume_series: list[VolumeSeriesPoint] = Field(default_factory=list)
 
 
 class AdminAnalyticsQueryResponse(BaseModel):

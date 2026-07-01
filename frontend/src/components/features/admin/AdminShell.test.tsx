@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AdminShell } from '@/src/components/features/admin/AdminShell'
 import { useUIStore } from '@/src/lib/store/uiStore'
+
+const globalsCss = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8')
 
 const adminRouterMocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -104,6 +108,11 @@ const adminAnalyticsHookCalls = vi.hoisted(
       enabled: boolean
       window?: string
       runId?: string | null
+      page?: number
+      filters?: {
+        topic_labels?: string[]
+        risk_labels?: string[]
+      }
     }>,
 )
 const analyticsSummary = vi.hoisted(() => ({
@@ -118,6 +127,15 @@ const analyticsSummary = vi.hoisted(() => ({
   ],
   unanswered_count: 12,
   risk_counts: { nil: 22, compliance: 14, recruiting: 3 },
+  volume_series: [
+    { date: '2026-05-27', total: 14, unanswered: 1 },
+    { date: '2026-05-28', total: 19, unanswered: 2 },
+    { date: '2026-05-29', total: 22, unanswered: 1 },
+    { date: '2026-05-30', total: 12, unanswered: 0 },
+    { date: '2026-05-31', total: 16, unanswered: 2 },
+    { date: '2026-06-01', total: 27, unanswered: 3 },
+    { date: '2026-06-02', total: 18, unanswered: 3 },
+  ],
 }))
 const analyticsQueries = vi.hoisted(() => ({
   window_start: '2026-05-27T00:00:00Z',
@@ -492,14 +510,18 @@ vi.mock('@/src/hooks/useAdminChat', () => ({
 }))
 
 vi.mock('@/src/hooks/useAdminAnalytics', () => ({
-  toManualRunWindow: (window: string) =>
-    window === 'custom'
-      ? null
-      : {
-          window_start: '2026-06-01T00:00:00.000Z',
-          window_end: '2026-06-08T00:00:00.000Z',
-          source_filters: {},
-        },
+  QUERY_REVIEW_PAGE_SIZE: 10,
+  normalizeAdminAnalyticsQueryFilters: (
+    filters: { topic_labels?: string[]; risk_labels?: string[] } = {},
+  ) => ({
+    topic_labels: filters.topic_labels ?? [],
+    risk_labels: filters.risk_labels ?? [],
+  }),
+  toManualRunWindow: () => ({
+    window_start: '2026-06-01T00:00:00.000Z',
+    window_end: '2026-06-08T00:00:00.000Z',
+    source_filters: {},
+  }),
   useAdminAnalyticsSummary: (window: string, enabled: boolean) => {
     adminAnalyticsHookCalls.push({ hook: 'summary', window, enabled })
     return {
@@ -509,12 +531,18 @@ vi.mock('@/src/hooks/useAdminAnalytics', () => ({
       isLoading: adminAnalyticsState.summaryLoading,
     }
   },
-  useAdminAnalyticsQueries: (window: string, enabled: boolean) => {
-    adminAnalyticsHookCalls.push({ hook: 'queries', window, enabled })
+  useAdminAnalyticsQueries: (
+    window: string,
+    enabled: boolean,
+    filters?: { topic_labels?: string[]; risk_labels?: string[] },
+    page = 0,
+  ) => {
+    adminAnalyticsHookCalls.push({ hook: 'queries', window, enabled, filters, page })
     return {
       data: enabled ? adminAnalyticsState.queries : undefined,
       isError: adminAnalyticsState.queriesError,
       isFetching: false,
+      isPlaceholderData: false,
       isLoading: adminAnalyticsState.queriesLoading,
     }
   },
@@ -847,7 +875,8 @@ describe('AdminShell', () => {
     expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
     expect(screen.getByText('AI summary')).toBeInTheDocument()
     expect(screen.getByText('Last 7 days')).toBeInTheDocument()
-    expect(screen.queryByText(/ai generated insights from user queries/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/ai generated insights from user queries/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /query review/i })).toBeInTheDocument()
     expect(screen.queryByText(/users & roles/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/loading admin/i)).not.toBeInTheDocument()
   })
@@ -902,7 +931,18 @@ describe('AdminShell', () => {
 
     expect(timeFilter).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
     expect(regenerate).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
+    expect(regenerate).toHaveClass('pb-admin-insights-regenerate-control')
     expect(explore).toHaveClass('pb-admin-header-control', 'pb-ui-sm')
+    const adminHeaderControlCss = globalsCss.match(/\.pb-admin-header-control\s*{[^}]*}/s)?.[0] ?? ''
+    expect(adminHeaderControlCss).toMatch(/align-items:\s*center;/)
+    expect(adminHeaderControlCss).toMatch(/box-sizing:\s*border-box;/)
+    expect(adminHeaderControlCss).toMatch(/height:\s*36px;/)
+    expect(adminHeaderControlCss).toMatch(/padding-inline:\s*10px;/)
+    expect(adminHeaderControlCss).toMatch(/width:\s*auto;/)
+    expect(adminHeaderControlCss).not.toMatch(/width:\s*152px;/)
+    expect(globalsCss).toMatch(
+      /\.pb-admin-insights-regenerate-control\s*{[^}]*min-width:\s*132px;/s,
+    )
     expect(screen.getByRole('button', { name: /^Insights$/i })).toHaveClass('pb-admin-nav-item')
     expect(screen.getByRole('button', { name: /^Insights$/i })).toHaveClass('pb-focus-control')
     expect(screen.getByRole('button', { name: /Knowledge base 1 failed document/i })).toHaveClass(
@@ -915,11 +955,184 @@ describe('AdminShell', () => {
     expect(screen.getByText(/Nil flags/i)).toBeInTheDocument()
     expect(screen.getByText(/Common topics/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^Risk flags$/i })).toBeInTheDocument()
+    expect(screen.getByText(/Common topics/i).closest('section')?.querySelector('.pb-dashboard-breakdown-scroll')).not.toBeNull()
+    expect(screen.getByRole('heading', { name: /^Risk flags$/i }).closest('section')?.querySelector('.pb-dashboard-breakdown-scroll')).not.toBeNull()
     expect(screen.getByText(/Query volume/i)).toBeInTheDocument()
     expect(screen.getByText(/128 in window/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Previous query-volume week/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Next query-volume week/i })).not.toBeInTheDocument()
+    expect(globalsCss).toMatch(
+      /\.pb-dashboard-breakdown-scroll\s*{[^}]*max-height:\s*198px;[^}]*overflow-y:\s*auto;/s,
+    )
+    expect(globalsCss).toMatch(
+      /\.pb-dashboard-breakdown-scroll\s*{[^}]*padding-right:\s*14px;[^}]*scrollbar-gutter:\s*stable;/s,
+    )
     expect(screen.getByRole('button', { name: /Knowledge base 1 failed document/i })).toBeInTheDocument()
     expect(screen.queryByText(/Fixture-backed until Phase 4 APIs land/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Grounded rate/i)).not.toBeInTheDocument()
+  })
+
+  it('paginates 30-day query volume by week', async () => {
+    currentUser.role = 'super_admin'
+    adminAnalyticsState.summary = {
+      ...analyticsSummary,
+      query_volume: 210,
+      volume_series: Array.from({ length: 14 }, (_, index) => ({
+        date: `2026-06-${String(index + 1).padStart(2, '0')}`,
+        total: index + 1,
+        unanswered: index % 3 === 0 ? 1 : 0,
+      })),
+    }
+
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Last 7 days/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Last 30 days/i }))
+
+    expect(screen.getByLabelText(/Jun 14: 14 questions/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Jun 1: 1 questions/i)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Previous query-volume week/i }))
+
+    expect(screen.getByLabelText(/Jun 1: 1 questions/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Jun 14: 14 questions/i)).not.toBeInTheDocument()
+  })
+
+  it('uses only MVP time windows and sends the selected window to analytics chat', async () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Last 7 days/i }))
+
+    expect(screen.getByRole('menuitem', { name: /Last 7 days/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /Last 30 days/i })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Custom range/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /Last 30 days/i }))
+
+    await waitFor(() =>
+      expect(adminAnalyticsHookCalls).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ hook: 'summary', window: '30d', enabled: true }),
+          expect.objectContaining({ hook: 'queries', window: '30d', enabled: true }),
+          expect.objectContaining({ hook: 'current', window: '30d', enabled: true }),
+        ]),
+      ),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /Explore with AI/i }))
+    await userEvent.click(screen.getByRole('button', { name: /What are athletes most confused about this week/i }))
+
+    await waitFor(() =>
+      expect(submitAdminChatMessageMutateAsync).toHaveBeenCalledWith({
+        sessionId: 'admin-chat-session-1',
+        question: 'What are athletes most confused about this week?',
+        window: '30d',
+      }),
+    )
+  })
+
+  it('renders anonymized query review rows and expandable details', async () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    const queryReview = screen.getByRole('region', { name: /Query review/i })
+
+    expect(within(queryReview).getByText(/When do I disclose an NIL deal/i)).toBeInTheDocument()
+    expect(within(queryReview).getByText(/Can recruiting staff text this prospect/i)).toBeInTheDocument()
+    expect(within(queryReview).getByText(/anon_1111/i)).toBeInTheDocument()
+    expect(within(queryReview).queryByText(/Jordan Mitchell/i)).not.toBeInTheDocument()
+    expect(within(queryReview).queryByText(/j\.mitchell@okstate\.edu/i)).not.toBeInTheDocument()
+
+    await userEvent.click(
+      within(queryReview).getByRole('button', {
+        name: /Open query details for When do I disclose an NIL deal/i,
+      }),
+    )
+
+    expect(within(queryReview).getByLabelText(/Message message-1/i)).toBeInTheDocument()
+    expect(within(queryReview).getByLabelText(/Answer grounded answer/i)).toBeInTheDocument()
+    expect(within(queryReview).getByLabelText(/Response complete/i)).toBeInTheDocument()
+  })
+
+  it('passes query-review topic and risk filters into analytics queries', async () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    const queryReview = screen.getByRole('region', { name: /Query review/i })
+
+    await userEvent.click(within(queryReview).getByRole('button', { name: /Filter topic Nil/i }))
+    await waitFor(() =>
+      expect(adminAnalyticsHookCalls).toContainEqual(
+        expect.objectContaining({
+          hook: 'queries',
+          filters: { topic_labels: ['nil'], risk_labels: [] },
+        }),
+      ),
+    )
+
+    await userEvent.click(within(queryReview).getByRole('button', { name: /Filter risk Recruiting/i }))
+    await waitFor(() =>
+      expect(adminAnalyticsHookCalls).toContainEqual(
+        expect.objectContaining({
+          hook: 'queries',
+          filters: { topic_labels: ['nil'], risk_labels: ['recruiting'] },
+        }),
+      ),
+    )
+  })
+
+  it('paginates query review rows and resets the page when filters change', async () => {
+    currentUser.role = 'super_admin'
+    adminAnalyticsState.queries = {
+      ...analyticsQueries,
+      queries: Array.from({ length: 11 }, (_, index) => ({
+        message_id: `message-${index + 1}`,
+        anonymous_user_key: `anon_${String(index + 1).padStart(4, '0')}`,
+        text: `Generated query ${index + 1}`,
+        created_at: '2026-06-02T15:32:00Z',
+        topic_labels: ['nil'],
+        risk_labels: index % 2 === 0 ? ['compliance'] : [],
+        response_status: 'complete',
+        answer_type: 'grounded_answer',
+        unanswered_reason: null,
+      })),
+    }
+
+    renderAdmin()
+
+    const queryReview = screen.getByRole('region', { name: /Query review/i })
+    expect(within(queryReview).getByText(/Generated query 10/i)).toBeInTheDocument()
+    expect(within(queryReview).queryByText(/Generated query 11/i)).not.toBeInTheDocument()
+
+    await userEvent.click(within(queryReview).getByRole('button', { name: /Next query page/i }))
+    await waitFor(() =>
+      expect(adminAnalyticsHookCalls).toContainEqual(
+        expect.objectContaining({ hook: 'queries', page: 1 }),
+      ),
+    )
+
+    await userEvent.click(within(queryReview).getByRole('button', { name: /Filter topic Nil/i }))
+    await waitFor(() =>
+      expect(adminAnalyticsHookCalls).toContainEqual(
+        expect.objectContaining({
+          hook: 'queries',
+          filters: { topic_labels: ['nil'], risk_labels: [] },
+          page: 0,
+        }),
+      ),
+    )
+  })
+
+  it('renders a filtered-empty query review state without fake rows', () => {
+    currentUser.role = 'super_admin'
+    adminAnalyticsState.queries = { ...analyticsQueries, queries: [] }
+
+    renderAdmin()
+
+    const queryReview = screen.getByRole('region', { name: /Query review/i })
+    expect(within(queryReview).getByText(/No matching query rows for this window/i)).toBeInTheDocument()
+    expect(within(queryReview).queryByText(/When do I disclose an NIL deal/i)).not.toBeInTheDocument()
   })
 
   it('starts a manual dashboard insight run for concrete UTC windows', async () => {
@@ -935,6 +1148,21 @@ describe('AdminShell', () => {
         source_filters: {},
       }),
     )
+  })
+
+  it('keeps Regenerate disabled without duplicating the AI summary loader while insight generation is active', () => {
+    currentUser.role = 'super_admin'
+    adminAnalyticsState.createRunPending = true
+
+    renderAdmin()
+
+    const regenerate = screen.getByRole('button', { name: /^Regenerating\.\.\.$/i })
+
+    expect(regenerate).toBeDisabled()
+    expect(regenerate).toHaveTextContent(/^Regenerating\.\.\.$/)
+    expect(regenerate.querySelector('.pb-spin')).toBeInTheDocument()
+    expect(screen.queryByText(/^Generating\.\.\.$/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/NIL disclosure timing is the clearest support gap/i)).toBeInTheDocument()
   })
 
   it('renders an empty-current dashboard insight state', () => {
@@ -1408,6 +1636,7 @@ describe('AdminShell', () => {
 
     renderAdmin()
 
+    expect(screen.getByRole('heading', { name: 'Users & roles' })).toHaveClass('pb-page-title')
     expect(screen.getByTestId('admin-users-skeleton')).toBeInTheDocument()
     expect(screen.getByText('Search users...')).toBeInTheDocument()
     expect(screen.getByText('User')).toBeInTheDocument()
@@ -1494,7 +1723,13 @@ describe('AdminShell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Explore with AI/i }))
 
-    expect(screen.getByRole('complementary', { name: /Analytics AI Agent/i })).toBeInTheDocument()
+    const panel = screen.getByRole('complementary', { name: /Analytics AI Agent/i })
+    const panelHeader = within(panel).getByRole('heading', { name: /Analytics AI Agent/i }).closest('header')
+
+    expect(panel).toBeInTheDocument()
+    expect(panelHeader).toHaveClass('pb-panel-header')
+    expect(panelHeader).not.toHaveClass('pb-admin-chat-panel-header')
+    expect(globalsCss).not.toMatch(/\.pb-admin-chat-panel-header\s*{/)
 
     await userEvent.click(screen.getByRole('button', { name: /What are athletes most confused about this week/i }))
 
@@ -1514,5 +1749,37 @@ describe('AdminShell', () => {
       streamUrl:
         '/api/v1/admin/chat/sessions/admin-chat-session-1/messages/admin-assistant-message-1/stream?task_id=admin-chat-task-1',
     })
+  })
+
+  it('greys out Explore with AI while the analytics chat side panel is open', async () => {
+    currentUser.role = 'super_admin'
+    renderAdmin()
+
+    const explore = screen.getByRole('button', { name: /Explore with AI/i })
+
+    expect(explore).toBeEnabled()
+
+    await userEvent.click(explore)
+
+    expect(screen.getByRole('complementary', { name: /Analytics AI Agent/i })).toBeInTheDocument()
+    expect(explore).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /Close analytics chat/i }))
+
+    expect(screen.queryByRole('complementary', { name: /Analytics AI Agent/i })).not.toBeInTheDocument()
+    expect(explore).toBeEnabled()
+  })
+
+  it('renders the pending admin chat turn immediately after send', async () => {
+    currentUser.role = 'super_admin'
+    createAdminChatSessionMutateAsync.mockImplementation(() => new Promise(() => {}))
+    renderAdmin()
+
+    await userEvent.click(screen.getByRole('button', { name: /Explore with AI/i }))
+    await userEvent.click(screen.getByRole('button', { name: /What are athletes most confused about this week/i }))
+
+    expect(screen.getByText('What are athletes most confused about this week?')).toBeInTheDocument()
+    expect(screen.getAllByText('Thinking...')).toHaveLength(1)
+    expect(screen.getByText('Thinking...')).toHaveClass('pb-thinking-shimmer')
   })
 }, 15_000)

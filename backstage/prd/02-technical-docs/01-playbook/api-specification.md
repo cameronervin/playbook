@@ -409,7 +409,11 @@ GET /api/v1/admin/analytics/summary?window=7d
     "nil": 22,
     "compliance": 14,
     "recruiting": 3
-  }
+  },
+  "volume_series": [
+    { "date": "2026-05-27", "total": 14, "unanswered": 1 },
+    { "date": "2026-05-28", "total": 19, "unanswered": 2 }
+  ]
 }
 ```
 
@@ -442,6 +446,10 @@ GET /api/v1/admin/analytics/queries?window=7d&topic_labels=nil&risk_labels=compl
 Analytics query responses are scoped to the current admin's organization and
 must not include athlete names, emails, raw user IDs, provider subjects, teams,
 or storage keys.
+
+Frontend Query review uses sentinel pagination over this endpoint: it requests
+`limit=11` with `offset=page * 10`, renders the first 10 rows, and uses the
+extra row only to determine whether a next page exists.
 
 ### Current Dashboard Insight
 `window`, or explicit `window_start` and `window_end`, scopes the lookup to the

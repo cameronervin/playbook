@@ -178,6 +178,9 @@ async def test_run_spec_uses_langfuse_experiment_runner(
     assert result.mean_scores == {"quality_score": 1.0}
     assert sorted(client.evaluations_by_item) == ["one", "two"]
     assert client.evaluations_by_item["one"][0].name == "quality_score"
+    assert result.metadata["dataset"] == "example"
+    assert result.metadata["dataset_path"] == "evals/datasets/example.yaml"
+    assert result.metadata["max_concurrency"] == 5
 
 
 @pytest.mark.asyncio
@@ -209,7 +212,8 @@ async def test_run_spec_records_agent_failures_without_blocking_other_items(
 
     result = await runner.run_spec(spec, run_name="partial-run", max_concurrency=5)
 
-    assert result.passed is True
+    assert result.passed is False
     assert result.mean_scores == {"quality_score": 1.0}
     assert result.errors == ["agent run on item bad: agent exploded"]
+    assert result.failures == ["errors: 1 isolated run/judge errors recorded"]
     assert sorted(client.evaluations_by_item) == ["good"]

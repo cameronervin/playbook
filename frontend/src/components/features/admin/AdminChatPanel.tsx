@@ -1,12 +1,13 @@
 'use client'
 
-import { FormEvent, useEffect, useRef, useState } from 'react'
-import { CornerDownRight, FileText, Send, X, Zap } from 'lucide-react'
+import { FormEvent, useMemo, useState } from 'react'
+import { AlertTriangle, BotMessageSquare, CornerDownRight, Send, X } from 'lucide-react'
 import { WorkspaceSidePanel } from '@/src/components/features/workspace/WorkspaceShell'
+import { useStreamingThreadScroll } from '@/src/components/features/workspace/useStreamingThreadScroll'
 import { AgentAvatar } from '@/src/components/ui'
 import { ADMIN_CHAT_SUGGESTIONS } from '@/src/lib/fixtures/admin'
 import { cn } from '@/src/lib/utils/cn'
-import type { AdminChatMessage, AdminChatReference } from '@/src/types/adminChat'
+import type { AdminChatMessage } from '@/src/types/adminChat'
 
 interface AdminChatPanelProps {
   isBusy?: boolean
@@ -15,6 +16,7 @@ interface AdminChatPanelProps {
   messages: AdminChatMessage[]
   onClose: () => void
   onSend: (content: string) => void
+  pendingMessage?: string | null
 }
 
 export function AdminChatPanel({
@@ -24,14 +26,22 @@ export function AdminChatPanel({
   messages,
   onClose,
   onSend,
+  pendingMessage = null,
 }: AdminChatPanelProps) {
   const [draft, setDraft] = useState('')
-  const threadRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!threadRef.current) return
-    threadRef.current.scrollTop = threadRef.current.scrollHeight
-  }, [isBusy, messages])
+  const scrollSignal = useMemo(
+    () => createAdminChatScrollSignal(messages, pendingMessage),
+    [messages, pendingMessage],
+  )
+  const {
+    handleScroll,
+    threadRef,
+  } = useStreamingThreadScroll({
+    forceFollowSignal: pendingMessage,
+    resetKey: messages[0]?.session_id ?? null,
+    scrollSignal,
+  })
+  const hasThreadContent = messages.length > 0 || pendingMessage !== null
 
   const submit = (content: string) => {
     const value = content.trim()
@@ -48,9 +58,6 @@ export function AdminChatPanel({
   return (
     <WorkspaceSidePanel aria-label="Analytics AI Agent" className="pb-workspace-side-panel-wide animate-pb-panel">
       <header className="pb-panel-header px-4">
-        <AgentAvatar className="h-8 w-8">
-          <Zap className="h-4 w-4" />
-        </AgentAvatar>
         <div className="min-w-0">
           <h2 className="pb-panel-title">Analytics AI Agent</h2>
         </div>
@@ -63,10 +70,15 @@ export function AdminChatPanel({
           <X className="h-[18px] w-[18px]" />
         </button>
       </header>
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4" ref={threadRef}>
+      <div
+        className="relative flex flex-1 flex-col gap-4 overflow-y-auto p-4"
+        data-testid="admin-chat-thread-scroll"
+        onScroll={handleScroll}
+        ref={threadRef}
+      >
         {isLoading ? (
           <p className="pb-admin-chat-copy mt-1 text-fg-3">Loading analytics chat...</p>
-        ) : messages.length === 0 ? (
+        ) : !hasThreadContent ? (
           <div className="mt-1">
             <p className="pb-admin-chat-copy mb-[18px]">
               Ask an AI agent about query patterns, support gaps, risk trends, and more.
@@ -88,15 +100,15 @@ export function AdminChatPanel({
             </div>
           </div>
         ) : (
-          messages.map((message) => <AdminChatMessage key={message.id} message={message} />)
-        )}
-        {isBusy && (
-          <div className="flex items-center gap-3">
-            <AgentAvatar className="h-[30px] w-[30px]">
-              <Zap className="h-[15px] w-[15px]" />
-            </AgentAvatar>
-            <span className="pb-admin-chat-copy pb-think text-fg-3">Thinking...</span>
-          </div>
+          <>
+            {messages.map((message) => <AdminChatMessage key={message.id} message={message} />)}
+            {pendingMessage && (
+              <>
+                <AdminChatMessage message={createPendingAdminMessage('pending-admin-user-message', 'user', pendingMessage)} />
+                <AdminChatMessage message={createPendingAdminMessage('pending-admin-assistant-message', 'assistant', '')} />
+              </>
+            )}
+          </>
         )}
         {isError && (
           <p className="pb-dashboard-meta rounded-md border border-danger/30 bg-danger-bg px-3 py-2 text-danger">
@@ -105,9 +117,10 @@ export function AdminChatPanel({
         )}
       </div>
       <form className="shrink-0 border-t border-border p-4" onSubmit={handleSubmit}>
-        <div className="flex items-end gap-2 rounded-lg border border-border-strong bg-surface py-2 pl-3 pr-2">
+        <div className="pb-chat-composer-shell pb-field-shell pb-admin-chat-composer-shell">
           <textarea
-            className="pb-admin-chat-input py-1"
+            aria-label="Message Analytics AI"
+            className="pb-chat-composer-input pb-admin-chat-input py-1"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -115,7 +128,7 @@ export function AdminChatPanel({
                 submit(draft)
               }
             }}
-            placeholder="Ask about the analytics..."
+            placeholder="Ask the Analytics AI a question..."
             rows={1}
             value={draft}
           />
@@ -138,7 +151,7 @@ function AdminChatMessage({ message }: { message: AdminChatMessage }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <p className="pb-admin-chat-user-message">
+        <p className="pb-chat-user-message pb-admin-chat-user-message">
           {message.content}
         </p>
       </div>
@@ -148,52 +161,75 @@ function AdminChatMessage({ message }: { message: AdminChatMessage }) {
   const failed = message.status === 'failed'
   const declined = message.answer_type === 'refusal' || message.answer_type === 'unsupported'
   const content = message.content || getStreamError(message.metadata) || (failed ? 'The analytics response failed. Try again.' : '')
+  const hasContent = content.trim().length > 0
+  const isThinking = !failed && message.status === 'streaming' && !hasContent
 
   return (
     <div className="flex gap-3">
       <AgentAvatar className="h-[30px] w-[30px]">
-        <Zap className="h-[15px] w-[15px]" />
+        <BotMessageSquare className="h-[15px] w-[15px]" />
       </AgentAvatar>
       <div className="min-w-0 flex-1">
-        <p
-          className={cn(
-            'pb-admin-chat-copy m-0',
-            message.status === 'streaming' && 'pb-streaming',
-            failed ? 'text-danger' : declined ? 'text-fg-3' : 'text-fg-2',
-          )}
-        >
-          {content}
-        </p>
-        {message.references.length > 0 && <SourcesDisclosure refs={message.references} />}
+        {isThinking ? (
+          <div className="pb-ui-sm flex items-center py-1 text-fg-3">
+            <span className="pb-thinking-shimmer">Thinking...</span>
+          </div>
+        ) : failed ? (
+          <div className="pb-ui-sm flex items-center gap-2 rounded-md border border-danger/40 bg-danger-bg px-3 py-2 text-danger">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{content}</span>
+          </div>
+        ) : (
+          <>
+            <p
+              className={cn(
+                'pb-chat-body m-0 whitespace-pre-wrap',
+                message.status === 'streaming' && 'pb-streaming',
+                declined ? 'text-fg-3' : 'text-fg-2',
+              )}
+            >
+              {content}
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-function SourcesDisclosure({ refs }: { refs: AdminChatReference[] }) {
-  return (
-    <div className="mt-2.5 flex flex-wrap gap-1.5">
-      {refs.map((ref) => (
-        <span
-          className="pb-dashboard-meta inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-2 py-1 font-semibold text-fg-2"
-          key={`${ref.type}-${ref.id}`}
-        >
-          {ref.type === 'dashboard_insight' ? <Zap className="h-3 w-3 text-brand" /> : <FileText className="h-3 w-3 text-brand" />}
-          <span className="text-fg-3">{formatReferenceType(ref.type)}</span>
-          <span>{ref.id}</span>
-        </span>
-      ))}
-    </div>
-  )
-}
-
-function formatReferenceType(type: AdminChatReference['type']) {
-  if (type === 'dashboard_insight') return 'Insight'
-  if (type === 'metric') return 'Metric'
-  return 'Query'
-}
-
 function getStreamError(metadata: Record<string, unknown>): string | null {
   const error = metadata.stream_error
   return typeof error === 'string' ? error : null
+}
+
+function createPendingAdminMessage(
+  id: string,
+  role: AdminChatMessage['role'],
+  content: string,
+): AdminChatMessage {
+  return {
+    id,
+    session_id: 'pending-admin-chat-session',
+    role,
+    content,
+    status: role === 'assistant' ? 'streaming' : 'complete',
+    references: [],
+    metadata: {},
+    answer_type: null,
+    created_at: new Date(0).toISOString(),
+  }
+}
+
+function createAdminChatScrollSignal(
+  messages: AdminChatMessage[],
+  pendingMessage: string | null,
+): string {
+  return [
+    pendingMessage ?? '',
+    ...messages.map((message) => [
+      message.id,
+      message.status,
+      message.content.length,
+    ].join(':')),
+  ].join('|')
 }

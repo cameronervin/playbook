@@ -370,6 +370,15 @@ async def test_admin_analytics_summary_counts_are_not_limited_by_query_row_cap(
     assert summary["top_topics"] == [{"label": "nil", "count": 4}]
     assert summary["risk_counts"] == {"compliance": 4}
     assert summary["unanswered_count"] == 1
+    assert summary["volume_series"] == [
+        {"date": "2026-06-01", "total": 1, "unanswered": 0},
+        {"date": "2026-06-02", "total": 1, "unanswered": 0},
+        {"date": "2026-06-03", "total": 1, "unanswered": 0},
+        {"date": "2026-06-04", "total": 1, "unanswered": 1},
+        {"date": "2026-06-05", "total": 0, "unanswered": 0},
+        {"date": "2026-06-06", "total": 0, "unanswered": 0},
+        {"date": "2026-06-07", "total": 0, "unanswered": 0},
+    ]
 
 
 @pytest.mark.asyncio

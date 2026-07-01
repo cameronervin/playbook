@@ -22,9 +22,17 @@ is **not** included here. A consumer adds their own, following this pattern:
    a committed row can't be traced back to a production record. This is a focused
    scrub, not full anonymization — the eval signal (e.g. document body text) is
    preserved on purpose.
-4. **Write `datasets/<name>.yaml`.** Emit the sampled, redacted items as a YAML
-   list in the dataset item shape (see `../datasets/README.md`). Commit the
-   redacted datasets; keep the raw CSV export gitignored.
+4. **Assign stable metadata.** Add a unique `metadata.id` and coverage-driving
+   `metadata.category` to every item. Use stable, human-readable ids rather than
+   raw production primary keys.
+5. **Write `datasets/<name>.yaml`.** Emit the sampled, redacted items as a YAML
+   list in the dataset item shape (see `../datasets/README.md`). Also maintain
+   `datasets/_fixtures/playbook_kb_sources.yaml` when the dataset expects KB
+   retrieval/citation grounding. Commit the redacted datasets and fixtures; keep
+   the raw CSV export gitignored.
+6. **Validate offline.** Run `uv run --group evals python -m evals.cli
+   validate-datasets` before syncing. Fix any `ValidationIssue` messages
+   locally; validation does not require Langfuse.
 
 ```text
 evals/data/<table>.csv   (gitignored)        # step 1
@@ -32,8 +40,11 @@ evals/data/<table>.csv   (gitignored)        # step 1
         ▼  hydrate + validate                # step 2
    item.input  ──►  redact PII               # step 3
         │
-        ▼  sample + write                     # step 4
+        ▼  sample + metadata + write          # steps 4-5
 evals/datasets/<name>.yaml  (committed, redacted)
+evals/datasets/_fixtures/playbook_kb_sources.yaml  (committed, redacted)
+        │
+        ▼  offline validation                 # step 6
 ```
 
 Wire the new script as a CLI under `evals/scripts/` and document its usage here.

@@ -7,6 +7,9 @@ from app.agents.chains import (
     conversation_title_chain,
     dashboard_insights_chain,
 )
+from app.agents.context.prompt_composers.athlete_chat_prompt_composer import (
+    build_athlete_chat_prompt,
+)
 from app.agents.runtime_context import (
     AthleteChatRuntimeContext,
     ConversationTitleRuntimeContext,
@@ -51,6 +54,16 @@ def test_create_athlete_chat_chain_wires_stateful_middleware(monkeypatch) -> Non
     assert isinstance(middleware, list)
     assert len(middleware) == 1
     assert hasattr(middleware[0], "awrap_model_call")
+
+
+def test_athlete_chat_prompt_includes_scope_refusal_and_grounding_policy() -> None:
+    prompt = build_athlete_chat_prompt("athlete_chat")
+
+    assert "only handles athletics-related questions" in prompt
+    assert "politely refuse" in prompt
+    assert "steer the athlete back to athletics" in prompt
+    assert "NIL, compliance, recruiting" in prompt
+    assert "retrieved Playbook knowledge base sources" in prompt
 
 
 def test_create_conversation_title_chain_wires_structured_agent(monkeypatch) -> None:

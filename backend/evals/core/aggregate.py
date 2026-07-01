@@ -24,6 +24,8 @@ def summarize(
     thresholds: dict[str, float],
     errors: list[str] | None = None,
     per_item: list[PerItemResult] | None = None,
+    metadata: dict[str, object] | None = None,
+    fail_on_errors: bool = True,
 ) -> RunResult:
     """Average numeric scores per criterion and gate against thresholds.
 
@@ -46,6 +48,8 @@ def summarize(
             failures.append(f"{name}: no numeric scores recorded")
         elif got < floor:
             failures.append(f"{name}: {got:.3f} < threshold {floor}")
+    if fail_on_errors and errors:
+        failures.append(f"errors: {len(errors)} isolated run/judge errors recorded")
 
     return RunResult(
         agent=agent,
@@ -53,6 +57,7 @@ def summarize(
         mean_scores=mean_scores,
         passed=len(failures) == 0,
         failures=failures,
+        metadata=dict(metadata or {}),
         errors=list(errors or []),
         per_item=list(per_item or []),
     )

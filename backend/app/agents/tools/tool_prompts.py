@@ -68,27 +68,52 @@ state athlete names, emails, owner IDs, teams, or other identity.
 ADMIN_CHAT_METRIC_PROMPT = """
 <tools>
 - **inspect_admin_metric**:
-Use this tool to verify exact analytics counts before answering questions about
-query volume, unanswered count, top topics, or risk counts. Cite
-metric:analytics.summary when using summary metrics.
+Use this data tool only for exact counts or summary metrics: query volume,
+unanswered count, top topics, risk counts, or a full analytics summary. Do not
+use it for representative examples, confusion themes, recommendations, stored
+insight summaries, or questions already answered by the runtime snapshot.
+
+Accepted metric_name inputs are exactly: analytics.summary, summary,
+query_volume, unanswered_count, top_topics, and risk_counts.
+metric:analytics.summary is a citation/reference, not a metric_name input. Cite
+metric:analytics.summary when using summary metrics. After this tool returns a
+relevant metric, stop using data tools and submit the final structured response
+unless the user asked for examples or stored insight records too. Do not call
+this data tool again with equivalent arguments.
 </tools>
 """
 
 ADMIN_CHAT_QUERY_EXAMPLES_PROMPT = """
 <tools>
 - **list_anonymized_queries**:
-Use this tool to inspect bounded anonymized query examples for a topic, risk, or
-unanswered gap. Refer only to anonymized message IDs. Never infer or state
-athlete names, emails, owner IDs, teams, provider subjects, or storage keys.
+Use this data tool for representative anonymized questions, confusion themes,
+unanswered gaps, or examples behind a topic/risk. Do not use it for exact
+summary counts, generated dashboard insight recommendations, or questions
+already answerable from the runtime snapshot and completed insight context.
+
+Filter by topic_label, risk_label, or unanswered_only only when the user asks
+for that slice or the snapshot makes the relevant slice clear. Refer only to
+anonymized message IDs. Never infer or state athlete names, emails, owner IDs,
+teams, provider subjects, or storage keys. After this tool returns relevant
+examples, stop using data tools and submit the final structured response unless
+the user also asked for exact counts or stored dashboard insights. Do not call
+this data tool again with equivalent arguments.
 </tools>
 """
 
 ADMIN_CHAT_DASHBOARD_INSIGHTS_PROMPT = """
 <tools>
 - **list_dashboard_insights**:
-Use this tool to inspect completed dashboard insight outputs overlapping the
-current window. Cite dashboard_insight IDs returned by the tool when drawing on
-stored insight summaries.
+Use this data tool for stored generated insights, recommendations, attention
+areas, or completed dashboard insight outputs overlapping the current window.
+Do not use it for raw query examples, exact summary counts, or general
+analytics questions already answered by the runtime context.
+
+Cite dashboard_insight IDs returned by the tool when drawing on stored insight
+summaries. After this tool returns relevant stored insights, stop using data
+tools and submit the final structured response unless the user also asked for
+exact counts or query examples. Do not call this data tool again with equivalent
+arguments.
 </tools>
 """
 

@@ -1,12 +1,11 @@
 'use client'
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { AlertTriangle, ArrowDown, FileText } from 'lucide-react'
 import { ChatThreadSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
+import { useStreamingThreadScroll } from '@/src/components/features/workspace/useStreamingThreadScroll'
 import { PlaybookMark } from '@/src/components/ui'
 import type { ChatMessage, Citation } from '@/src/types/conversations'
-
-const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 96
 
 interface ChatThreadProps {
   conversationId?: string | null
@@ -28,19 +27,16 @@ export function ChatThread({
     [messages, pendingMessage],
   )
   const {
-    forceFollowLatest,
     handleScroll,
     isPinnedToBottom,
     scrollToLatest,
     threadRef,
-  } = useChatAutoScroll({ conversationId, scrollSignal })
+  } = useStreamingThreadScroll({
+    forceFollowSignal: pendingMessage,
+    resetKey: conversationId,
+    scrollSignal,
+  })
   const hasThreadContent = messages.length > 0 || pendingMessage !== null
-
-  useLayoutEffect(() => {
-    if (pendingMessage !== null) {
-      forceFollowLatest('auto')
-    }
-  }, [forceFollowLatest, pendingMessage])
 
   if (isLoading) return <ChatThreadSkeleton />
 
@@ -90,70 +86,6 @@ export function ChatThread({
   )
 }
 
-interface ChatAutoScrollOptions {
-  conversationId: string | null
-  scrollSignal: string
-}
-
-function useChatAutoScroll({ conversationId, scrollSignal }: ChatAutoScrollOptions) {
-  const threadRef = useRef<HTMLDivElement | null>(null)
-  const isPinnedRef = useRef(true)
-  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
-
-  const setPinnedToBottom = useCallback((isPinned: boolean) => {
-    isPinnedRef.current = isPinned
-    setIsPinnedToBottom(isPinned)
-  }, [])
-
-  const scrollToLatest = useCallback(
-    (behavior: ScrollBehavior = 'auto') => {
-      const thread = threadRef.current
-      if (!thread) return
-
-      const resolvedBehavior = shouldReduceMotion() ? 'auto' : behavior
-      if (resolvedBehavior === 'smooth' && typeof thread.scrollTo === 'function') {
-        thread.scrollTo({ behavior: resolvedBehavior, top: thread.scrollHeight })
-      } else {
-        thread.scrollTop = thread.scrollHeight
-      }
-      setPinnedToBottom(true)
-    },
-    [setPinnedToBottom],
-  )
-
-  const forceFollowLatest = useCallback(
-    (behavior: ScrollBehavior = 'auto') => {
-      isPinnedRef.current = true
-      scrollToLatest(behavior)
-    },
-    [scrollToLatest],
-  )
-
-  const handleScroll = useCallback(() => {
-    const thread = threadRef.current
-    if (!thread) return
-    setPinnedToBottom(isNearBottom(thread))
-  }, [setPinnedToBottom])
-
-  useLayoutEffect(() => {
-    forceFollowLatest('auto')
-  }, [conversationId, forceFollowLatest])
-
-  useLayoutEffect(() => {
-    if (isPinnedRef.current) {
-      scrollToLatest('auto')
-    }
-  }, [scrollSignal, scrollToLatest])
-
-  return {
-    forceFollowLatest,
-    handleScroll,
-    isPinnedToBottom,
-    scrollToLatest,
-    threadRef,
-  }
-}
-
 function createScrollSignal(messages: ChatMessage[], pendingMessage: string | null): string {
   return [
     pendingMessage ?? '',
@@ -164,15 +96,6 @@ function createScrollSignal(messages: ChatMessage[], pendingMessage: string | nu
       message.citations.length,
     ].join(':')),
   ].join('|')
-}
-
-function isNearBottom(element: HTMLElement): boolean {
-  const distanceFromBottom = element.scrollHeight - element.clientHeight - element.scrollTop
-  return distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX
-}
-
-function shouldReduceMotion(): boolean {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 
 function EmptyState() {

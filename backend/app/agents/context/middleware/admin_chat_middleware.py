@@ -108,12 +108,39 @@ def _runtime_context(
             f"Window start: {_string_value(state.get('window_start'), 'unknown')}",
             f"Window end: {_string_value(state.get('window_end'), 'unknown')}",
             "",
-            snapshot_context,
+            "### Question",
+            _string_value(state.get("question"), "unknown"),
             "",
-            insight_context,
+            "### Available Snapshot Facts",
+            _section_text(snapshot_context, "No analytics snapshot facts available."),
             "",
-            "Allowed references:",
+            "### Completed Dashboard Insights",
+            _section_text(
+                insight_context,
+                "No completed dashboard insights overlap this window.",
+            ),
+            "",
+            "### Allowed References",
             _string_value(state.get("allowed_references"), "[]"),
+            "",
+            "### Tool Guidance Reminder",
+            (
+                "Data tools are optional. If the available snapshot facts or "
+                "completed dashboard insights already answer the question, use "
+                "the final structured response tool without calling data tools."
+            ),
+            (
+                "Call inspect_admin_metric only for exact counts or summary "
+                "metrics; call list_anonymized_queries only for examples, "
+                "confusion themes, or unanswered gaps; call "
+                "list_dashboard_insights only for stored generated insights, "
+                "recommendations, or attention areas."
+            ),
+            (
+                "After a relevant data tool result, produce the final structured "
+                "response unless the user asked for a different data type. Do "
+                "not call the same data tool with equivalent arguments twice."
+            ),
         ]
     )
 
@@ -133,3 +160,15 @@ def _string_value(value: Any, default: str = "") -> str:
         return default
     text = str(value).strip()
     return text or default
+
+
+def _section_text(value: str, default: str) -> str:
+    text = _string_value(value, default)
+    lines = text.splitlines()
+    if lines and lines[0].strip() in {
+        "## Admin Analytics Snapshot",
+        "## Completed Dashboard Insights",
+    }:
+        cleaned = "\n".join(lines[1:]).strip()
+        return cleaned or default
+    return text

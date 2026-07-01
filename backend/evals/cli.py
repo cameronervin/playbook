@@ -35,7 +35,8 @@ def _ensure_langfuse() -> None:
     if not is_langfuse_ready():
         raise click.ClickException(
             "Langfuse is not ready. Set LANGFUSE_ENABLED=true and provide "
-            "LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST in your .env."
+            "LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL in "
+            "your .env."
         )
 
 
@@ -48,6 +49,21 @@ def _shutdown_langfuse() -> None:
 def dataset_exists(spec: object) -> bool:
     """Whether a spec's dataset YAML is present (not-yet-authored specs are skipped)."""
     return os.path.exists(getattr(spec, "dataset_path"))  # noqa: B009
+
+
+def validate_specs(specs: list[object]) -> list[object]:
+    """Validate on-disk eval datasets without initializing Langfuse."""
+    from evals.core.validation import validate_specs as _validate_specs  # noqa: PLC0415
+
+    return list(_validate_specs(specs))
+
+
+def _raise_if_failed(result: object) -> None:
+    if getattr(result, "passed", False):
+        return
+    failures = list(getattr(result, "failures", []) or [])
+    message = "\n".join(failures) if failures else "eval run failed"
+    raise click.ClickException(message)
 
 
 @click.group()
@@ -78,6 +94,7 @@ def run(agent: str, run_name: str | None, max_concurrency: int) -> None:
             )
         )
         click.echo(result.summary())
+        _raise_if_failed(result)
     finally:
         _shutdown_langfuse()
 
@@ -91,17 +108,28 @@ def run(agent: str, run_name: str | None, max_concurrency: int) -> None:
     show_default=True,
     help="Maximum concurrent dataset item executions per spec.",
 )
-def run_all(max_concurrency: int) -> None:
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Fail on missing datasets or any failed spec; use for release gates.",
+)
+def run_all(max_concurrency: int, strict: bool) -> None:
     """Run every registered agent (e.g. nightly)."""
     _ensure_langfuse()
 
-    async def _all() -> None:
+    async def _all() -> list[str]:
         stamp = datetime.now(UTC).strftime("%Y%m%d")
+        failures: list[str] = []
         for name, spec in REGISTRY.items():
             # Skip not-yet-authored datasets so one missing spec can't abort the
             # whole nightly run (run_spec syncs the dataset, which would 404).
             if not dataset_exists(spec):
-                click.echo(f"skipped {name}: no dataset at {spec.dataset_path}")
+                message = f"missing {name}: no dataset at {spec.dataset_path}"
+                if strict:
+                    click.echo(message)
+                    failures.append(message)
+                else:
+                    click.echo(f"skipped {name}: no dataset at {spec.dataset_path}")
                 continue
             result = await run_spec(
                 spec,
@@ -109,9 +137,14 @@ def run_all(max_concurrency: int) -> None:
                 max_concurrency=max_concurrency,
             )
             click.echo(result.summary())
+            if strict and not result.passed:
+                failures.append(f"{name} failed release thresholds")
+        return failures
 
     try:
-        asyncio.run(_all())
+        failures = asyncio.run(_all())
+        if failures:
+            raise click.ClickException("\n".join(failures))
     finally:
         _shutdown_langfuse()
 
@@ -134,6 +167,29 @@ def sync_datasets(agent: str | None) -> None:
             click.echo(f"synced {spec.name}: {count} items")
     finally:
         _shutdown_langfuse()
+
+
+@cli.command(name="validate-datasets")
+@click.option(
+    "--agent",
+    type=click.Choice(list(REGISTRY)),
+    default=None,
+    help="Validate one agent's dataset; default validates all registered specs.",
+)
+def validate_datasets(agent: str | None) -> None:
+    """Validate local eval datasets without Langfuse credentials."""
+    specs = [REGISTRY[agent]] if agent else list(REGISTRY.values())
+    issues = validate_specs(specs)
+    if not issues:
+        click.echo("datasets valid")
+        return
+
+    for issue in issues:
+        severity = getattr(issue, "severity", "error")
+        path = getattr(issue, "path", "?")
+        message = getattr(issue, "message", str(issue))
+        click.echo(f"{severity}: {path}: {message}")
+    raise click.ClickException(f"{len(issues)} dataset validation issue(s)")
 
 
 if __name__ == "__main__":

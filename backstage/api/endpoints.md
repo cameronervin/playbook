@@ -71,8 +71,8 @@ Example error response:
 | DELETE | `/admin/kb/documents/{document_id}` | Delete backend document record, original file, and searchable KB vectors |
 | POST | `/kb/webhook` | Receive signed KB-service status callbacks |
 | GET | `/admin/audit-logs` | Query org-scoped audit log records |
-| GET | `/admin/analytics/summary` | Return admin-only query volume, topic, unanswered, and risk summary for an org/window |
-| GET | `/admin/analytics/queries` | Return admin-only anonymized athlete query rows for review and filtering |
+| GET | `/admin/analytics/summary` | Return admin-only query volume, topic, unanswered, risk, and daily volume-series summary for an org/window |
+| GET | `/admin/analytics/queries` | Return admin-only anonymized athlete query rows for review, filtering, and limit/offset pagination |
 | GET | `/admin/dashboard-insights/current` | Get the latest completed dashboard insight output, optionally scoped to a window that overlaps the run window |
 | GET | `/admin/dashboard-insights/outputs` | List generated dashboard insight outputs |
 | GET | `/admin/dashboard-insights/outputs/{insight_id}` | Get one generated dashboard insight output |

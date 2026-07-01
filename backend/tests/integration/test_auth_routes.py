@@ -18,6 +18,7 @@ from app.infrastructure.auth import OAuthIdentity
 from app.models.identity import AppSession, OAuthAccount, User
 from app.repositories.identity import (
     AppSessionRepository,
+    OAuthAccountRepository,
     OrganizationRepository,
     UserRepository,
 )
@@ -36,6 +37,8 @@ class FakeOAuthProviderClient:
         self.last_redirect_uri: str | None = None
         self.last_state: str | None = None
         self.fail_identity_lookup = False
+        self.email_override: str | None = None
+        self.display_name_override: str | None = None
 
     @property
     def access_token(self) -> str:
@@ -51,7 +54,11 @@ class FakeOAuthProviderClient:
 
     @property
     def email(self) -> str:
-        return f"{self.provider}@example.com"
+        return self.email_override or f"{self.provider}@example.com"
+
+    @property
+    def display_name(self) -> str:
+        return self.display_name_override or f"{self.provider.title()} SSO User"
 
     async def get_authorization_url(
         self,
@@ -85,6 +92,7 @@ class FakeOAuthProviderClient:
             access_token=self.access_token,
             refresh_token=self.refresh_token,
             expires_at=TOKEN_EXPIRY,
+            name=self.display_name,
         )
 
 
@@ -246,6 +254,7 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert callback_response.status_code == 200
     body = callback_response.json()
     assert body["user"]["email"] == oauth_client.email
+    assert body["user"]["name"] == oauth_client.display_name
     assert body["next_route"] == "/profile"
     assert body["access_token"] != oauth_client.access_token
     decoded_token = jwt.decode(body["access_token"], test_settings.SECRET_KEY, algorithms=["HS256"])
@@ -288,6 +297,7 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert account.expires_at == TOKEN_EXPIRY
     assert user.auth_provider == provider
     assert user.provider_subject == oauth_client.subject
+    assert user.name == oauth_client.display_name
 
 
 @pytest.mark.asyncio
@@ -332,7 +342,172 @@ async def test_oauth_callback_sends_admin_roles_to_admin_workspace(
 
     assert callback_response.status_code == 200
     assert callback_response.json()["user"]["role"] == role
+    assert callback_response.json()["user"]["name"] == "Jordan Admin"
     assert callback_response.json()["next_route"] == "/admin"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_repairs_existing_email_fallback_name(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    _configure_oauth_settings(monkeypatch, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
+    oauth_client = provider_registry.clients["google"]
+    oauth_client.email_override = "jdoe123@example.edu"
+    oauth_client.display_name_override = "Jordan Doe"
+    organization = await OrganizationRepository(db_session).create(
+        name=test_settings.DEFAULT_ORGANIZATION_NAME,
+        slug=test_settings.DEFAULT_ORGANIZATION_SLUG,
+    )
+    await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email=oauth_client.email,
+        name="Jdoe123",
+        auth_provider="google",
+        provider_subject="existing-google-subject",
+        role="athlete",
+    )
+
+    login_response = await route_client.client.get("/api/v1/auth/google/login")
+    assert login_response.status_code == 200
+    assert oauth_client.last_state is not None
+
+    callback_response = await route_client.client.get(
+        "/api/v1/auth/google/callback",
+        params={"code": "oauth-code", "state": oauth_client.last_state},
+    )
+
+    user = await db_session.scalar(select(User).where(User.email == oauth_client.email))
+    assert callback_response.status_code == 200
+    assert callback_response.json()["user"]["name"] == "Jordan Doe"
+    assert user is not None
+    assert user.name == "Jordan Doe"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_preserves_manually_completed_profile_name(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    _configure_oauth_settings(monkeypatch, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
+    oauth_client = provider_registry.clients["google"]
+    oauth_client.email_override = "athlete-manual@example.edu"
+    oauth_client.display_name_override = "Provider Directory Name"
+    organization = await OrganizationRepository(db_session).create(
+        name=test_settings.DEFAULT_ORGANIZATION_NAME,
+        slug=test_settings.DEFAULT_ORGANIZATION_SLUG,
+    )
+    await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email=oauth_client.email,
+        name="Manual Profile Name",
+        auth_provider="google",
+        provider_subject="existing-google-subject",
+        role="athlete",
+        sport_team="Basketball",
+    )
+
+    login_response = await route_client.client.get("/api/v1/auth/google/login")
+    assert login_response.status_code == 200
+    assert oauth_client.last_state is not None
+
+    callback_response = await route_client.client.get(
+        "/api/v1/auth/google/callback",
+        params={"code": "oauth-code", "state": oauth_client.last_state},
+    )
+
+    user = await db_session.scalar(select(User).where(User.email == oauth_client.email))
+    assert callback_response.status_code == 200
+    assert callback_response.json()["user"]["name"] == "Manual Profile Name"
+    assert callback_response.json()["next_route"] == "/chat"
+    assert user is not None
+    assert user.name == "Manual Profile Name"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_relinks_legacy_google_people_account_to_oidc_subject(
+    route_client,
+    db_session,
+    monkeypatch,
+    test_settings,
+) -> None:
+    _configure_oauth_settings(monkeypatch, test_settings)
+    provider_registry = FakeProviderRegistry()
+    _override_auth_service_with_registry(
+        route_client,
+        db_session,
+        provider_registry,
+        test_settings,
+    )
+    oauth_client = provider_registry.clients["google"]
+    oauth_client.email_override = "legacy-google@example.edu"
+    oauth_client.display_name_override = "Jordan Legacy"
+    organization = await OrganizationRepository(db_session).create(
+        name=test_settings.DEFAULT_ORGANIZATION_NAME,
+        slug=test_settings.DEFAULT_ORGANIZATION_SLUG,
+    )
+    user = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email=oauth_client.email,
+        name="Legacy Google",
+        auth_provider="google",
+        provider_subject="people/legacy-google-subject",
+        role="athlete",
+    )
+    legacy_account = await OAuthAccountRepository(db_session).create(
+        user_id=user.id,
+        oauth_name="google",
+        access_token="legacy-provider-access-token",
+        refresh_token="legacy-provider-refresh-token",
+        expires_at=123,
+        account_id="people/legacy-google-subject",
+        account_email=oauth_client.email,
+    )
+
+    login_response = await route_client.client.get("/api/v1/auth/google/login")
+    assert login_response.status_code == 200
+    assert oauth_client.last_state is not None
+
+    callback_response = await route_client.client.get(
+        "/api/v1/auth/google/callback",
+        params={"code": "oauth-code", "state": oauth_client.last_state},
+    )
+
+    accounts = list(
+        (
+            await db_session.scalars(
+                select(OAuthAccount).where(OAuthAccount.oauth_name == "google")
+            )
+        ).all()
+    )
+    await db_session.refresh(user)
+    assert callback_response.status_code == 200
+    assert callback_response.json()["user"]["name"] == "Legacy Google"
+    assert user.provider_subject == oauth_client.subject
+    assert len(accounts) == 1
+    assert accounts[0].id == legacy_account.id
+    assert accounts[0].account_id == oauth_client.subject
+    assert accounts[0].access_token == oauth_client.access_token
+    assert accounts[0].refresh_token == oauth_client.refresh_token
+    assert accounts[0].expires_at == TOKEN_EXPIRY
 
 
 @pytest.mark.asyncio
@@ -384,6 +559,13 @@ async def test_oauth_callback_failure_does_not_persist_or_log_provider_tokens(
     monkeypatch.setattr(test_settings, "ACCESS_TOKEN_COOKIE_NAME", CUSTOM_ACCESS_COOKIE_NAME)
     provider_registry = FakeProviderRegistry()
     provider_registry.clients["google"].fail_identity_lookup = True
+    captured_provider_logs: list[dict[str, object]] = []
+
+    class FakeAuthLogger:
+        def warning(self, event: str, **kwargs: object) -> None:
+            captured_provider_logs.append({"event": event, **kwargs})
+
+    monkeypatch.setattr("app.services.auth_service.logger", FakeAuthLogger())
     _override_auth_service_with_registry(
         route_client,
         db_session,
@@ -417,8 +599,29 @@ async def test_oauth_callback_failure_does_not_persist_or_log_provider_tokens(
     )
     assert google_client.access_token not in callback_response.text
     assert google_client.refresh_token not in callback_response.text
-    assert google_client.access_token not in _log_blob(captured_logs)
-    assert google_client.refresh_token not in _log_blob(captured_logs)
+    log_blob = _log_blob(captured_logs)
+    assert captured_provider_logs == [
+        {
+            "event": "auth_oauth_provider_callback_failed",
+            "provider": "google",
+            "phase": "callback",
+            "error_type": "OAuth2Error",
+            "status_code": None,
+        }
+    ]
+    provider_log_blob = _log_blob(captured_provider_logs)
+    assert google_client.access_token not in log_blob
+    assert google_client.refresh_token not in log_blob
+    assert google_client.email not in log_blob
+    assert google_client.display_name not in log_blob
+    assert "oauth-code" not in log_blob
+    assert google_client.last_state not in log_blob
+    assert google_client.access_token not in provider_log_blob
+    assert google_client.refresh_token not in provider_log_blob
+    assert google_client.email not in provider_log_blob
+    assert google_client.display_name not in provider_log_blob
+    assert "oauth-code" not in provider_log_blob
+    assert google_client.last_state not in provider_log_blob
     assert await db_session.scalar(select(OAuthAccount)) is None
     assert await db_session.scalar(select(User).where(User.email == google_client.email)) is None
 

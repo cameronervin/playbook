@@ -14,6 +14,8 @@ imports are lazy (inside the functions) so importing this module never forces
 provider init and ``compileall`` succeeds without the heavy deps installed.
 """
 
+# ruff: noqa: PLC0415
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -84,8 +86,8 @@ def _agent_chat_model() -> "BaseChatModel":
 @lru_cache
 def get_example_chains() -> dict[str, Any]:
     """Example chain set: ``{"example": chain}``."""
-    from app.core.config import get_settings
     from app.agents.builders.chains_builder import create_example_chain_set
+    from app.core.config import get_settings
 
     return create_example_chain_set(
         _agent_chat_model(),

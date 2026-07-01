@@ -21,6 +21,8 @@ import {
   useSubmitAdminChatMessage,
 } from '@/src/hooks/useAdminChat'
 import {
+  normalizeAdminAnalyticsQueryFilters,
+  QUERY_REVIEW_PAGE_SIZE,
   toManualRunWindow,
   useAdminAnalyticsQueries,
   useAdminAnalyticsSummary,
@@ -49,15 +51,24 @@ import {
 import { useSessionActivity } from '@/src/hooks/useSessionActivity'
 import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
+import type { AdminAnalyticsQueryFilters } from '@/src/types/adminAnalytics'
 import type { AdminChatMessage } from '@/src/types/adminChat'
 
 const EMPTY_ADMIN_CHAT_MESSAGES: AdminChatMessage[] = []
+const EMPTY_QUERY_FILTERS: Required<AdminAnalyticsQueryFilters> = {
+  topic_labels: [],
+  risk_labels: [],
+}
 
 export function AdminShell() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [adminChatSessionId, setAdminChatSessionId] = useState<string | null>(null)
+  const [pendingAdminChatMessage, setPendingAdminChatMessage] = useState<string | null>(null)
   const [dashboardInsightRunId, setDashboardInsightRunId] = useState<string | null>(null)
+  const [queryFilters, setQueryFilters] =
+    useState<Required<AdminAnalyticsQueryFilters>>(EMPTY_QUERY_FILTERS)
+  const [queryPage, setQueryPage] = useState(0)
   const { data: user, isLoading } = useCurrentUser()
   const logout = useLogout()
   const adminTab = useUIStore((state) => state.adminTab)
@@ -72,7 +83,12 @@ export function AdminShell() {
   const isAdmin = user?.role === 'admin' || isSuperAdmin
   const insightsEnabled = Boolean(isAdmin && adminTab === 'insights')
   const analyticsSummaryQuery = useAdminAnalyticsSummary(adminTimeWindow, insightsEnabled)
-  const analyticsQueriesQuery = useAdminAnalyticsQueries(adminTimeWindow, insightsEnabled)
+  const analyticsQueriesQuery = useAdminAnalyticsQueries(
+    adminTimeWindow,
+    insightsEnabled,
+    queryFilters,
+    queryPage,
+  )
   const currentInsightQuery = useCurrentDashboardInsight(adminTimeWindow, insightsEnabled)
   const createDashboardInsightRun = useCreateDashboardInsightRun()
   const dashboardInsightRunQuery = useDashboardInsightRun(
@@ -158,20 +174,23 @@ export function AdminShell() {
 
   const handleSendAdminChatMessage = useCallback(
     (content: string) => {
+      setPendingAdminChatMessage(content)
       void (async () => {
         try {
           const sessionId = await ensureAdminChatSession(content)
           const response = await submitAdminChatMessage.mutateAsync({
             sessionId,
             question: content,
-            window: adminTimeWindow === 'custom' ? undefined : adminTimeWindow,
+            window: adminTimeWindow,
           })
+          setPendingAdminChatMessage(null)
           startAdminChatStream({
             assistantMessageId: response.assistant_message_id,
             sessionId,
             streamUrl: response.stream_url,
           })
         } catch {
+          setPendingAdminChatMessage(null)
           // Mutation state renders the recoverable panel error.
         }
       })()
@@ -179,7 +198,7 @@ export function AdminShell() {
     [adminTimeWindow, ensureAdminChatSession, startAdminChatStream, submitAdminChatMessage],
   )
 
-  if (isLoading) return <AdminWorkspaceSkeleton />
+  if (isLoading) return <AdminWorkspaceSkeleton activeTab={adminTab} />
 
   if (!isAdmin) {
     return (
@@ -209,7 +228,6 @@ export function AdminShell() {
   const handleGenerate = () => {
     void (async () => {
       const request = toManualRunWindow(adminTimeWindow)
-      if (!request) return
       try {
         const response = await createDashboardInsightRun.mutateAsync(request)
         setDashboardInsightRunId(response.run_id)
@@ -218,6 +236,21 @@ export function AdminShell() {
       }
     })()
   }
+
+  const handleTimeWindowChange = (window: typeof adminTimeWindow) => {
+    setQueryFilters(EMPTY_QUERY_FILTERS)
+    setQueryPage(0)
+    setAdminTimeWindow(window)
+  }
+
+  const handleQueryFiltersChange = (filters: Required<AdminAnalyticsQueryFilters>) => {
+    setQueryPage(0)
+    setQueryFilters(normalizeAdminAnalyticsQueryFilters(filters))
+  }
+
+  const queryRows = analyticsQueriesQuery.data?.queries ?? []
+  const queryReviewRows = queryRows.slice(0, QUERY_REVIEW_PAGE_SIZE)
+  const queryReviewHasNextPage = queryRows.length > QUERY_REVIEW_PAGE_SIZE
 
   const leftRail = (
     <AdminNav
@@ -240,12 +273,16 @@ export function AdminShell() {
           <AdminInsightsDashboard
             currentInsight={currentInsightQuery.data ?? null}
             currentRun={dashboardInsightRunQuery.data ?? null}
+            isChatOpen={adminChatOpen}
             isError={
               analyticsSummaryQuery.isError ||
               analyticsQueriesQuery.isError ||
               currentInsightQuery.isError ||
               createDashboardInsightRun.isError ||
               dashboardInsightRunQuery.isError
+            }
+            isQueryReviewFetching={
+              analyticsQueriesQuery.isFetching && !analyticsQueriesQuery.isLoading
             }
             isGenerating={
               createDashboardInsightRun.isPending ||
@@ -259,8 +296,14 @@ export function AdminShell() {
             }
             onGenerate={handleGenerate}
             onOpenChat={() => setAdminChatOpen(true)}
-            onTimeWindowChange={setAdminTimeWindow}
-            queries={analyticsQueriesQuery.data?.queries ?? []}
+            onQueryFiltersChange={handleQueryFiltersChange}
+            onQueryPageChange={setQueryPage}
+            onTimeWindowChange={handleTimeWindowChange}
+            queries={queryReviewRows}
+            queryHasNextPage={queryReviewHasNextPage}
+            queryFilters={queryFilters}
+            queryPage={queryPage}
+            queryPageSize={QUERY_REVIEW_PAGE_SIZE}
             summary={analyticsSummaryQuery.data ?? null}
             timeWindow={adminTimeWindow}
           />
@@ -316,8 +359,12 @@ export function AdminShell() {
       isError={adminChatError}
       isLoading={adminChatLoading}
       messages={adminChatMessages}
-      onClose={() => setAdminChatOpen(false)}
+      onClose={() => {
+        setPendingAdminChatMessage(null)
+        setAdminChatOpen(false)
+      }}
       onSend={handleSendAdminChatMessage}
+      pendingMessage={pendingAdminChatMessage}
     />
   ) : undefined
 

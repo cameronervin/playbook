@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from threading import RLock
@@ -65,6 +66,52 @@ def _expected_output(item: Any) -> Any:
 def _input_cache_key(input_obj: Any) -> str:
     raw = json.dumps(input_obj, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _git_commit_sha() -> str | None:
+    """Return the current commit SHA when this checkout is a git worktree."""
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except Exception:  # noqa: BLE001 - metadata is best-effort only.
+        return None
+    sha = completed.stdout.strip()
+    return sha or None
+
+
+def _run_metadata(spec: EvalSpec, *, max_concurrency: int) -> dict[str, object]:
+    """Build sanitized metadata persisted with local eval results."""
+    metadata: dict[str, object] = {
+        "dataset": spec.name,
+        "dataset_path": spec.dataset_path,
+        "thresholds": spec.thresholds,
+        "max_concurrency": max_concurrency,
+        "commit_sha": _git_commit_sha(),
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    try:
+        from app.core.config import get_settings  # noqa: PLC0415
+
+        settings = get_settings()
+        metadata.update(
+            {
+                "environment": settings.ENVIRONMENT,
+                "llm_provider_mode": settings.LLM_PROVIDER_MODE,
+                "llm_chat_model": settings.LLM_CHAT_MODEL,
+                "eval_judge_model": settings.EVAL_JUDGE_MODEL
+                or settings.LLM_CHAT_MODEL,
+                "eval_embeddings_model": settings.EVAL_EMBEDDINGS_MODEL,
+                "kb_provider_mode": settings.KB_PROVIDER_MODE,
+            }
+        )
+    except Exception:  # noqa: BLE001 - app settings are helpful, not required.
+        pass
+    return metadata
 
 
 def _langfuse_evaluations(scores: list[Score]) -> list[Any]:
@@ -196,6 +243,7 @@ async def run_spec(
         thresholds=spec.thresholds,
         errors=state.errors,
         per_item=state.per_item,
+        metadata=_run_metadata(spec, max_concurrency=max_concurrency),
     )
     json_path, _ = write_run_result(result)
     logger.info(

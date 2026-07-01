@@ -90,7 +90,11 @@ ingestion and dashboard insight generation, remains polled by task/run status.
 4. KB search results from ready, visible documents.
 5. Safety policy configuration.
 
-Policy/process guidance must be grounded in KB or conversation file context. General model knowledge may only supply harmless background phrasing, not authoritative policy claims.
+Playbook athlete chat only handles athletics-related questions. Policy/process
+guidance must be grounded in KB or conversation file context. General model
+knowledge may only supply harmless broad athletics background phrasing, not
+authoritative policy claims. Non-athletics questions should be politely declined
+and steered back to athletics or department support topics.
 
 ### Flow
 
@@ -149,6 +153,7 @@ Policy/process guidance must be grounded in KB or conversation file context. Gen
 | No KB support for policy/process answer | Decline and direct athlete to athletic department |
 | Emergency request | Refuse advice and show emergency instructions |
 | Medical/legal/mental-health request | Decline and direct to appropriate official support |
+| Non-athletics question | Politely decline and steer back to athletics or department support topics |
 | NIL/compliance/recruiting without source support | Decline and direct athlete to athletic department |
 | Harassment/reporting topic | Provide only approved reporting path if present in KB; otherwise decline |
 
@@ -354,7 +359,7 @@ Constraints:
 
 Runtime LangGraph tracing uses Langfuse when both `TRACING_ENABLED=true` and
 `LANGFUSE_ENABLED=true` are configured with `LANGFUSE_PUBLIC_KEY`,
-`LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` for the backend API and backend
+`LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` for the backend API and backend
 Celery workers. Startup logs emit a `tracing_startup_check` or
 `backend_worker_tracing_startup_check` readiness payload so operators can see
 whether callbacks will attach.
