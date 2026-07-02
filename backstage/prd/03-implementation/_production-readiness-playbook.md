@@ -27,7 +27,8 @@ tests, docs, or runbooks.
 - [ ] **Eval gates** pass for retrieval, citations, grounded answers, refusals, emergency handling, admin insights, admin chat, and conversation titles.
 - [ ] **Deployment hardening** includes HTTPS, explicit CORS, security headers, request/body limits, internal DB/Valkey access only, health checks, resource limits, and non-debug prod config.
 - [ ] **Backups and recovery** include encrypted DB backups, object-storage retention/versioning, restore drill, migration rollback path, and documented RPO/RTO.
-- [ ] **Privacy/legal artifacts** exist: privacy notice, terms/acceptable use, subprocessor list, data retention/deletion policy, vulnerability disclosure path, and incident contact.
+- [ ] **Cookie posture** uses only essential cookies by default. Do not add analytics, marketing, replay, ad, or cross-site tracking cookies unless a separate consent/preference flow is implemented first.
+- [ ] **Privacy/legal artifacts** exist: privacy notice, terms/acceptable use, essential-cookie notice, subprocessor list, data retention/deletion policy, vulnerability disclosure path, and incident contact. Starter terms draft: `_terms-and-conditions.md`.
 
 ## P1 Gates Before Institutional Rollout
 
@@ -36,6 +37,7 @@ tests, docs, or runbooks.
 - [ ] **Incident runbook** defines severity levels, owner, communication path, containment, secret rotation, evidence capture, and post-incident review.
 - [ ] **Access reviews** cover OAuth apps, cloud/IAM roles, database users, LiteLLM keys, Langfuse access, S3 buckets, and admin/super-admin users.
 - [ ] **Data lifecycle** documents retention, deletion, export, audit-log retention, eval dataset redaction, and production-to-test data rules.
+- [ ] **Cookie inventory** is reviewed before each institutional rollout and confirms only auth/session, OAuth state, CSRF/security, and service-protection cookies or equivalent essential storage.
 - [ ] **Pen test or external review** is scheduled after P0 automation is green.
 
 ## Required Command Set
