@@ -3,7 +3,7 @@
 import { type ReactNode } from 'react'
 import Link from 'next/link'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { ChevronsUpDown, Database, LayoutDashboard, LogOut, MessageCircle, Settings, Users } from 'lucide-react'
+import { ChevronsUpDown, Database, FileText, LayoutDashboard, LogOut, MessageCircle, ScrollText, Settings, Users } from 'lucide-react'
 import { BrandLockup } from '@/src/components/ui'
 import { ROUTES } from '@/src/lib/constants/config'
 import { cn } from '@/src/lib/utils/cn'
@@ -26,6 +26,11 @@ const navItems: Array<{ id: AdminTab; icon: ReactNode; label: string }> = [
   { id: 'insights', icon: <LayoutDashboard className="pb-admin-nav-icon" />, label: 'Insights' },
   { id: 'kb', icon: <Database className="pb-admin-nav-icon" />, label: 'Knowledge base' },
   { id: 'users', icon: <Users className="pb-admin-nav-icon" />, label: 'Users & roles' },
+]
+
+const ACCOUNT_LEGAL_LINKS: Array<{ href: string; icon: ReactNode; label: string }> = [
+  { href: ROUTES.privacy, icon: <FileText className="h-4 w-4" />, label: 'Privacy Policy' },
+  { href: ROUTES.terms, icon: <ScrollText className="h-4 w-4" />, label: 'Terms of Service' },
 ]
 
 export function AdminNav({
@@ -110,6 +115,13 @@ export function AdminNav({
               <DropdownLinkItem href={ROUTES.chat} icon={<MessageCircle className="h-4 w-4" />}>
                 Chat workspace
               </DropdownLinkItem>
+              <div className="mt-1 border-t border-border pt-1">
+                {ACCOUNT_LEGAL_LINKS.map((link) => (
+                  <DropdownLinkItem href={link.href} icon={link.icon} key={link.href}>
+                    {link.label}
+                  </DropdownLinkItem>
+                ))}
+              </div>
               <div className="mt-1 border-t border-border pt-1">
                 <DropdownItem danger disabled={isLoggingOut} icon={<LogOut className="h-4 w-4" />} onSelect={onLogout}>
                   Sign out

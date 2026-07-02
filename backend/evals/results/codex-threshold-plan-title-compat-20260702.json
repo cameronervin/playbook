@@ -1,0 +1,192 @@
+{
+  "agent": "conversation_title",
+  "run_name": "codex-threshold-plan-title-compat-20260702",
+  "timestamp": "2026-07-02T17:31:58+00:00",
+  "passed": false,
+  "metadata": {
+    "dataset": "conversation_title",
+    "dataset_path": "evals/datasets/conversation_title.yaml",
+    "thresholds": {
+      "expected_answer": 0.9,
+      "privacy_leakage": 1.0
+    },
+    "max_concurrency": 1,
+    "commit_sha": "0190230a22ab07fe5db32d066e9900a396d87bc0",
+    "created_at": "2026-07-02T17:31:58+00:00",
+    "environment": "local",
+    "llm_provider_mode": "litellm",
+    "llm_chat_model": "playbook-chat",
+    "eval_judge_model": "playbook-chat",
+    "eval_embeddings_model": "text-embedding-3-small",
+    "kb_provider_mode": "local"
+  },
+  "mean_scores": {
+    "title_relevance": 4.666666666666667,
+    "title_brevity": 5.0,
+    "title_privacy": 5.0,
+    "expected_answer": 0.5,
+    "privacy_leakage": 1.0
+  },
+  "failures": [
+    "expected_answer: 0.500 < threshold 0.9"
+  ],
+  "errors": [],
+  "per_item": [
+    {
+      "item_id": "a44927d0e23aeec8",
+      "trace_id": "0f460412e802d3dbcf105f0889a51d69",
+      "scores": {
+        "title_relevance": {
+          "score": 5.0,
+          "reasoning": "The title closely matches the athlete's first support question about urgent help for a teammate at risk of self-harm. It captures both the subject (teammate) and the crisis nature of the request. It does not explicitly include words like 'emergency' or 'support,' but 'Crisis Help' conveys the same core meaning well."
+        },
+        "title_brevity": {
+          "score": 5.0,
+          "reasoning": "The title is short and easy to scan in chat history. At four words, it is compact while still preserving the essential context."
+        },
+        "title_privacy": {
+          "score": 5.0,
+          "reasoning": "The title contains no names, emails, IDs, or other sensitive personal identifiers. It refers only generally to a teammate and the situation type."
+        },
+        "expected_answer": {
+          "score": 0.0,
+          "reasoning": "missing expected answer terms: ['emergency', 'support']"
+        },
+        "privacy_leakage": {
+          "score": 1.0,
+          "reasoning": "no privacy leakage detected"
+        }
+      }
+    },
+    {
+      "item_id": "a915682129daa07e",
+      "trace_id": "eb2db0e01aabcc983c7b0f2e842a1e0a",
+      "scores": {
+        "title_relevance": {
+          "score": 5.0,
+          "reasoning": "The title directly reflects the athlete's first support issue about missing study hall check-in. It captures the core topic, though it omits the accountability/help aspect of who to notify."
+        },
+        "title_brevity": {
+          "score": 5.0,
+          "reasoning": "The title is very short and easy to scan in chat history, using only four words while still conveying the topic clearly."
+        },
+        "title_privacy": {
+          "score": 5.0,
+          "reasoning": "The title contains no names, emails, IDs, or other sensitive personal details. It is fully generic and privacy-safe."
+        },
+        "expected_answer": {
+          "score": 1.0,
+          "reasoning": "answer matched expected behavior"
+        },
+        "privacy_leakage": {
+          "score": 1.0,
+          "reasoning": "no privacy leakage detected"
+        }
+      }
+    },
+    {
+      "item_id": "29952e30069b89f9",
+      "trace_id": "dd48fd5734e7b0c88d18f6f09c616bc6",
+      "scores": {
+        "title_relevance": {
+          "score": 5.0,
+          "reasoning": "The title directly reflects the athlete's first support question about a contract clause involving a 30 day approval line. It includes the key concepts 'Contract' and 'Approval,' which align with the expected answer content. It is slightly less precise because it omits that the user is asking what the clause means, but it still captures the topic well."
+        },
+        "title_brevity": {
+          "score": 5.0,
+          "reasoning": "The title is short and easy to scan in chat history at four words. It conveys the topic without unnecessary filler."
+        },
+        "title_privacy": {
+          "score": 5.0,
+          "reasoning": "The title contains no names, email addresses, IDs, or other sensitive personal details. It is fully generic and privacy-safe."
+        },
+        "expected_answer": {
+          "score": 1.0,
+          "reasoning": "answer matched expected behavior"
+        },
+        "privacy_leakage": {
+          "score": 1.0,
+          "reasoning": "no privacy leakage detected"
+        }
+      }
+    },
+    {
+      "item_id": "4aec2e86fab5ba6b",
+      "trace_id": "f5e4967fb42d7a890500ea12f8b51539",
+      "scores": {
+        "title_relevance": {
+          "score": 4.0,
+          "reasoning": "The title captures the core issue about rules for extra game tickets, but it misses the recruiting context implied by 'a recruit's parent,' which the expected answer suggests should be reflected."
+        },
+        "title_brevity": {
+          "score": 5.0,
+          "reasoning": "The title is short and easy to scan in chat history, with only four words and no unnecessary detail."
+        },
+        "title_privacy": {
+          "score": 5.0,
+          "reasoning": "The title contains no names, emails, IDs, or other sensitive personal information; it is fully generic."
+        },
+        "expected_answer": {
+          "score": 0.0,
+          "reasoning": "missing expected answer terms: ['recruiting']"
+        },
+        "privacy_leakage": {
+          "score": 1.0,
+          "reasoning": "no privacy leakage detected"
+        }
+      }
+    },
+    {
+      "item_id": "45996c963a71f514",
+      "trace_id": "a822d79ab3424f91032e94234a2438f7",
+      "scores": {
+        "title_relevance": {
+          "score": 5.0,
+          "reasoning": "The title directly matches the athlete's first support question about where to upload travel receipts, and it includes the key concepts 'travel' and 'receipts'. It omits the Teamworks frustration detail, but still captures the core issue well."
+        },
+        "title_brevity": {
+          "score": 5.0,
+          "reasoning": "The title is short and easy to scan in chat history. At three words, it is compact without losing meaning."
+        },
+        "title_privacy": {
+          "score": 5.0,
+          "reasoning": "The title contains no names, emails, IDs, tokens, or other sensitive personal details. It is fully generic and privacy-safe."
+        },
+        "expected_answer": {
+          "score": 1.0,
+          "reasoning": "answer matched expected behavior"
+        },
+        "privacy_leakage": {
+          "score": 1.0,
+          "reasoning": "no privacy leakage detected"
+        }
+      }
+    },
+    {
+      "item_id": "4312603a60873df4",
+      "trace_id": "177777b8afe08553f43d26c97be79d1b",
+      "scores": {
+        "title_relevance": {
+          "score": 4.0,
+          "reasoning": "The title matches the athlete's core question about whether NIL-related paperwork must be completed before posting. It captures the timing concern ('before posting') and the NIL context. It does not explicitly mention 'disclosure,' which the reference hints at, but it is still clearly aligned with the first support question."
+        },
+        "title_brevity": {
+          "score": 5.0,
+          "reasoning": "The title is short and easy to scan in chat history. At four words, it is compact without losing meaning."
+        },
+        "title_privacy": {
+          "score": 5.0,
+          "reasoning": "The title contains no names, contact details, IDs, or other sensitive personal information. It is fully generic and privacy-safe."
+        },
+        "expected_answer": {
+          "score": 0.0,
+          "reasoning": "missing expected answer terms: ['disclosure']"
+        },
+        "privacy_leakage": {
+          "score": 1.0,
+          "reasoning": "no privacy leakage detected"
+        }
+      }
+    }
+  ]
+}

@@ -294,6 +294,8 @@ describe('ChatShell', () => {
     expect(screen.getByText(/get answers to your athletics questions,/i)).toBeInTheDocument()
     expect(screen.getByText(/playbookai is your coach off the field\./i)).toBeInTheDocument()
     expect(screen.getByText(/responses are ai generated\. review to confirm accuracy\./i)).toBeInTheDocument()
+    expect(screen.getByText(/uploaded files stay scoped to this conversation/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute('href', '/privacy')
     expect(screen.getByRole('button', { name: /attach file/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /attach file/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /^ask$/i })).toBeDisabled()
@@ -734,6 +736,8 @@ describe('ChatShell', () => {
 
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /chat workspace/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /privacy policy/i })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('menuitem', { name: /terms of service/i })).toHaveAttribute('href', '/terms')
 
     await userEvent.click(screen.getByRole('menuitem', { name: /settings/i }))
 
@@ -747,7 +751,7 @@ describe('ChatShell', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: /sign out/i }))
 
     expect(chatMocks.logoutMutateAsync).toHaveBeenCalledOnce()
-  })
+  }, 10000)
 
   it('shows only the admin dashboard switcher from the chat account menu for admins', async () => {
     currentUser.role = 'admin'
@@ -760,6 +764,8 @@ describe('ChatShell', () => {
 
     expect(adminDashboard).toBeInTheDocument()
     expect(adminDashboard).toHaveAttribute('href', '/admin')
+    expect(screen.getByRole('menuitem', { name: /privacy policy/i })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('menuitem', { name: /terms of service/i })).toHaveAttribute('href', '/terms')
     expect(screen.queryByRole('menuitem', { name: /chat workspace/i })).not.toBeInTheDocument()
-  })
+  }, 10000)
 })

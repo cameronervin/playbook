@@ -47,6 +47,7 @@ from app.infrastructure.streaming import cleanup_agent_stream_provider
 from app.middleware import setup_cors, setup_request_context, setup_session_refresh
 from app.observability.agent_trace import verify_tracing_configuration
 from app.observability.langfuse_init import init_langfuse, shutdown_langfuse
+from app.observability.sentry_init import init_sentry
 from app.services.rate_limit import cleanup_rate_limit_stores
 
 configure_logging()
@@ -184,6 +185,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI app."""
     settings = app_settings or get_settings()
     configure_logging(settings.LOG_LEVEL)
+    init_sentry(settings, service_name="backend-api", include_fastapi=True)
     app = FastAPI(
         title=settings.PROJECT_NAME,
         debug=settings.DEBUG,

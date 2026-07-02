@@ -14,6 +14,11 @@ export const ROUTES = {
   profile: '/profile',
   chat: '/chat',
   admin: '/admin',
+  privacy: '/privacy',
+  terms: '/terms',
+  cookies: '/cookies',
+  subprocessors: '/subprocessors',
+  security: '/security',
 } as const
 
 export const QUERY_KEYS = {

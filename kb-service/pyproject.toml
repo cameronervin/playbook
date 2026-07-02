@@ -28,6 +28,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "python-pptx>=1.0",
     "redis>=5.0.0",
+    "sentry-sdk>=2.64.0",
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.0",
     "tiktoken>=0.7",

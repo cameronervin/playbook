@@ -73,17 +73,7 @@ export function ProfileCardSkeleton() {
 }
 
 export function RootRedirectLoader() {
-  return (
-    <main className="pb-stage flex min-h-dvh items-center justify-center p-6" data-testid="root-redirect-loader">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <BrandLockup />
-        <span className="pb-refresh-note">
-          <PlaybookMark className="pb-think text-brand" size={18} />
-          Opening Playbook
-        </span>
-      </div>
-    </main>
-  )
+  return <PlaybookRouteLoader />
 }
 
 export function ChatWorkspaceSkeleton() {

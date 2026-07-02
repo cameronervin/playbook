@@ -1,0 +1,88 @@
+name: DAST
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_url:
+        description: "Staging frontend URL to scan."
+        required: true
+        type: string
+      api_url:
+        description: "Staging API base URL; /api/v1 is scanned."
+        required: true
+        type: string
+      fail_on_findings:
+        description: "Fail the workflow on ZAP baseline findings."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP Baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run ZAP baseline scans
+        env:
+          API_TARGET: ${{ inputs.api_url }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
+          FRONTEND_TARGET: ${{ inputs.frontend_url }}
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/dast/frontend .artifacts/dast/api
+
+          run_zap() {
+            local label="$1"
+            local target="$2"
+            local workdir="$3"
+            local report_prefix="$4"
+
+            echo "==> ZAP baseline: ${label} (${target})"
+            set +e
+            docker run --rm \
+              -v "$PWD/${workdir}:/zap/wrk:rw" \
+              ghcr.io/zaproxy/zaproxy:stable \
+              zap-baseline.py \
+              -t "$target" \
+              -a \
+              -m 5 \
+              -T 10 \
+              -J "${report_prefix}.json" \
+              -r "${report_prefix}.html" \
+              -w "${report_prefix}.md" \
+              -x "${report_prefix}.xml"
+            local code="$?"
+            set -e
+
+            if [[ "$code" -ne 0 && "$FAIL_ON_FINDINGS" == "true" ]]; then
+              echo "ZAP baseline failed for ${label} with status ${code}." >&2
+              return "$code"
+            fi
+            if [[ "$code" -ne 0 ]]; then
+              echo "WARN: ZAP baseline reported findings for ${label}; fail_on_findings=false."
+            fi
+          }
+
+          run_zap "frontend" "$FRONTEND_TARGET" ".artifacts/dast/frontend" "frontend"
+          run_zap "api" "${API_TARGET%/}/api/v1" ".artifacts/dast/api" "api"
+
+      - name: Upload DAST artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-artifacts
+          path: .artifacts/dast
+          if-no-files-found: warn
+          retention-days: 90

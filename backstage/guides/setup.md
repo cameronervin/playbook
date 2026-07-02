@@ -262,6 +262,10 @@ The frontend routes are `/login`, `/profile`, `/chat`, `/admin`, and `/`.
 The root route resolves the current session and redirects to the appropriate
 Playbook surface.
 
+Frontend Sentry monitoring is disabled unless `NEXT_PUBLIC_SENTRY_DSN` is set.
+Source-map upload uses `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`
+only during CI/builds; keep those values out of `.env.local`.
+
 ## 5. KB Service
 
 For standalone KB-service work, use Docker Compose for infrastructure and `uv`
@@ -353,6 +357,16 @@ KB infrastructure definitions:
    chat question or trigger a dashboard insight run and confirm the Langfuse
    trace has `playbook`, `env:*`, `mode:*`, and `phase:*` tags plus safe ID
    metadata only.
+8. If Sentry monitoring is enabled for a local/dev smoke, set
+   `SENTRY_ENABLED=true`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, and
+   `SENTRY_RELEASE` for the backend API, backend worker, KB API, and KB workers.
+   Use separate Sentry projects for frontend, backend, and KB-service in shared
+   environments. Keep Session Replay, user feedback, and Sentry Logs disabled.
+   The default trace sample rate is `0.1`; use `1.0` locally only when you
+   explicitly want every trace for a short smoke run. Frontend monitoring uses
+   `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`,
+   `NEXT_PUBLIC_SENTRY_RELEASE`, and
+   `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`.
 
 ### Direct Upload Smoke
 
@@ -418,6 +432,12 @@ Langfuse or model credentials:
 ./deploy/scripts/release-validate.sh --skip-frontend --skip-kb
 ```
 
+For the fuller CI-style release gate from the repo root:
+
+```bash
+./deploy/scripts/release-validate.sh --ci
+```
+
 The deterministic release checks can also be run directly from the backend:
 
 ```bash
@@ -436,11 +456,38 @@ uv run --group evals python -m evals.cli sync-datasets
 uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
 
 cd ..
-./deploy/scripts/release-validate.sh --live-evals
+./deploy/scripts/release-validate.sh --ci --live-evals
 ```
 
 Use `KB_PROVIDER_MODE=local` when validating real retrieval and citation
 behavior against KB-service. `mock` mode only validates harness plumbing.
+
+### Locust Load-Test Tooling
+
+Locust lives in `load-tests/` as a separate `uv` project. Local development does
+not need staging bearer tokens unless you run against a deployed environment.
+
+```bash
+cd load-tests
+uv sync
+uv run pytest -q
+uv run ruff check .
+cd ..
+
+# Validate command construction without opening sockets.
+./deploy/scripts/load-test.sh local \
+  --profile smoke \
+  --users 1 \
+  --spawn-rate 1 \
+  --run-time 30s \
+  --dry-run
+```
+
+For a real local smoke, start the backend with Developer SSO enabled
+(`DEV_AUTH_ENABLED=true`, `ENVIRONMENT=local`, `DEBUG=true`) so the Locust
+athlete/admin users can exercise the normal dev auth callback flow. Staging and
+release runs should use pre-provisioned non-production bearer tokens supplied
+through `PLAYBOOK_ATHLETE_BEARER_TOKENS` and `PLAYBOOK_ADMIN_BEARER_TOKENS`.
 
 ## Common Issues
 

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { BrandLockup } from '@/src/components/ui'
+import { PlaybookRouteLoader } from '@/src/components/features/loading/PlaybookLoaders'
 import { useCurrentUser } from '@/src/hooks/useAuth'
 import { ROUTES } from '@/src/lib/constants/config'
 import { getDefaultAuthenticatedRoute } from '@/src/lib/authRouting'
@@ -20,12 +20,5 @@ export default function RootRedirect() {
     router.replace(getDefaultAuthenticatedRoute(user))
   }, [isError, isLoading, router, user])
 
-  return (
-    <main className="pb-stage flex min-h-dvh items-center justify-center p-6">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <BrandLockup />
-        <p className="pb-refresh-note">Opening Playbook</p>
-      </div>
-    </main>
-  )
+  return <PlaybookRouteLoader />
 }

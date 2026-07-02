@@ -27,26 +27,34 @@ FROM python:3.12-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libpq5 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /home/app --create-home app \
+    && mkdir -p /app/backend \
+    && chown -R app:app /app /home/app
 
 ENV PATH="/opt/venv/bin:$PATH" \
-    UV_PROJECT_ENVIRONMENT=/opt/venv
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    HOME=/home/app \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Lay the backend out under /app/backend so the container layout mirrors the
 # repo: /app is the "repo root" and /app/backend matches the local backend/ dir.
 WORKDIR /app/backend
 
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder --chown=app:app /opt/venv /opt/venv
 
 # Application code and migrations.
-COPY app app/
-COPY alembic alembic/
-COPY alembic.ini .
-COPY pyproject.toml uv.lock ./
+COPY --chown=app:app app app/
+COPY --chown=app:app alembic alembic/
+COPY --chown=app:app alembic.ini .
+COPY --chown=app:app pyproject.toml uv.lock ./
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+USER app
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

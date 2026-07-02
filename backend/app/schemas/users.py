@@ -52,8 +52,6 @@ class SessionResponse(BaseModel):
     """Authenticated session payload."""
 
     user: UserResponse
-    access_token: str
-    token_type: str = "bearer"
     next_route: str
 
 

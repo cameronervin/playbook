@@ -6,8 +6,10 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.api import health as health_module
 from app.api.deps.services import get_configuration_service, get_ingestion_service
-from app.main import app
+from app.core.config import Settings
+from app.main import app, cors_origins_for_settings, docs_urls_for_settings
 from app.schemas.ingest import (
     DocumentMetadataRefreshResponse,
     IngestDocumentResponse,
@@ -148,11 +150,60 @@ def test_canonical_kb_routes_reject_bad_bearer_token() -> None:
     assert response.status_code == 401
 
 
-def test_health_routes_allow_unauthenticated_access() -> None:
+def test_health_routes_allow_unauthenticated_access(monkeypatch) -> None:
+    async def ok_postgres() -> tuple[str, str]:
+        return "postgres", "ok"
+
+    async def ok_valkey() -> tuple[str, str]:
+        return "valkey", "ok"
+
+    monkeypatch.setattr(health_module, "_check_postgres", ok_postgres)
+    monkeypatch.setattr(health_module, "_check_valkey", ok_valkey)
     client = TestClient(app)
 
     assert client.get("/health").status_code == 200
     assert client.get("/api/kb/health").status_code == 200
+
+
+def test_health_routes_return_503_when_dependencies_are_degraded(monkeypatch) -> None:
+    async def degraded_postgres() -> tuple[str, str]:
+        return "postgres", "error: unavailable"
+
+    async def ok_valkey() -> tuple[str, str]:
+        return "valkey", "ok"
+
+    monkeypatch.setattr(health_module, "_check_postgres", degraded_postgres)
+    monkeypatch.setattr(health_module, "_check_valkey", ok_valkey)
+    client = TestClient(app)
+
+    response = client.get("/api/kb/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "degraded"
+
+
+def test_production_disables_docs_and_wildcard_cors() -> None:
+    production_settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql+asyncpg://kb:kb@localhost:5432/kb",
+        KB_WEBHOOK_SECRET="long-webhook-secret-value-123456",
+        KB_API_SECRET="long-api-secret-value-1234567890",
+        ENVIRONMENT="production",
+        LLM_PROVIDER_MODE="litellm",
+        LITELLM_BASE_URL="https://litellm.example.com",
+        LITELLM_API_KEY="litellm-key",
+        CORS_ORIGINS="https://app.example.com,https://admin.example.com",
+    )
+
+    assert docs_urls_for_settings(production_settings) == {
+        "openapi_url": None,
+        "docs_url": None,
+        "redoc_url": None,
+    }
+    assert cors_origins_for_settings(production_settings) == [
+        "https://app.example.com",
+        "https://admin.example.com",
+    ]
 
 
 def test_configuration_resolve_accepts_empty_authenticated_request() -> None:

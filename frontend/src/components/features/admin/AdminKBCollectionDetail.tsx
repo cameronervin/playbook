@@ -239,6 +239,9 @@ export function AdminKBCollectionDetail({
                 <span className="pb-admin-kb-upload-accepted">
                   Accepted file types: PDF, DOCX, PPTX, or XLSX.
                 </span>
+                <span className="pb-admin-kb-upload-accepted">
+                  Only upload department-approved content.
+                </span>
               </span>
             </div>
           </section>

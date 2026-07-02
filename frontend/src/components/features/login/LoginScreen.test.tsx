@@ -77,6 +77,8 @@ describe('LoginScreen', () => {
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/can't log in/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/all systems operational/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('link', { name: /terms of service/i })).toHaveAttribute('href', '/terms')
   })
 
   it('renders a session-expired message when redirected after inactivity', () => {

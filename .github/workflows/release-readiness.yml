@@ -1,0 +1,138 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      live_evals:
+        description: "Run strict Langfuse-backed evals. Requires approved runtime credentials."
+        required: false
+        default: false
+        type: boolean
+      staging_load:
+        description: "Run the staging Locust smoke load gate. Requires staging URLs and test tokens."
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+  GO_VERSION: "1.24.x"
+  GITLEAKS_VERSION: "v8.27.2"
+  OSV_SCANNER_VERSION: "v2.4.0"
+  TRIVY_VERSION: "v0.72.0"
+
+jobs:
+  release-validation:
+    name: Deterministic Release Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Go for scanner CLIs
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install uv and OSS scanner CLIs
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit pip-audit semgrep uv
+          go install "github.com/gitleaks/gitleaks/v8@${GITLEAKS_VERSION}"
+          go install "github.com/google/osv-scanner/v2/cmd/osv-scanner@${OSV_SCANNER_VERSION}"
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sync backend dependencies
+        run: uv sync --locked --all-groups
+        working-directory: backend
+
+      - name: Sync KB-service dependencies
+        run: uv sync --locked --all-groups
+        working-directory: kb-service
+
+      - name: Sync frontend dependencies
+        run: npm ci --ignore-scripts
+        working-directory: frontend
+
+      - name: Run release validation command
+        env:
+          RELEASE_VALIDATE_BUILD_IMAGES: "true"
+          RUN_LIVE_EVALS: ${{ github.event_name == 'workflow_dispatch' && inputs.live_evals || false }}
+          RUN_STAGING_LOAD: ${{ github.event_name == 'workflow_dispatch' && inputs.staging_load || false }}
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          STAGING_KB_BASE_URL: ${{ secrets.STAGING_KB_BASE_URL }}
+          PLAYBOOK_ATHLETE_BEARER_TOKENS: ${{ secrets.PLAYBOOK_ATHLETE_BEARER_TOKENS }}
+          PLAYBOOK_ADMIN_BEARER_TOKENS: ${{ secrets.PLAYBOOK_ADMIN_BEARER_TOKENS }}
+          PLAYBOOK_KB_API_SECRET: ${{ secrets.PLAYBOOK_KB_API_SECRET }}
+          PLAYBOOK_LOAD_ORGANIZATION_ID: ${{ secrets.PLAYBOOK_LOAD_ORGANIZATION_ID }}
+        run: |
+          args=()
+          if [[ "$RUN_LIVE_EVALS" == "true" ]]; then
+            args+=(--live-evals)
+          fi
+          if [[ "$RUN_STAGING_LOAD" == "true" ]]; then
+            args+=(--staging-load)
+          fi
+          ./deploy/scripts/release-validate.sh --ci --include-scanners "${args[@]}"
+
+      - name: Upload security scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-security-scan-artifacts
+          path: .artifacts/security-scan
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-sbom-artifacts
+          path: .artifacts/sbom
+          if-no-files-found: warn
+          retention-days: 180
+
+      - name: Upload load-test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-artifacts
+          path: .artifacts/load-tests
+          if-no-files-found: ignore
+          retention-days: 90

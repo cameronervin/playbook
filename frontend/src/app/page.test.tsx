@@ -74,6 +74,9 @@ describe('RootRedirect', () => {
     await mockCurrentUser({ isLoading: true })
     renderWithQuery(<RootRedirect />)
 
-    expect(screen.getByText(/opening playbook/i)).toBeInTheDocument()
+    expect(screen.getByTestId('playbook-brand-loader')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /loading playbook/i })).toBeInTheDocument()
+    expect(screen.getByText(/^Loading$/i)).toBeInTheDocument()
+    expect(screen.queryByText(/opening playbook/i)).not.toBeInTheDocument()
   })
 })

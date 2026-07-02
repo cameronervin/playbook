@@ -14,6 +14,9 @@ from typing import Literal
 
 import yaml
 
+from evals.core.validation import validate_specs
+from evals.specs import REGISTRY
+
 IssueSeverity = Literal["error", "warning"]
 
 DEFAULT_SCAN_PATHS = (
@@ -247,29 +250,42 @@ def check_rate_limit_release_config(*, repo_root: Path) -> list[ReleaseCheckIssu
             )
         ]
     text = prod_env.read_text(encoding="utf-8", errors="ignore")
+    issues: list[ReleaseCheckIssue] = []
     required = (
         "RATE_LIMIT_ENABLED=true",
         "RATE_LIMIT_STORE_MODE=valkey",
-        "RATE_LIMIT_VALKEY_URL=${RATE_LIMIT_VALKEY_URL}",
     )
-    return [
-        ReleaseCheckIssue(
-            severity="error",
-            path="deploy/envs/.env.prod.example",
-            message=f"{setting} is required for production rate-limit release gates.",
+    for setting in required:
+        if setting not in text:
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path="deploy/envs/.env.prod.example",
+                    message=(
+                        f"{setting} is required for production rate-limit "
+                        "release gates."
+                    ),
+                )
+            )
+    rate_limit_valkey_url = _env_value(text, "RATE_LIMIT_VALKEY_URL")
+    if not rate_limit_valkey_url:
+        issues.append(
+            ReleaseCheckIssue(
+                severity="error",
+                path="deploy/envs/.env.prod.example",
+                message=(
+                    "RATE_LIMIT_VALKEY_URL must be set for production "
+                    "rate-limit release gates."
+                ),
+            )
         )
-        for setting in required
-        if setting not in text
-    ]
+    return issues
 
 
 def _dataset_validation_issues(
     *,
     specs: Iterable[object] | None,
 ) -> list[ReleaseCheckIssue]:
-    from evals.core.validation import validate_specs
-    from evals.specs import REGISTRY
-
     resolved_specs = list(specs) if specs is not None else list(REGISTRY.values())
     return [
         ReleaseCheckIssue(
@@ -297,6 +313,16 @@ def _iter_text_files(repo_root: Path, scan_paths: Sequence[str]) -> Iterable[Pat
 
 def _is_text_path(path: Path) -> bool:
     return path.suffix.lower() in TEXT_SUFFIXES
+
+
+def _env_value(text: str, key: str) -> str | None:
+    prefix = f"{key}="
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or not stripped.startswith(prefix):
+            continue
+        return stripped[len(prefix) :].split("#", 1)[0].strip()
+    return None
 
 
 def _required_string(

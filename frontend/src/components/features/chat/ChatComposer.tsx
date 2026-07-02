@@ -1,8 +1,10 @@
 'use client'
 
 import { forwardRef, useImperativeHandle, useRef, useState, type ChangeEvent } from 'react'
+import Link from 'next/link'
 import { AlertTriangle, FileText, LoaderCircle, Paperclip, Send } from 'lucide-react'
 import { Button } from '@/src/components/ui'
+import { ROUTES } from '@/src/lib/constants/config'
 import { SUPPORTED_UPLOAD_ACCEPT } from '@/src/lib/constants/uploads'
 import type { ConversationFileSummary } from '@/src/types/conversations'
 import type { ChatUploadRow } from '@/src/components/features/chat/chatTypes'
@@ -132,6 +134,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         <p className="pb-ui-xs mt-2.5 text-center text-fg-4">
           Responses are AI generated. Review to confirm accuracy.
         </p>
+        {canAttach && (
+          <p className="pb-ui-xs mt-1.5 text-center text-fg-4">
+            Uploaded files stay scoped to this conversation. See the{' '}
+            <Link className="font-semibold text-fg-3 transition hover:text-fg-1" href={ROUTES.privacy}>
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        )}
       </div>
     </div>
   )

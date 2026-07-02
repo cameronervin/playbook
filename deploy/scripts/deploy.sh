@@ -8,6 +8,7 @@ set -e
 #   --build   Force rebuild images
 #   --down    Stop services instead of starting
 #   --logs    Follow logs after starting
+#   --evidence Capture readiness/migration evidence after a detached start
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_DIR="$SCRIPT_DIR/../compose"
@@ -20,12 +21,14 @@ BUILD=""
 DETACH=""
 LOGS=""
 DOWN=""
+EVIDENCE=""
 
 for arg in "$@"; do
     case $arg in
         --build) BUILD="--build" ;;
         --down)  DOWN="true" ;;
         --logs)  LOGS="true" ;;
+        --evidence) EVIDENCE="true" ;;
         *) echo "Unknown option: $arg"; exit 1 ;;
     esac
 done
@@ -33,7 +36,7 @@ done
 # Validate environment
 if [[ ! "$ENV" =~ ^(local|dev|prod)$ ]]; then
     echo "Error: invalid environment '$ENV'"
-    echo "Usage: $0 [local|dev|prod] [--build] [--down] [--logs]"
+    echo "Usage: $0 [local|dev|prod] [--build] [--down] [--logs] [--evidence]"
     exit 1
 fi
 
@@ -78,6 +81,15 @@ fi
 
 echo "Starting services..."
 $COMPOSE_CMD up $BUILD $DETACH
+
+if [[ "$EVIDENCE" == "true" ]]; then
+    if [[ "$DETACH" == "-d" ]]; then
+        "$SCRIPT_DIR/readiness-evidence.sh" "$ENV"
+    else
+        echo "Readiness evidence is available after detached starts only."
+        echo "Run separately: $SCRIPT_DIR/readiness-evidence.sh $ENV"
+    fi
+fi
 
 if [[ "$LOGS" == "true" && "$DETACH" == "-d" ]]; then
     $COMPOSE_CMD logs -f

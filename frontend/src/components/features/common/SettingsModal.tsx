@@ -4,8 +4,10 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import type { ChangeEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Check, Lock, Mail, User, X } from 'lucide-react'
 import { Button, IconButton } from '@/src/components/ui'
+import { ROUTES } from '@/src/lib/constants/config'
 import { cn } from '@/src/lib/utils/cn'
 import type { CurrentUser, UserRole } from '@/src/types/auth'
 
@@ -27,6 +29,14 @@ interface ProfileDraft {
 
 const SETTINGS_NAV: Array<{ id: SettingsSection; icon: typeof User; label: string }> = [
   { id: 'profile', icon: User, label: 'Profile' },
+]
+
+const SETTINGS_LEGAL_LINKS = [
+  { href: ROUTES.privacy, label: 'Privacy Policy' },
+  { href: ROUTES.terms, label: 'Terms of Service' },
+  { href: ROUTES.cookies, label: 'Cookie Notice' },
+  { href: ROUTES.subprocessors, label: 'Subprocessors' },
+  { href: ROUTES.security, label: 'Security' },
 ]
 
 export function SettingsModal({ open, onOpenChange, user }: SettingsModalProps) {
@@ -166,6 +176,22 @@ function ProfilePane({ draft, onPatch }: ProfilePaneProps) {
           <Field label="Role">
             <SettingsInput readOnly value={draft.roleLabel} />
           </Field>
+        </div>
+      </Group>
+      <Group
+        description="Review the current Playbook legal and security notices."
+        title="Legal"
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SETTINGS_LEGAL_LINKS.map((link) => (
+            <Link
+              className="pb-focus-control pb-settings-meta rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg-2 transition hover:bg-surface-hover hover:text-fg-1"
+              href={link.href}
+              key={link.href}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
       </Group>
     </div>

@@ -3,7 +3,7 @@
 import { type ReactNode, useMemo, useState } from 'react'
 import Link from 'next/link'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { ChevronsUpDown, LayoutDashboard, LogOut, Plus, Search, Settings, X } from 'lucide-react'
+import { ChevronsUpDown, FileText, LayoutDashboard, LogOut, Plus, ScrollText, Search, Settings, X } from 'lucide-react'
 import { ChatHistorySkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { BrandLockup } from '@/src/components/ui'
 import { ROUTES } from '@/src/lib/constants/config'
@@ -25,6 +25,11 @@ interface ChatNavRailProps {
   onSelectConversation: (conversationId: string) => void
   user?: CurrentUser
 }
+
+const ACCOUNT_LEGAL_LINKS: Array<{ href: string; icon: ReactNode; label: string }> = [
+  { href: ROUTES.privacy, icon: <FileText className="h-4 w-4" />, label: 'Privacy Policy' },
+  { href: ROUTES.terms, icon: <ScrollText className="h-4 w-4" />, label: 'Terms of Service' },
+]
 
 export function ChatNavRail({
   activeConversationId,
@@ -187,6 +192,13 @@ export function ChatNavRail({
                   Admin dashboard
                 </DropdownLinkItem>
               )}
+              <div className="mt-1 border-t border-border pt-1">
+                {ACCOUNT_LEGAL_LINKS.map((link) => (
+                  <DropdownLinkItem href={link.href} icon={link.icon} key={link.href}>
+                    {link.label}
+                  </DropdownLinkItem>
+                ))}
+              </div>
               <div className="mt-1 border-t border-border pt-1">
                 <DropdownItem danger disabled={isLoggingOut} icon={<LogOut className="h-4 w-4" />} onSelect={onLogout}>
                   Sign out

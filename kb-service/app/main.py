@@ -12,12 +12,39 @@ import structlog
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.logging_config import configure_logging
 from app.infrastructure.db.session import cleanup_db_engine
+from app.observability.sentry_init import init_sentry
 
 configure_logging(settings.LOG_LEVEL)
+init_sentry(settings, service_name="kb-api", include_fastapi=True)
 logger = structlog.get_logger(__name__)
+
+
+def _is_production_environment(value: str) -> bool:
+    return value.lower() in {"prod", "production"}
+
+
+def _parse_cors_origins(value: str) -> list[str]:
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+def docs_urls_for_settings(app_settings: Settings) -> dict[str, str | None]:
+    """Return FastAPI docs/OpenAPI URLs for the current environment."""
+    if _is_production_environment(app_settings.ENVIRONMENT):
+        return {"openapi_url": None, "docs_url": None, "redoc_url": None}
+    return {"openapi_url": "/openapi.json", "docs_url": "/docs", "redoc_url": None}
+
+
+def cors_origins_for_settings(app_settings: Settings) -> list[str]:
+    """Return explicit CORS origins, keeping wildcard only for non-production."""
+    configured = _parse_cors_origins(app_settings.CORS_ORIGINS)
+    if configured:
+        return configured
+    if _is_production_environment(app_settings.ENVIRONMENT):
+        return []
+    return ["*"]
 
 
 @asynccontextmanager
@@ -40,14 +67,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url="/openapi.json",
-    docs_url="/docs",
     lifespan=lifespan,
+    **docs_urls_for_settings(settings),
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins_for_settings(settings),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

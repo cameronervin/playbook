@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.infrastructure.db.session import get_engine
@@ -56,7 +57,7 @@ async def _check_valkey() -> tuple[str, str]:
 
 
 @router.get("", tags=["health"])
-async def health_check() -> dict:
+async def health_check() -> JSONResponse:
     """Liveness + readiness probe.
 
     Probes Postgres (SELECT 1) and Valkey (PING).
@@ -67,4 +68,8 @@ async def health_check() -> dict:
     overall = "ok" if all(v == "ok" for v in results.values()) else "degraded"
     if overall == "degraded":
         logger.error("kb_health_degraded", checks=results)
-    return {"status": overall, "checks": results}
+        return JSONResponse(
+            status_code=503,
+            content={"status": overall, "checks": results},
+        )
+    return JSONResponse(content={"status": overall, "checks": results})

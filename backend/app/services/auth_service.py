@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -49,6 +50,23 @@ from app.schemas.users import (
 logger = structlog.get_logger(__name__)
 
 _STATE_COOKIE_MAX_AGE = 600
+
+
+@dataclass(frozen=True)
+class CreatedSession:
+    """Internal session creation result.
+
+    The app JWT is intentionally internal-only and should only be copied to the
+    HttpOnly cookie, never serialized in browser-facing JSON.
+    """
+
+    user: UserResponse
+    access_token: str
+    next_route: str
+
+    def public_response(self) -> SessionResponse:
+        """Return the browser/API-safe session payload."""
+        return SessionResponse(user=self.user, next_route=self.next_route)
 
 
 def user_to_response(user: User) -> UserResponse:
@@ -148,7 +166,7 @@ class AuthService:
         state: str,
         request: Request,
         response: Response,
-    ) -> SessionResponse:
+    ) -> CreatedSession:
         """Handle OAuth callback, upsert user/account, and create a session."""
         self._validate_state(provider=provider, state=state, request=request)
         client = self.provider_registry.get_client(provider)
@@ -202,13 +220,13 @@ class AuthService:
             user_id=str(user.id),
             organization_id=str(user.organization_id),
         )
-        return SessionResponse(
+        return CreatedSession(
             user=user_to_response(user),
             access_token=access_token,
             next_route=self._next_route(user=user),
         )
 
-    def browser_redirect_response(self, session: SessionResponse) -> RedirectResponse:
+    def browser_redirect_response(self, session: CreatedSession) -> RedirectResponse:
         """Build a browser redirect response with session cookies attached."""
         redirect = RedirectResponse(
             url=f"{self.settings.FRONTEND_URL.rstrip('/')}{session.next_route}",

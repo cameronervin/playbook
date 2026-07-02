@@ -226,6 +226,7 @@ describe('AdminKBCollectionDetail', () => {
     expect(dropButton).toHaveTextContent('or')
     expect(dropButton).toHaveTextContent('Browse files')
     expect(dropButton).toHaveTextContent('Accepted file types: PDF, DOCX, PPTX, or XLSX.')
+    expect(dropButton).toHaveTextContent('Only upload department-approved content.')
 
     const file = new File(['hello'], 'active-upload.pdf', { type: 'application/pdf' })
     await act(async () => {

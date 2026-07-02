@@ -45,10 +45,11 @@ files, tokens, secrets, and raw IP addresses are not logged.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Liveness/readiness check |
+| GET | `/health` | Liveness check |
+| GET | `/ready` | Readiness check for deploy smoke; returns `503` when traffic-serving dependencies are degraded |
 | GET | `/auth/providers` | List configured OAuth providers; includes local-only Developer SSO when dev auth is enabled |
 | GET | `/auth/{provider}/login` | Return OAuth authorization URL and bind state cookie |
-| GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session; browser callers receive a 303 redirect to `FRONTEND_URL + next_route` |
+| GET | `/auth/{provider}/callback` | Complete OAuth callback and issue app session in an HttpOnly cookie; browser callers receive a 303 redirect to `FRONTEND_URL + next_route`, while JSON callers receive user and `next_route` only |
 | POST | `/auth/session/refresh` | Refresh the current app session on authenticated user activity; returns `204` |
 | POST | `/auth/logout` | Revoke the current app session when present and clear the session cookie |
 | GET | `/users/me` | Return current authenticated user/profile |

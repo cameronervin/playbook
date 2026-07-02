@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import AppError
+from app.observability.sentry_init import capture_exception
 from app.schemas.errors import (
     ErrorDetail,
     ErrorResponse,
@@ -57,6 +58,20 @@ def _http_exception_message(detail: object) -> str:
     return str(detail)
 
 
+def _safe_validation_errors(exc: RequestValidationError) -> list[dict[str, object]]:
+    """Return validation error details without raw submitted values."""
+    safe_errors: list[dict[str, object]] = []
+    for error in exc.errors():
+        safe_errors.append(
+            {
+                "loc": [str(loc) for loc in error.get("loc", [])],
+                "msg": error.get("msg"),
+                "type": error.get("type"),
+            }
+        )
+    return safe_errors
+
+
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """Handle custom AppError exceptions with standardized response."""
     logger.error(
@@ -69,6 +84,8 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         status_code=exc.status,
         exc_info=True,
     )
+    if exc.status >= 500:
+        capture_exception(exc)
 
     details = dict(exc.details)
     if (request_id := _request_id(request)) is not None:
@@ -106,6 +123,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     }
     error_code = error_code_map.get(exc.status_code, "UNKNOWN_ERROR")
     retryable = exc.status_code in (429, 500, 503, 504)
+    if exc.status_code >= 500:
+        capture_exception(exc)
 
     details = {}
     if (request_id := _request_id(request)) is not None:
@@ -131,7 +150,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         "Request validation failed",
         path=request.url.path,
         method=request.method,
-        errors=exc.errors(),
+        validation_errors=_safe_validation_errors(exc),
     )
 
     validation_errors = [
@@ -170,6 +189,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         error_type=type(exc).__name__,
         exc_info=True,
     )
+    capture_exception(exc)
 
     details = {"error_type": type(exc).__name__}
     if (request_id := _request_id(request)) is not None:

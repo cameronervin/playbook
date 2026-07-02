@@ -2,11 +2,13 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { AuthCard } from '@/src/components/features/auth/AuthLayout'
 import { ProfileCardSkeleton } from '@/src/components/features/loading/PlaybookLoaders'
 import { BrandLockup, Button, Input } from '@/src/components/ui'
 import { useCurrentUser } from '@/src/hooks/useAuth'
 import { useUpdateProfile } from '@/src/hooks/useProfile'
+import { ROUTES } from '@/src/lib/constants/config'
 
 export function ProfileScreen() {
   const router = useRouter()
@@ -78,6 +80,13 @@ export function ProfileScreen() {
           {"I'm ready"}
         </Button>
       </form>
+      <p className="pb-auth-copy mt-4 max-w-[30ch] text-left">
+        Profile details help route support. See the{' '}
+        <Link className="font-semibold text-fg-2 transition hover:text-fg-1" href={ROUTES.privacy}>
+          Privacy Policy
+        </Link>
+        .
+      </p>
     </AuthCard>
   )
 }

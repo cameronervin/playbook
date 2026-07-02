@@ -9,6 +9,7 @@ from evals import cli as eval_cli
 from evals.core.release_checks import (
     check_affiliation_copy,
     check_litellm_virtual_key_policy,
+    check_rate_limit_release_config,
 )
 
 
@@ -55,6 +56,43 @@ def test_litellm_policy_requires_budget_and_rate_fields(tmp_path: Path) -> None:
         "virtual_keys[0].budget_duration is required.",
         "virtual_keys[0].rpm_limit must be a positive number.",
     }
+
+
+def test_rate_limit_release_config_accepts_internal_valkey_url(tmp_path: Path) -> None:
+    env_path = tmp_path / "deploy" / "envs" / ".env.prod.example"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text(
+        "\n".join(
+            [
+                "RATE_LIMIT_ENABLED=true",
+                "RATE_LIMIT_STORE_MODE=valkey",
+                "RATE_LIMIT_VALKEY_URL=redis://valkey:6379/3",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert check_rate_limit_release_config(repo_root=tmp_path) == []
+
+
+def test_rate_limit_release_config_requires_url_value(tmp_path: Path) -> None:
+    env_path = tmp_path / "deploy" / "envs" / ".env.prod.example"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text(
+        "\n".join(
+            [
+                "RATE_LIMIT_ENABLED=true",
+                "RATE_LIMIT_STORE_MODE=valkey",
+                "RATE_LIMIT_VALKEY_URL=",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    issues = check_rate_limit_release_config(repo_root=tmp_path)
+
+    assert issues
+    assert "RATE_LIMIT_VALKEY_URL must be set" in issues[0].message
 
 
 def test_release_checks_cli_reports_failures_without_langfuse(monkeypatch) -> None:

@@ -63,10 +63,58 @@ def test_direct_mode_requires_explicit_openai_key() -> None:
     assert "OPENAI_API_KEY is required when LLM_PROVIDER_MODE=direct" in message
 
 
+def test_production_requires_litellm_unless_break_glass_enabled() -> None:
+    try:
+        _base_settings(
+            ENVIRONMENT="production",
+            LLM_PROVIDER_MODE="direct",
+            OPENAI_API_KEY="direct-key",
+        )
+    except ValidationError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Settings should reject production direct provider mode")
+
+    assert "LLM_PROVIDER_MODE must be litellm in production" in message
+
+    settings = _base_settings(
+        ENVIRONMENT="production",
+        LLM_PROVIDER_MODE="direct",
+        OPENAI_API_KEY="direct-key",
+        ALLOW_DIRECT_LLM_IN_PROD=True,
+    )
+
+    assert settings.ALLOW_DIRECT_LLM_IN_PROD is True
+
+
 def test_ocr_provider_defaults_to_none() -> None:
     settings = _base_settings()
 
     assert settings.OCR_PROVIDER == "none"
+    assert settings.SENTRY_ENABLED is False
+    assert settings.SENTRY_DSN == ""
+    assert settings.SENTRY_ENVIRONMENT == ""
+    assert settings.SENTRY_RELEASE == ""
+    assert settings.SENTRY_TRACES_SAMPLE_RATE == 0.1
+    assert settings.SENTRY_PROFILES_SAMPLE_RATE == 0.0
+
+
+def test_sentry_runtime_settings_accept_env_overrides() -> None:
+    settings = _base_settings(
+        SENTRY_ENABLED=True,
+        SENTRY_DSN="https://public@example.ingest.sentry.io/2",
+        SENTRY_ENVIRONMENT="staging",
+        SENTRY_RELEASE="kb-service@2026.07.02",
+        SENTRY_TRACES_SAMPLE_RATE="0.2",
+        SENTRY_PROFILES_SAMPLE_RATE="0.01",
+    )
+
+    assert settings.SENTRY_ENABLED is True
+    assert settings.SENTRY_DSN.startswith("https://public@")
+    assert settings.SENTRY_ENVIRONMENT == "staging"
+    assert settings.SENTRY_RELEASE == "kb-service@2026.07.02"
+    assert settings.SENTRY_TRACES_SAMPLE_RATE == 0.2
+    assert settings.SENTRY_PROFILES_SAMPLE_RATE == 0.01
 
 
 def test_rerank_placeholders_default_to_disabled_litellm_alias() -> None:

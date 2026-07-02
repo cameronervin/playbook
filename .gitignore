@@ -12,7 +12,9 @@ build/
 *.log
 .coverage
 .pytest_cache/
+.ruff_cache/
 coverage/
+.artifacts/
 
 # Environment files - never commit secrets
 .env

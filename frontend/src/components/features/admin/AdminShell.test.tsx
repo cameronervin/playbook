@@ -898,6 +898,8 @@ describe('AdminShell', () => {
 
     expect(chatWorkspace).toBeInTheDocument()
     expect(chatWorkspace).toHaveAttribute('href', '/chat')
+    expect(screen.getByRole('menuitem', { name: /privacy policy/i })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('menuitem', { name: /terms of service/i })).toHaveAttribute('href', '/terms')
     expect(screen.queryByRole('menuitem', { name: /admin dashboard/i })).not.toBeInTheDocument()
   })
 

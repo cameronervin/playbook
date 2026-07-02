@@ -256,14 +256,11 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert body["user"]["email"] == oauth_client.email
     assert body["user"]["name"] == oauth_client.display_name
     assert body["next_route"] == "/profile"
-    assert body["access_token"] != oauth_client.access_token
-    decoded_token = jwt.decode(body["access_token"], test_settings.SECRET_KEY, algorithms=["HS256"])
-    assert decoded_token["sub"]
-    assert decoded_token["sid"]
     assert oauth_client.access_token not in callback_response.text
     assert oauth_client.refresh_token not in callback_response.text
     assert oauth_client.subject not in callback_response.text
-    assert "access_token" in body
+    assert "access_token" not in body
+    assert "token_type" not in body
     assert "refresh_token" not in body
     assert "refresh_token" not in callback_response.text
     assert "oauth_accounts" not in body
@@ -289,7 +286,6 @@ async def test_oauth_callback_creates_session_without_exposing_provider_tokens(
     assert account is not None
     assert user is not None
     assert app_session is not None
-    assert decoded_token["sid"] == str(app_session.id)
     assert app_session.revoked_at is None
     assert account.user_id == user.id
     assert account.access_token == oauth_client.access_token

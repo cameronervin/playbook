@@ -33,6 +33,7 @@ from app.infrastructure.checkpointer import (
 )
 from app.observability.agent_trace import verify_tracing_configuration
 from app.observability.langfuse_init import init_langfuse, shutdown_langfuse
+from app.observability.sentry_init import init_sentry
 from app.workers.queues import (
     BACKEND_INSIGHTS_QUEUE,
     TASK_QUEUES,
@@ -248,6 +249,7 @@ def init_worker_resources(**_: Any) -> None:
     if _worker_resources_initialized:
         return
 
+    init_sentry(settings, service_name="backend-worker", include_celery=True)
     init_langfuse(settings)
     tracing_status = verify_tracing_configuration(settings)
     logger.info("backend_worker_tracing_startup_check", **tracing_status)

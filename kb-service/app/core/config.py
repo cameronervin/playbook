@@ -16,6 +16,14 @@ def _is_production_environment(value: str) -> bool:
     return value.lower() in {"prod", "production"}
 
 
+def _is_local_url(value: str) -> bool:
+    return "localhost" in value or "127.0.0.1" in value
+
+
+def _parse_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def _require_min_secret_length(
     errors: list[str],
     *,
@@ -47,6 +55,7 @@ class Settings(BaseSettings):
     #   direct:  calls the OpenAI API directly with OPENAI_API_KEY (dev/test)
     # -------------------------------------------------------------------------
     LLM_PROVIDER_MODE: Literal["direct", "litellm"] = "litellm"
+    ALLOW_DIRECT_LLM_IN_PROD: bool = False
 
     # Shared embedding tuning (applies to both modes)
     KB_EMBED_DIMENSIONS: int = 1536
@@ -112,6 +121,16 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "KB Service"
     ENVIRONMENT: str = "local"
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    CORS_ORIGINS: str = ""
+
+    # Sentry — runtime error monitoring and tracing. Disabled by default and
+    # only initialized when SENTRY_ENABLED=true and SENTRY_DSN is present.
+    SENTRY_ENABLED: bool = False
+    SENTRY_DSN: str = Field(default="", repr=False)
+    SENTRY_ENVIRONMENT: str = ""
+    SENTRY_RELEASE: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
+    SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
 
     # -------------------------------------------------------------------------
     # Chunking — changing these requires re-ingesting existing documents
@@ -227,6 +246,17 @@ class Settings(BaseSettings):
                     "LITELLM_RERANK_MODEL is required when KB_RERANK_ENABLED=true"
                 )
         if _is_production_environment(self.ENVIRONMENT):
+            if self.LLM_PROVIDER_MODE == "direct" and not self.ALLOW_DIRECT_LLM_IN_PROD:
+                errors.append(
+                    "LLM_PROVIDER_MODE must be litellm in production unless "
+                    "ALLOW_DIRECT_LLM_IN_PROD=true"
+                )
+            if self.LLM_PROVIDER_MODE == "litellm" and _is_local_url(
+                self.LITELLM_BASE_URL
+            ):
+                errors.append("LITELLM_BASE_URL cannot use localhost in production")
+            if "*" in _parse_csv(self.CORS_ORIGINS):
+                errors.append("CORS_ORIGINS cannot contain '*' in production")
             _require_min_secret_length(
                 errors,
                 name="KB_API_SECRET",

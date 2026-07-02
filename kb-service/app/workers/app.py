@@ -49,6 +49,7 @@ from celery.signals import (
 from app.core.config import settings
 from app.core.logging_config import configure_logging, install_secret_redaction_filter
 from app.infrastructure.embedders.factory import build_fresh_embed_provider
+from app.observability.sentry_init import init_sentry
 
 configure_logging(settings.LOG_LEVEL)
 logger = structlog.get_logger(__name__)
@@ -189,6 +190,8 @@ def init_worker_resources(**kwargs) -> None:
         return
 
     global _worker_loop, _worker_loop_owner_thread
+
+    init_sentry(settings, service_name="kb-worker", include_celery=True)
 
     from sqlalchemy import create_engine
     from sqlalchemy.engine.url import make_url

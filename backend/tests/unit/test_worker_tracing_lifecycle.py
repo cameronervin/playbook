@@ -129,6 +129,20 @@ def test_worker_lifecycle_initializes_langfuse_once_and_shutdowns(
         assert app_settings is worker_app.settings
         calls.append("init_langfuse")
 
+    def fake_init_sentry(
+        app_settings: Settings,
+        *,
+        service_name: str,
+        include_celery: bool = False,
+        include_fastapi: bool = False,
+    ) -> bool:
+        assert app_settings is worker_app.settings
+        assert service_name == "backend-worker"
+        assert include_celery is True
+        assert include_fastapi is False
+        calls.append("init_sentry")
+        return True
+
     def fake_verify(app_settings: Settings) -> dict[str, object]:
         assert app_settings is worker_app.settings
         calls.append("verify_tracing")
@@ -138,6 +152,7 @@ def test_worker_lifecycle_initializes_langfuse_once_and_shutdowns(
     monkeypatch.setattr(worker_app, "_worker_loop_owner_thread", None)
     monkeypatch.setattr(worker_app, "_worker_resources_initialized", False)
     monkeypatch.setattr(worker_app, "init_langfuse", fake_init_langfuse, raising=False)
+    monkeypatch.setattr(worker_app, "init_sentry", fake_init_sentry, raising=False)
     monkeypatch.setattr(
         worker_app,
         "verify_tracing_configuration",
@@ -160,6 +175,7 @@ def test_worker_lifecycle_initializes_langfuse_once_and_shutdowns(
     worker_app.init_worker_resources()
     worker_app.teardown_worker_resources()
 
+    assert calls.count("init_sentry") == 1
     assert calls.count("init_langfuse") == 1
     assert calls.count("verify_tracing") == 1
     assert calls[-1] == "shutdown_langfuse"

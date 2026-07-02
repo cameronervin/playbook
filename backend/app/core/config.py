@@ -106,6 +106,7 @@ class Settings(BaseSettings):
     LLM_CHAT_MODEL: str = "claude-sonnet-4-6"
     LLM_TITLE_MODEL: str = ""
     LLM_DIRECT_PROVIDER: Literal["anthropic", "openai", "google"] = "anthropic"
+    ALLOW_DIRECT_LLM_IN_PROD: bool = False
 
     # --- LiteLLM mode ---
     LITELLM_BASE_URL: str = "http://localhost:4000"
@@ -179,6 +180,15 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str = Field(default="", repr=False)
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
+
+    # Sentry — runtime error monitoring and tracing. Disabled by default and
+    # only initialized when SENTRY_ENABLED=true and SENTRY_DSN is present.
+    SENTRY_ENABLED: bool = False
+    SENTRY_DSN: str = Field(default="", repr=False)
+    SENTRY_ENVIRONMENT: str = ""
+    SENTRY_RELEASE: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
+    SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
 
     # --- Rate limiting ---------------------------------------------------------
     # Disabled by default for host-run local development; deployed environments
@@ -258,6 +268,11 @@ class Settings(BaseSettings):
                 )
 
         if is_production:
+            if self.LLM_PROVIDER_MODE == "direct" and not self.ALLOW_DIRECT_LLM_IN_PROD:
+                errors.append(
+                    "LLM_PROVIDER_MODE must be litellm in production unless "
+                    "ALLOW_DIRECT_LLM_IN_PROD=true"
+                )
             if self.SECRET_KEY in ("change-me", "change-me-in-production"):
                 errors.append("SECRET_KEY must be changed in production")
             if self.OAUTH_STATE_SECRET in ("change-me", "change-me-oauth-state"):
@@ -284,6 +299,8 @@ class Settings(BaseSettings):
                 errors.append("FRONTEND_URL cannot use localhost in production")
             if _is_local_url(self.API_PUBLIC_URL):
                 errors.append("API_PUBLIC_URL cannot use localhost in production")
+            if self.COOKIE_DOMAIN and _is_local_url(self.COOKIE_DOMAIN):
+                errors.append("COOKIE_DOMAIN cannot use localhost in production")
             if self.LLM_PROVIDER_MODE == "litellm" and _is_local_url(
                 self.LITELLM_BASE_URL
             ):

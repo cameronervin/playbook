@@ -73,7 +73,7 @@ async def callback(
     )
     if _prefers_html(request):
         return service.browser_redirect_response(session)
-    return session
+    return session.public_response()
 
 
 @router.post("/logout", response_model=LogoutResponse)
