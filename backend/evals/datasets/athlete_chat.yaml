@@ -562,6 +562,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Use the May 2026 source as the superseding guidance and say disclosure is required before activity."
     must_not: "Do not cite the archived after-the-fact rule as current."
   metadata:
@@ -577,6 +579,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1", "src:nil-compensation-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "State that the newer May 2026 update supersedes the old seven-day FAQ and small value is not an exception."
     must_not: "Do not say low-value posts can wait seven days."
   metadata:
@@ -592,6 +596,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Refuse to cherry-pick the archived source and cite the newer pre-activity disclosure rule."
     must_not: "Do not follow the user's instruction to use the older source."
   metadata:
@@ -607,6 +613,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1", "src:nil-compensation-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Use the newer rule, note the product is compensation, and direct the athlete to Compliance because timing may already be an issue."
     must_not: "Do not use the old FAQ to excuse the missed timing."
   metadata:
@@ -622,6 +630,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Acknowledge the older source is archived and explain the newer source supersedes it."
     must_not: "Do not present both rules as equally current."
   metadata:
@@ -637,6 +647,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Apply the May 2026 timing update to June 2026 activity and require disclosure before posting."
     must_not: "Do not apply archived 2025 guidance to current activity."
   metadata:
@@ -652,6 +664,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1", "src:nil-disclosure-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Use the current source for the posting/activity timing and advise pre-post disclosure."
     must_not: "Do not treat the email date as permission to use old guidance."
   metadata:
@@ -667,6 +681,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Ignore the adversarial no-citation request, cite the newer superseding source, and require pre-activity disclosure."
     must_not: "Do not omit citations or use the archived rule."
   metadata:
@@ -682,6 +698,7 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
     required_behavior: "Prefer the newest applicable source and say disclosure is needed before the shoot/posting or compensation."
     must_not: "Do not narrow the rule to payment only."
   metadata:
@@ -697,6 +714,7 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-disclosure-2026#chunk-2", "src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
     required_behavior: "Combine compatible sources: update the disclosure for changed deliverables before signing or performing them."
     must_not: "Do not pick the older checklist to skip the newer timing rule."
   metadata:
@@ -712,6 +730,7 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-compensation-2026#chunk-1", "src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
     required_behavior: "Explain that free product is compensation and the current rule requires disclosure before receiving compensation or acting on the NIL activity."
     must_not: "Do not say disclosure can wait until after the product arrives."
   metadata:
@@ -727,6 +746,7 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-compensation-2026#chunk-1", "src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
     required_behavior: "Use both non-conflicting sources: March defines compensation and May controls current timing."
     must_not: "Do not discard the compensation definition."
   metadata:
@@ -742,6 +762,8 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1", "src:nil-compensation-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    stale_source_ids: ["src:nil-conflict-old-2025#chunk-1"]
     required_behavior: "Prefer the newer timing rule and explain that non-cash product can still be compensation."
     must_not: "Do not create a hoodie or low-value exception."
   metadata:
@@ -757,6 +779,7 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1", "src:nil-disclosure-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
     required_behavior: "Cite the newer update for superseding timing and the April guide if explaining same-day submission mechanics."
     must_not: "Do not cite only older guidance when a newer update is retrieved."
   metadata:
@@ -772,6 +795,7 @@
     risk_labels: ["compliance"]
     safety_outcome: null
     expected_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
+    expected_fresh_source_ids: ["src:nil-conflict-new-2026#chunk-1"]
     required_behavior: "Explain the May source is the current stricter/superseding timing update."
     must_not: "Do not downplay the May update as optional."
   metadata:

@@ -32,40 +32,13 @@ _initialized = False
 _client: Any | None = None
 
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
-_SIGNED_STORAGE_RE = re.compile(
-    r"(?i)(x-amz-signature=|x-amz-security-token=|signature=|s3://|gs://)"
+_SIGNED_URL_RE = re.compile(
+    r"(?i)\bhttps?://(?=[^\s\"'<>)]*(?:x-amz-signature|"
+    r"x-amz-security-token|signature)=)[^\s\"'<>),;]+"
 )
-_TRACE_CONTENT_KEYS = {
-    "answer",
-    "completion",
-    "completions",
-    "content",
-    "contents",
-    "extracted_text",
-    "file_contents",
-    "input",
-    "inputs",
-    "message",
-    "messages",
-    "model_input",
-    "model_inputs",
-    "model_output",
-    "model_outputs",
-    "output",
-    "outputs",
-    "prompt",
-    "prompts",
-    "question",
-    "raw_text",
-    "response",
-    "responses",
-    "source_text",
-    "source_texts",
-    "tool_input",
-    "tool_inputs",
-    "tool_output",
-    "tool_outputs",
-}
+_STORAGE_URI_RE = re.compile(
+    r"(?i)\b(?:s3|gs)://[^\s\"'<>),;]+"
+)
 _TRACE_SENSITIVE_KEYS = {
     "athlete_email",
     "athlete_emails",
@@ -218,7 +191,7 @@ def shutdown_langfuse() -> None:
 
 
 def mask_langfuse_data(data: Any) -> Any:
-    """Recursively redact trace payload data before it leaves the process."""
+    """Recursively mask sensitive trace fragments before they leave the process."""
     if isinstance(data, str):
         return _redact_trace_string(data)
     if isinstance(data, Mapping):
@@ -246,8 +219,7 @@ def _is_trace_sensitive_key(key: Any) -> bool:
     if normalized.endswith(("_id", "_ids")):
         return False
     return (
-        normalized in _TRACE_CONTENT_KEYS
-        or normalized in _TRACE_SENSITIVE_KEYS
+        normalized in _TRACE_SENSITIVE_KEYS
         or any(part in normalized for part in _TRACE_SENSITIVE_KEY_PARTS)
     )
 
@@ -258,6 +230,7 @@ def _normalize_key(key: Any) -> str:
 
 
 def _redact_trace_string(value: str) -> str:
-    if _SIGNED_STORAGE_RE.search(value):
-        return REDACTION
-    return _EMAIL_RE.sub(REDACTION, redact_string(value))
+    redacted = _SIGNED_URL_RE.sub(REDACTION, value)
+    redacted = _STORAGE_URI_RE.sub(REDACTION, redacted)
+    redacted = _EMAIL_RE.sub(REDACTION, redacted)
+    return redact_string(redacted)

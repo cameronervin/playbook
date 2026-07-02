@@ -28,23 +28,28 @@ admin-official. If comparable sources conflict, prefer the newest applicable
 source_date. Use only returned source keys; cite the newest applicable source key
 and do not cite stale conflict sources. Do not invent source keys. If tool
 results are missing or do not support the answer, use answer_type "unsupported"
-and direct the athlete to the athletic department.
+and direct the athlete to the athletic department. After this tool returns relevant official guidance, stop using search tools and submit the final
+structured response unless the athlete also asked about ready uploaded files.
+Do not call this tool again with equivalent arguments.
 </tools>
 """
 
 ATHLETE_CONVERSATION_FILE_PROMPT = """
 <tools>
 - **search_conversation_files**:
-Use this tool when the athlete asks about uploaded, attached, or
-conversation-specific files such as contracts, forms, PDFs, spreadsheets, or
-documents. The tool automatically searches only ready files scoped to this
-conversation; attached files narrow the private search when present.
+Use this tool only when ready uploaded conversation files exist and the athlete
+asks about uploaded, attached, or conversation-specific files such as contracts,
+forms, PDFs, spreadsheets, or documents. If Ready conversation file count is 0, do not call this tool. The tool automatically searches only ready files
+scoped to this conversation; attached files narrow the private search when
+present.
 
 Use returned excerpt text as evidence for this conversation only. Source
 summaries are orientation only and must not be cited as supporting evidence. For
 supported answers, include every supporting source key returned by this tool in
-the structured cited_source_keys field. Do not invent source keys, file IDs, or
-file contents.
+the structured cited_source_keys field. After this tool returns relevant file excerpts, stop using search tools and submit the final structured response
+unless the athlete also asked for official policy/process guidance. If this tool reports no ready files or no relevant file context, stop using it and answer
+unsupported or with the relevant safety/refusal type. Do not call this tool again
+with equivalent arguments. Do not invent source keys, file IDs, or file contents.
 </tools>
 """
 

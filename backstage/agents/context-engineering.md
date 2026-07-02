@@ -50,6 +50,11 @@ Athlete chat uses `create_athlete_chat_middleware()` in the nested
 - applies `assert_message_loop_bounded(...)`;
 - appends compact runtime context: current question, KB-support flag,
   topic/risk labels, attached-file IDs/count, and ready-file count;
+- appends a `Tool Guidance Reminder` that mirrors the athlete prompt's
+  tool-use policy: tools are optional, `search_conversation_files` must not be
+  called when ready-file count is `0`, equivalent search calls must not repeat,
+  and no-results/no-ready-files tool responses should end tool use for that
+  answer;
 - appends a bounded uploaded-file manifest when ready conversation files have
   summaries or file metadata available.
 
@@ -180,11 +185,15 @@ def get_serializer(field_name: str, tier: str):
   middleware preserves that history, filters blank message entries, applies the
   message-loop guard, and appends a compact runtime context with the current
   question, KB-support flag, labels, attached-file IDs/count, and ready-file
-  count. It may append a bounded uploaded-file manifest for orientation. Shared
-  KB context is loaded just-in-time through `search_playbook_knowledgebase`.
-  Uploaded-file evidence is loaded just-in-time through
-  `search_conversation_files`, using private scope prepared deterministically by
-  the graph. Citation metadata is captured from registered sources rather than
+  count plus explicit tool-stop guidance. It may append a bounded uploaded-file
+  manifest for orientation. Shared KB context is loaded just-in-time through
+  `search_playbook_knowledgebase`; the prompt tells the model to stop after a
+  relevant official-guidance result or a clear no-results result. Uploaded-file
+  evidence is loaded just-in-time through `search_conversation_files`, using
+  private scope prepared deterministically by the graph; the prompt and runtime
+  reminder both prohibit this tool when no ready files exist and tell the model
+  not to retry equivalent file searches after no ready files/no relevant file
+  context. Citation metadata is captured from registered sources rather than
   injected wholesale.
 - For dashboard insights, `load_run` and `build_snapshot` own the deterministic
   context load. The chain receives the stable dashboard prompt plus one compact

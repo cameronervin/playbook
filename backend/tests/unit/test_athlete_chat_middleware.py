@@ -124,6 +124,11 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
     assert "Attached file count: 2" in context
     assert "Attached file IDs: file-1, file-2" in context
     assert "Ready conversation file count: 1" in context
+    assert "### Tool Guidance Reminder" in context
+    assert "Requires KB support is true" in context
+    assert "If Ready conversation file count is 0, do not call search_conversation_files" in context
+    assert "After a relevant tool result, produce the final structured response" in context
+    assert "Do not call the same search tool with equivalent arguments twice" in context
     assert "Source result" not in context
 
 

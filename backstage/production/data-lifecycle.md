@@ -23,7 +23,7 @@ through clear data governance, minimization, retention, and disposal practices.
 | Admin analytics | Anonymized query snapshots, dashboard insights, admin chat history. | Exclude athlete names, emails, raw user IDs, provider subjects, teams, and storage keys. |
 | Audit logs | Role changes, KB actions, manual insight runs, admin chat events. | Append-only operational evidence. |
 | Evals | Golden datasets, result summaries, trace IDs, judge scores. | Keep generated result artifacts out of git unless explicitly redacted. |
-| Operational telemetry | Logs, traces, Sentry events, scanner/workflow artifacts. | Scrub secrets, prompts, source text, signed URLs, raw IPs, and athlete identity. |
+| Operational telemetry | Logs, traces, Sentry events, scanner/workflow artifacts. | Scrub secrets, signed URLs, raw IPs, and athlete identity; approved Langfuse traces may retain prompt/source content for evaluation, but exported artifacts require privacy review. |
 
 ## Retention Table
 

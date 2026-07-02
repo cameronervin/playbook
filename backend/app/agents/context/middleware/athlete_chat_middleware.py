@@ -116,6 +116,30 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
             f"Attached file count: {len(attached_file_ids)}",
             f"Attached file IDs: {_csv_or_none(attached_file_ids)}",
             f"Ready conversation file count: {len(ready_file_ids)}",
+            "",
+            "### Tool Guidance Reminder",
+            (
+                "Data tools are optional. Use search tools only when the current "
+                "question needs official KB evidence or ready uploaded-file "
+                "evidence."
+            ),
+            (
+                "If Ready conversation file count is 0, do not call "
+                "search_conversation_files. For uploaded-file questions with no "
+                "ready files, say the file is not available for search yet and "
+                "submit the final structured response."
+            ),
+            (
+                "After a relevant tool result, produce the final structured "
+                "response unless the current question clearly needs the other "
+                "search tool."
+            ),
+            (
+                "Do not call the same search tool with equivalent arguments twice. "
+                "If a search returns no results, no ready files, or unavailable, "
+                "stop using that tool and answer unsupported or with the relevant "
+                "safety/refusal type."
+            ),
         ]
     )
 

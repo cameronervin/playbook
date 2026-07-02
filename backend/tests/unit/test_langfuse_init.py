@@ -140,7 +140,7 @@ def test_create_langfuse_handler_returns_fresh_callback(
     assert first is not second
 
 
-def test_mask_langfuse_data_redacts_content_and_secrets() -> None:
+def test_mask_langfuse_data_preserves_trace_content_and_redacts_secrets() -> None:
     payload = {
         "messages": [
             {
@@ -150,6 +150,10 @@ def test_mask_langfuse_data_redacts_content_and_secrets() -> None:
         ],
         "input": "raw prompt with SECRET_TOKEN=super-secret",
         "output": "raw answer with Bearer token-secret",
+        "tool_input": "search NIL policy source text",
+        "tool_output": "source says submit in Teamworks",
+        "source_text": "official policy excerpt",
+        "answer": "Submit the NIL disclosure before posting.",
         "metadata": {
             "organization_id": "org-123",
             "assistant_message_id": "msg-456",
@@ -172,9 +176,18 @@ def test_mask_langfuse_data_redacts_content_and_secrets() -> None:
     masked = langfuse_init.mask_langfuse_data(payload)
     rendered = repr(masked)
 
-    assert masked["messages"] == REDACTION
-    assert masked["input"] == REDACTION
-    assert masked["output"] == REDACTION
+    assert masked["messages"] == [
+        {
+            "role": "user",
+            "content": f"Jane Smith asked from {REDACTION}",
+        }
+    ]
+    assert masked["input"] == f"raw prompt with SECRET_TOKEN={REDACTION}"
+    assert masked["output"] == f"raw answer with Bearer {REDACTION}"
+    assert masked["tool_input"] == "search NIL policy source text"
+    assert masked["tool_output"] == "source says submit in Teamworks"
+    assert masked["source_text"] == "official policy excerpt"
+    assert masked["answer"] == "Submit the NIL disclosure before posting."
     assert masked["metadata"]["organization_id"] == "org-123"
     assert masked["metadata"]["assistant_message_id"] == "msg-456"
     assert masked["metadata"]["email"] == REDACTION
@@ -185,20 +198,33 @@ def test_mask_langfuse_data_redacts_content_and_secrets() -> None:
     assert masked["metadata"]["raw_ip_address"] == REDACTION
     assert masked["metadata"]["source_uri"] == REDACTION
     assert masked["metadata"]["sourceUri"] == REDACTION
-    assert masked["metadata"]["source_text"] == REDACTION
+    assert masked["metadata"]["source_text"] == "private policy source text"
     assert masked["metadata"]["storage_key"] == REDACTION
     assert masked["metadata"]["storageKey"] == REDACTION
     assert masked["metadata"]["signed_url"] == REDACTION
     assert masked["metadata"]["public_note"] == "safe ids only"
-    assert "Jane Smith" not in rendered
     assert "jane.smith@example.edu" not in rendered
     assert "oauth-provider-subject" not in rendered
     assert "203.0.113.40" not in rendered
     assert "198.51.100.40" not in rendered
-    assert "private policy source text" not in rendered
     assert "super-secret" not in rendered
     assert "token-secret" not in rendered
     assert "private-bucket" not in rendered
+
+
+def test_mask_langfuse_data_redacts_storage_references_inside_trace_text() -> None:
+    payload = {
+        "prompt": (
+            "Review https://storage.test/file.pdf?X-Amz-Signature=abc and "
+            "s3://private-bucket/org/document.pdf before answering."
+        ),
+    }
+
+    masked = langfuse_init.mask_langfuse_data(payload)
+
+    assert masked["prompt"] == (
+        f"Review {REDACTION} and {REDACTION} before answering."
+    )
 
 
 def test_shutdown_langfuse_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:

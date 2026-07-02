@@ -5,6 +5,7 @@ from uuid import UUID
 
 from langchain.tools import ToolRuntime
 
+from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.agents.tools.knowledgebase import (
     ATHLETE_CONVERSATION_FILE_TOOL_PROFILE,
     ATHLETE_KB_TOOL_PROFILE,
@@ -15,7 +16,6 @@ from app.agents.tools.knowledgebase import (
     format_conversation_file_context,
     register_knowledgebase_sources,
 )
-from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.infrastructure.knowledgebase.providers.local_kb import LocalKBProvider
 from app.infrastructure.streaming import InMemoryAgentStreamProvider
 from app.schemas.knowledgebase import KnowledgebaseResult, RetrievedChunk
@@ -733,6 +733,28 @@ async def test_conversation_file_tool_hides_private_scope_and_searches_ready_fil
     )
 
 
+def test_athlete_knowledgebase_tools_expose_described_argument_schemas() -> None:
+    athlete_tool = create_knowledgebase_search_tool(ATHLETE_KB_TOOL_PROFILE)
+    file_tool = create_conversation_file_search_tool(
+        ATHLETE_CONVERSATION_FILE_TOOL_PROFILE
+    )
+
+    athlete_fields = athlete_tool.args_schema.model_fields
+    file_fields = file_tool.args_schema.model_fields
+    assert "focused official policy or process search terms" in athlete_fields[
+        "query"
+    ].description
+    assert "Use a small value" in athlete_fields["max_docs"].description
+    assert "Lower only when the first focused search misses" in athlete_fields[
+        "score_threshold"
+    ].description
+    assert "ready uploaded conversation files exist" in file_fields["query"].description
+    assert "Do not call this tool when ready file count is 0" in file_fields[
+        "query"
+    ].description
+    assert "Usually 1 to 3" in file_fields["max_docs"].description
+
+
 async def test_conversation_file_tool_returns_no_ready_files_message_without_provider_call() -> (
     None
 ):
@@ -756,7 +778,8 @@ async def test_conversation_file_tool_returns_no_ready_files_message_without_pro
             },
         )
 
-    assert result == "No ready uploaded conversation files are available."
+    assert "No ready uploaded conversation files are available." in result
+    assert "Stop using search_conversation_files for this answer" in result
     assert provider.conversation_file_requests == []
 
 

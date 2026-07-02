@@ -14,6 +14,7 @@ import structlog
 from langchain.tools import ToolRuntime
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.runtime_context import AthleteChatRuntimeContext
 from app.core.exceptions import KnowledgebaseError
@@ -76,7 +77,8 @@ ATHLETE_KB_TOOL_PROFILE = KnowledgebaseToolProfile(
     description=(
         "Search official Playbook athletic department knowledge base sources for "
         "athlete NIL, compliance, recruiting, reporting, and process guidance. "
-        "Use this before making policy or process claims."
+        "Use this before making policy or process claims, then stop once enough "
+        "official evidence is found."
     ),
     metadata_filter={"visibility_policy": {"scope": "all_athletes"}},
 )
@@ -86,12 +88,78 @@ ATHLETE_CONVERSATION_FILE_TOOL_PROFILE = KnowledgebaseToolProfile(
     tool_name="search_conversation_files",
     description=(
         "Search ready uploaded files attached to the current athlete conversation. "
-        "Use this for questions about uploaded contracts, forms, documents, or "
-        "conversation-specific file contents."
+        "Use this only when ready uploaded files exist and the athlete asks about "
+        "contracts, forms, documents, or conversation-specific file contents."
     ),
-    no_results_message="No relevant uploaded conversation file context found.",
+    no_results_message=(
+        "No relevant uploaded conversation file context found. Stop using "
+        "search_conversation_files for this answer."
+    ),
     unavailable_message="Conversation file search temporarily unavailable.",
 )
+
+
+class KnowledgebaseSearchInput(BaseModel):
+    """Arguments for official athlete KB search."""
+
+    model_config = ConfigDict(extra="allow")
+
+    query: str = Field(
+        description=(
+            "focused official policy or process search terms for the athlete's "
+            "current NIL, compliance, recruiting, reporting, or department "
+            "process question."
+        )
+    )
+    max_docs: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description=(
+            "Use a small value, usually 3 to 5. Increase only when the question "
+            "requires comparing multiple official sources."
+        ),
+    )
+    score_threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Optional retrieval threshold. Lower only when the first focused "
+            "search misses and one more broader search is justified."
+        ),
+    )
+
+
+class ConversationFileSearchInput(BaseModel):
+    """Arguments for private ready-file search."""
+
+    model_config = ConfigDict(extra="allow")
+
+    query: str = Field(
+        description=(
+            "Focused search terms for uploaded-file content. Use only when ready "
+            "uploaded conversation files exist. Do not call this tool when ready "
+            "file count is 0."
+        )
+    )
+    max_docs: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description=(
+            "Usually 1 to 3 excerpts are enough for an uploaded-file answer."
+        ),
+    )
+    score_threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Optional private-file retrieval threshold. Lower only for one "
+            "broader retry after a focused uploaded-file search misses."
+        ),
+    )
 
 
 @contextmanager
@@ -198,6 +266,7 @@ def create_knowledgebase_search_tool(
         coroutine=_search,
         name=profile.tool_name,
         description=profile.description,
+        args_schema=KnowledgebaseSearchInput,
     )
 
 
@@ -238,7 +307,10 @@ def create_conversation_file_search_tool(
             )
             return profile.unavailable_message
         if not file_ids:
-            return "No ready uploaded conversation files are available."
+            return (
+                "No ready uploaded conversation files are available. Stop using "
+                "search_conversation_files for this answer."
+            )
 
         resolved_max_docs = max_docs or profile.default_max_docs
         resolved_score_threshold = (
@@ -291,6 +363,7 @@ def create_conversation_file_search_tool(
         coroutine=_search,
         name=profile.tool_name,
         description=profile.description,
+        args_schema=ConversationFileSearchInput,
     )
 
 

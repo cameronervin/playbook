@@ -130,6 +130,16 @@ def _expected_source_ids(expected_output: object) -> list[str]:
     return [str(source_id) for source_id in raw if str(source_id).strip()]
 
 
+def _reference(expected_output: object) -> str:
+    """Return the compact reference text Ragas should judge against."""
+    if isinstance(expected_output, dict):
+        for key in ("required_behavior", "expected_behavior", "expected_answer"):
+            value = expected_output.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return str(expected_output)
+
+
 @dataclass
 class RagasJudge:
     """RAG retrieval/generation judge backed by injected LiteLLM models."""
@@ -187,7 +197,7 @@ class RagasJudge:
             user_input=_question(run),
             response=_response(run),
             retrieved_contexts=retrieved_contexts or None,
-            reference=str(expected_output),
+            reference=_reference(expected_output),
         )
         scores: list[Score] = []
         for name, metric in self._build_metrics(rubric):

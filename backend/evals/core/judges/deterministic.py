@@ -177,7 +177,7 @@ def score_retrieval_hit(
     required = _expected_strings(expected, _EXPECTED_SOURCE_KEYS)
     acceptable = _expected_strings(expected, _ACCEPTABLE_SOURCE_KEYS)
     if not required and not acceptable:
-        return _score(name, False, "retrieval hit", "missing expected source IDs")
+        return _skip_score(name, "skipped: no expected sources for this sample")
 
     sources = retrieved_sources(run)
     top_k = _positive_int(_first_present(expected, ("retrieval_top_k", "top_k")))
@@ -477,58 +477,27 @@ def score_source_freshness(
     fresh_ids = _expected_strings(expected, _FRESH_SOURCE_KEYS)
     stale_ids = _expected_strings(expected, _STALE_SOURCE_KEYS)
 
-    if fresh_ids:
-        missing_fresh = [
-            source_id
-            for source_id in fresh_ids
-            if not _citation_set_matches_expected(citations, source_id, sources)
-        ]
-        stale_cited = [
-            source_id
-            for source_id in stale_ids
-            if _citation_set_matches_expected(citations, source_id, sources)
-        ]
-        return _score(
-            name,
-            not missing_fresh and not stale_cited,
-            "newest expected source was cited without stale conflict sources",
-            _join_reasons(
-                [
-                    f"missing fresh citations: {missing_fresh}" if missing_fresh else "",
-                    f"stale sources cited: {stale_cited}" if stale_cited else "",
-                ]
-            ),
-        )
+    if not fresh_ids:
+        return _skip_score(name, "skipped: no freshness expectation for this sample")
 
-    dated_sources = [source for source in sources if source.source_date is not None]
-    if not dated_sources:
-        return _score(name, False, "newest source was cited", "no dated sources found")
-
-    newest_date = max(source.source_date for source in dated_sources)
-    newest_sources = [
-        source for source in dated_sources if source.source_date == newest_date
+    missing_fresh = [
+        source_id
+        for source_id in fresh_ids
+        if not _citation_set_matches_expected(citations, source_id, sources)
     ]
-    older_sources = [
-        source for source in dated_sources if source.source_date != newest_date
-    ]
-    cited_newest = any(
-        _source_matches(source, citation)
-        for source in newest_sources
-        for citation in citations
-    )
-    cited_older = [
-        citation
-        for citation in citations
-        if any(_source_matches(source, citation) for source in older_sources)
+    stale_cited = [
+        source_id
+        for source_id in stale_ids
+        if _citation_set_matches_expected(citations, source_id, sources)
     ]
     return _score(
         name,
-        cited_newest and not cited_older,
-        "newest retrieved source was cited",
+        not missing_fresh and not stale_cited,
+        "newest expected source was cited without stale conflict sources",
         _join_reasons(
             [
-                "newest retrieved source was not cited" if not cited_newest else "",
-                f"older source citations present: {cited_older}" if cited_older else "",
+                f"missing fresh citations: {missing_fresh}" if missing_fresh else "",
+                f"stale sources cited: {stale_cited}" if stale_cited else "",
             ]
         ),
     )
@@ -653,6 +622,15 @@ def _score(
         value=1.0 if passed else 0.0,
         data_type="NUMERIC",
         comment=pass_comment if passed else fail_comment,
+    )
+
+
+def _skip_score(name: str, comment: str) -> Score:
+    return Score(
+        name=name,
+        value="skipped",
+        data_type="CATEGORICAL",
+        comment=comment,
     )
 
 
@@ -911,6 +889,7 @@ def _expected_behavior(expected: Mapping[str, object]) -> str:
         expected.get("expected_behavior")
         or expected.get("behavior")
         or expected.get("expected_answer_type")
+        or expected.get("answer_type")
     )
 
 

@@ -372,7 +372,9 @@ ID, run ID, and assistant/user/message IDs.
 
 Trace metadata and logs must not include raw query text, prompts, source URIs,
 storage keys, signed URLs, attached file IDs, athlete owner identity, OAuth
-tokens, secrets, or unnecessary PII. The Langfuse runtime client installs a
-recursive mask that redacts prompts, messages, model inputs/outputs, raw text,
-source locations, signed URLs, emails, tokens, secrets, and storage keys before
-payloads leave the backend process.
+tokens, secrets, or unnecessary PII. Langfuse trace payloads intentionally keep
+prompt/message/model/tool/source content visible for evaluation. The Langfuse
+runtime client installs a recursive mask that redacts explicit sensitive fields
+and sensitive fragments such as source locations, signed URLs, emails, tokens,
+secrets, storage keys, and provider identity values before payloads leave the
+backend process.

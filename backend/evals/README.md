@@ -101,10 +101,13 @@ behavior and rerun the full strict suite.
   `title_brevity: 5.000`, `title_privacy: 5.000`, and
   `title_relevance: 4.667`.
 - 2026-07-02: the full strict suite was attempted with
-  `DEBUG=true uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5`;
-  it repeatedly stalled during `athlete_chat` in external DNS resolution
-  (`socket_getaddrinfo`/mDNS) before writing a result artifact. Keep the release
-  eval gate open until the full suite completes cleanly.
+  `DEBUG=true RAGAS_DO_NOT_TRACK=true uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5`;
+  `athlete_chat-nightly-20260702` wrote result artifacts but failed strict
+  thresholds and exposed one repeated `search_conversation_files` loop-guard
+  error on a legal-boundary item with no ready uploaded files. Athlete chat
+  prompt/tool guidance now mirrors the admin-chat stop criteria. A later
+  `admin_chat` run-all phase hit async DB/event-loop concurrency during seeding,
+  so keep the release eval gate open until the full suite completes cleanly.
 
 > The CLI initialises Langfuse via `app.observability.langfuse_init`
 > (`init_langfuse`, `is_langfuse_ready`, `shutdown_langfuse`) and the chain

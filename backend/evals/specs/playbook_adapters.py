@@ -18,7 +18,10 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import yaml
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from app.agents.tools.knowledgebase import register_knowledgebase_sources
 from app.infrastructure.knowledgebase.providers.base import (
     DEFAULT_KB_MAX_DOCS,
     DEFAULT_KB_SCORE_THRESHOLD,
@@ -72,11 +75,13 @@ class RetrievalRecord:
         """JSON-safe source metadata for trajectory inspection."""
         return [
             {
-                "text": chunk.text,
-                "metadata": dict(chunk.metadata or {}),
-                "similarity_score": chunk.similarity_score,
+                "source_key": source.source_key,
+                "source_title": source.source_title,
+                "text": source.text,
+                "metadata": dict(source.metadata or {}),
+                "similarity_score": source.similarity_score,
             }
-            for chunk in self.result.sources
+            for source in _registered_sources(self.result)
         ]
 
 
@@ -485,11 +490,16 @@ def make_athlete_chat_executor_adapter(
                 kwargs["title_executor_factory"] = title_executor_factory
             executor = executor_type(**kwargs)
             output = await executor.execute(**_athlete_execute_kwargs(run_input))
+            persisted_output, persisted_citations = await _athlete_persisted_evidence(
+                session=active_session,
+                assistant_message_id=run_input["assistant_message_id"],
+            )
             return build_graph_run(
                 input_data=run_input,
-                executor_output=output,
+                executor_output={**_output_mapping(output), **persisted_output},
                 kb_provider=kb_recorder,
                 stream_service=stream_recorder,
+                citations=persisted_citations or None,
             )
 
     return adapter
@@ -612,6 +622,11 @@ def _retriever_event(record: RetrievalRecord) -> dict[str, Any]:
     }
 
 
+def _registered_sources(result: KnowledgebaseResult) -> list[Any]:
+    registry: dict[str, Any] = {}
+    return register_knowledgebase_sources(result, registry=registry)
+
+
 def _knowledgebase_result_from_chunks(
     *,
     query: str,
@@ -679,6 +694,61 @@ async def _seeded_input(
     if not isinstance(seeded, Mapping):
         raise TypeError("Eval item seeder must return a mapping or None")
     return {**item_input, **dict(seeded)}
+
+
+async def _athlete_persisted_evidence(
+    *,
+    session: Any,
+    assistant_message_id: Any,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Read persisted athlete citations after executor completion for eval scoring."""
+
+    if not hasattr(session, "execute"):
+        return {}, []
+
+    from app.repositories.conversations import (  # noqa: PLC0415
+        ConversationMessageRepository,
+        MessageCitationRepository,
+    )
+
+    assistant_id = _uuid_value(assistant_message_id, "assistant_message_id")
+    message = await ConversationMessageRepository(session).get(assistant_id)
+    if message is None:
+        return {}, []
+
+    metadata = dict(getattr(message, "message_metadata", {}) or {})
+    source_keys = [
+        str(source_key)
+        for source_key in metadata.get("source_keys", [])
+        if str(source_key).strip()
+    ]
+    output: dict[str, Any] = {}
+    if source_keys:
+        output["cited_source_keys"] = source_keys
+    if getattr(message, "content", "") and not output.get("answer"):
+        output["answer"] = message.content
+
+    citations = await MessageCitationRepository(session).list_by_message(assistant_id)
+    citation_events: list[dict[str, Any]] = []
+    for index, citation in enumerate(citations):
+        event: dict[str, Any] = {}
+        if index < len(source_keys):
+            event["source_key"] = source_keys[index]
+        if getattr(citation, "source_title", None):
+            event["source_title"] = citation.source_title
+        if getattr(citation, "document_id", None) is not None:
+            event["document_id"] = str(citation.document_id)
+        if getattr(citation, "chunk_id", None) is not None:
+            event["chunk_id"] = str(citation.chunk_id)
+        source_metadata = dict(getattr(citation, "source_metadata", {}) or {})
+        event.update(_jsonish_mapping(source_metadata))
+        if event:
+            citation_events.append(event)
+
+    if not citation_events and source_keys:
+        citation_events = [{"source_key": source_key} for source_key in source_keys]
+
+    return output, citation_events
 
 
 @asynccontextmanager
@@ -1357,9 +1427,24 @@ def _default_settings() -> Any:
 
 
 def _default_session_factory(settings: Any) -> SessionFactory:
-    from app.infrastructure.db import get_session_factory  # noqa: PLC0415
+    return lambda: _eval_session_scope(settings)
 
-    return get_session_factory(settings)
+
+@asynccontextmanager
+async def _eval_session_scope(settings: Any) -> AsyncIterator[AsyncSession]:
+    """Create an eval-local session/engine so live evals do not share loop-bound pools."""
+
+    engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    try:
+        async with session_factory() as session:
+            yield session
+    finally:
+        await engine.dispose()
 
 
 def _default_chat_model(settings: Any) -> Any:

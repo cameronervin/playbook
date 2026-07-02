@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
+from app.agents.tools.knowledgebase import register_knowledgebase_sources
+from app.repositories.conversations import (
+    ConversationMessageRepository,
+    MessageCitationRepository,
+)
 from app.schemas.knowledgebase import RetrievedChunk
+from evals.specs import playbook_adapters
 from evals.specs.playbook_adapters import (
     RecordingKnowledgebaseProvider,
     RecordingStreamService,
@@ -47,6 +54,12 @@ def _file_chunk() -> RetrievedChunk:
         },
         similarity_score=0.86,
     )
+
+
+def _source_key_from_event(run: object) -> str:
+    source_key = run.events[0]["retriever"]["sources"][0].get("source_key")
+    assert isinstance(source_key, str)
+    return source_key
 
 
 @pytest.mark.asyncio
@@ -110,6 +123,7 @@ async def test_build_graph_run_emits_retrieval_citation_and_reference_events() -
     assert run.events[0]["retriever"]["documents"] == [
         "NIL deals must be disclosed before signing."
     ]
+    assert _source_key_from_event(run).startswith("S-")
 
 
 def test_graph_run_events_accept_explicit_citations_and_admin_references() -> None:
@@ -187,7 +201,36 @@ async def test_athlete_chat_executor_adapter_auto_seeds_and_uses_fixture_kb(
     assert run.events[0]["retriever"]["sources"][0]["metadata"]["source_id"] == (
         "src:nil-disclosure-2026#chunk-1"
     )
+    assert _source_key_from_event(run).startswith("S-")
     assert "Same-day opportunities" in run.events[0]["retriever"]["documents"][0]
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_executor_adapter_enriches_persisted_citation_evidence(
+    test_settings,
+    db_session,
+) -> None:
+    adapter = make_athlete_chat_executor_adapter(
+        session=db_session,
+        settings=test_settings,
+        chat_model=object(),
+        executor_cls=PersistingAthleteExecutor,
+    )
+
+    run = await adapter(
+        item={
+            "input": {
+                "question": "do i have to disclose before posting?",
+                "retrieved_source_ids": ["src:nil-disclosure-2026#chunk-1"],
+            }
+        }
+    )
+
+    event_source_key = _source_key_from_event(run)
+    assert run.output["answer"] == "Disclose before posting."
+    assert run.output["cited_source_keys"] == [event_source_key]
+    citation_event = next(event["citations"] for event in run.events if "citations" in event)
+    assert citation_event["sources"][0]["source_key"] == event_source_key
 
 
 @pytest.mark.asyncio
@@ -254,6 +297,61 @@ async def test_admin_chat_executor_adapter_auto_seeds_snapshot_references(
     assert graph.initial_state["session_id"] == run.input["session_id"]
     assert len(query_refs) == 3
     assert {"type": "metric", "id": "analytics.summary"} in run.input["allowed_references"]
+
+
+@pytest.mark.asyncio
+async def test_default_eval_session_factory_isolates_concurrent_engines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeEngine.counter = 0
+    created_engines: list[FakeEngine] = []
+
+    def fake_create_async_engine(database_url: str, **kwargs: Any) -> "FakeEngine":
+        engine = FakeEngine(database_url=database_url, kwargs=kwargs)
+        created_engines.append(engine)
+        return engine
+
+    def fake_async_sessionmaker(
+        engine: "FakeEngine",
+        *,
+        class_: object,
+        expire_on_commit: bool,
+    ) -> Any:
+        assert class_ is playbook_adapters.AsyncSession
+        assert expire_on_commit is False
+        return lambda: FakeSession(engine)
+
+    monkeypatch.setattr(
+        playbook_adapters,
+        "create_async_engine",
+        fake_create_async_engine,
+    )
+    monkeypatch.setattr(
+        playbook_adapters,
+        "async_sessionmaker",
+        fake_async_sessionmaker,
+    )
+
+    factory = playbook_adapters._default_session_factory(
+        SimpleNamespace(DATABASE_URL="postgresql+asyncpg://eval-db")
+    )
+
+    async def open_session() -> str:
+        async with factory() as session:
+            return session.label
+
+    labels = await asyncio.gather(open_session(), open_session())
+
+    assert labels == ["session-1", "session-2"]
+    assert [engine.database_url for engine in created_engines] == [
+        "postgresql+asyncpg://eval-db",
+        "postgresql+asyncpg://eval-db",
+    ]
+    assert all(
+        engine.kwargs["poolclass"] is playbook_adapters.NullPool
+        for engine in created_engines
+    )
+    assert all(engine.disposed for engine in created_engines)
 
 
 @pytest.mark.asyncio
@@ -328,6 +426,54 @@ class AthleteGraphDouble:
         )
 
 
+class PersistingAthleteExecutor:
+    def __init__(self, **kwargs: Any) -> None:
+        self.session = kwargs["session"]
+        self.knowledgebase_provider = kwargs["knowledgebase_provider"]
+
+    async def execute(self, **kwargs: Any) -> dict[str, Any]:
+        result = await self.knowledgebase_provider.search_admin_uploads(
+            query="nil disclosure",
+            organization_id=kwargs["organization_id"],
+        )
+        registry: dict[str, Any] = {}
+        sources = register_knowledgebase_sources(result, registry=registry)
+        source_key = sources[0].source_key
+        assistant_message = await ConversationMessageRepository(self.session).get(
+            kwargs["assistant_message_id"]
+        )
+        assert assistant_message is not None
+        await ConversationMessageRepository(self.session).update_status_and_content(
+            assistant_message,
+            status="complete",
+            content="Disclose before posting.",
+            safety_outcome="grounded_answer",
+            metadata={
+                **assistant_message.message_metadata,
+                "answer_type": "grounded_answer",
+                "source_keys": [source_key],
+            },
+        )
+        await MessageCitationRepository(self.session).delete_by_message(
+            kwargs["assistant_message_id"]
+        )
+        await MessageCitationRepository(self.session).create(
+            message_id=kwargs["assistant_message_id"],
+            source_title=sources[0].source_title,
+            source_metadata=sources[0].metadata,
+            rank=1,
+        )
+        await self.session.commit()
+        return {
+            "status": "complete",
+            "task_id": kwargs["task_id"],
+            "assistant_message_id": str(kwargs["assistant_message_id"]),
+            "answer_type": "grounded_answer",
+            "citation_count": 1,
+            "answer": "Disclose before posting.",
+        }
+
+
 class AdminGraphDouble:
     def __init__(self) -> None:
         self.initial_state: dict[str, Any] = {}
@@ -381,3 +527,28 @@ class FakeConversationTitleExecutor:
     async def execute(self, **kwargs: Any) -> str:
         self.execute_calls.append({key: str(value) for key, value in kwargs.items()})
         return "NIL Deal Disclosure"
+
+
+class FakeEngine:
+    counter = 0
+
+    def __init__(self, *, database_url: str, kwargs: dict[str, Any]) -> None:
+        FakeEngine.counter += 1
+        self.label = f"session-{FakeEngine.counter}"
+        self.database_url = database_url
+        self.kwargs = kwargs
+        self.disposed = False
+
+    async def dispose(self) -> None:
+        self.disposed = True
+
+
+class FakeSession:
+    def __init__(self, engine: FakeEngine) -> None:
+        self.label = engine.label
+
+    async def __aenter__(self) -> "FakeSession":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None

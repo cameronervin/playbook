@@ -322,7 +322,8 @@ PLAYBOOK_ADMIN_BEARER_TOKENS=<admin-test-token> \
 
 # Optional runtime tracing smoke, when Langfuse is enabled for backend + workers:
 # confirm startup logs show ready=true, then trigger admin chat or dashboard
-# insights and inspect the Langfuse trace for safe tags/ID metadata only.
+# insights and inspect the Langfuse trace for safe tags/ID metadata, visible
+# eval content, and masked secrets/source locations/identity fields.
 
 # Optional Sentry smoke, when Sentry is enabled for staging/prod:
 # trigger one synthetic unexpected 500 in an isolated staging path or task, then

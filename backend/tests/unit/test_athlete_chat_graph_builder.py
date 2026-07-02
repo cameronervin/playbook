@@ -31,6 +31,10 @@ class FakeChain:
 captured_chain_tool_names: list[str] = []
 
 
+def _compact(text: str) -> str:
+    return " ".join(text.split())
+
+
 def fake_chain_factory(**_: object) -> FakeChain:
     captured_chain_tool_names[:] = [tool.name for tool in _.get("tools", [])]
     return FakeChain()
@@ -61,7 +65,14 @@ def test_create_athlete_chat_chain_wires_stateful_middleware(monkeypatch) -> Non
 
 def test_athlete_chat_prompt_includes_scope_refusal_and_grounding_policy() -> None:
     prompt = build_athlete_chat_prompt("athlete_chat")
+    compact = _compact(prompt)
 
+    assert "<tool_use_policy>" in prompt
+    assert "Read the runtime context first" in prompt
+    assert "Data tools are optional" in prompt
+    assert "final structured response tool" in compact
+    assert "Do not call the same search tool with equivalent arguments twice" in compact
+    assert "After a relevant tool result" in prompt
     assert "only handles athletics-related questions" in prompt
     assert "politely refuse" in prompt
     assert "steer the athlete back to athletics" in prompt
@@ -74,10 +85,27 @@ def test_athlete_kb_prompt_requires_returned_and_fresh_source_keys() -> None:
         "athlete_chat",
         ["search_playbook_knowledgebase"],
     )
+    compact = _compact(prompt)
 
     assert "Use only returned source keys" in prompt
     assert "cite the newest applicable source key" in prompt
     assert "do not cite stale conflict sources" in prompt
+    assert "After this tool returns relevant official guidance" in compact
+    assert "Do not call this tool again with equivalent arguments" in compact
+
+
+def test_athlete_file_prompt_stops_when_no_ready_files_or_no_results() -> None:
+    prompt = build_athlete_chat_prompt(
+        "athlete_chat",
+        ["search_conversation_files"],
+    )
+    compact = _compact(prompt)
+
+    assert "Use this tool only when ready uploaded conversation files exist" in compact
+    assert "If Ready conversation file count is 0, do not call this tool" in compact
+    assert "After this tool returns relevant file excerpts" in compact
+    assert "If this tool reports no ready files or no relevant file context" in compact
+    assert "Do not call this tool again with equivalent arguments" in compact
 
 
 def test_conversation_title_prompt_requires_canonical_eval_labels() -> None:

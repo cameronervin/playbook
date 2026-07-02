@@ -355,8 +355,9 @@ KB infrastructure definitions:
    restart both. Confirm startup logs show `tracing_startup_check` and
    `backend_worker_tracing_startup_check` with `ready=true`; submit an admin
    chat question or trigger a dashboard insight run and confirm the Langfuse
-   trace has `playbook`, `env:*`, `mode:*`, and `phase:*` tags plus safe ID
-   metadata only.
+   trace has `playbook`, `env:*`, `mode:*`, and `phase:*` tags, safe ID
+   metadata only, visible prompt/message content for evaluation, and masked
+   secrets/source locations/identity fields.
 8. If Sentry monitoring is enabled for a local/dev smoke, set
    `SENTRY_ENABLED=true`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, and
    `SENTRY_RELEASE` for the backend API, backend worker, KB API, and KB workers.
