@@ -61,6 +61,7 @@ PROTECTED_AFFILIATION_TERMS = (
 )
 LITELLM_POLICY_PATH = Path("backend/evals/release/litellm_virtual_key_policy.yaml")
 LITELLM_CONFIG_PATH = Path("deploy/litellm/config.yaml")
+PRODUCTION_COVERAGE_POLICY_PATH = Path("backstage/production/coverage-policy.yaml")
 LITELLM_APP_ENV_PATHS = (
     Path("deploy/envs/.env.prod.example"),
     Path("deploy/envs/.env.backend.prod.example"),
@@ -142,6 +143,7 @@ def run_release_checks(
     issues.extend(check_affiliation_copy(repo_root=root))
     issues.extend(check_observability_baseline(repo_root=root))
     issues.extend(check_rate_limit_release_config(repo_root=root))
+    issues.extend(check_production_coverage_policy(repo_root=root))
     return ReleaseCheckResult(issues=issues)
 
 
@@ -519,6 +521,164 @@ def check_rate_limit_release_config(*, repo_root: Path) -> list[ReleaseCheckIssu
             )
         )
     return issues
+
+
+def check_production_coverage_policy(
+    *,
+    repo_root: Path,
+    policy_path: Path = PRODUCTION_COVERAGE_POLICY_PATH,
+) -> list[ReleaseCheckIssue]:
+    """Validate P1 risk-surface coverage evidence points at committed files."""
+    path = repo_root / policy_path
+    if not path.exists():
+        return [
+            ReleaseCheckIssue(
+                severity="error",
+                path=policy_path.as_posix(),
+                message="production coverage policy manifest is missing.",
+            )
+        ]
+
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        return [
+            ReleaseCheckIssue(
+                severity="error",
+                path=policy_path.as_posix(),
+                message="production coverage policy manifest must be a mapping.",
+            )
+        ]
+
+    required_surfaces = loaded.get("required_surfaces")
+    surfaces = loaded.get("surfaces")
+    issues: list[ReleaseCheckIssue] = []
+    if not _string_list(required_surfaces):
+        issues.append(
+            ReleaseCheckIssue(
+                severity="error",
+                path=policy_path.as_posix(),
+                message="required_surfaces must list at least one coverage surface.",
+            )
+        )
+    if not isinstance(surfaces, dict):
+        issues.append(
+            ReleaseCheckIssue(
+                severity="error",
+                path=policy_path.as_posix(),
+                message="surfaces must map coverage surface names to evidence.",
+            )
+        )
+        return issues
+    if not _string_list(required_surfaces):
+        return issues
+
+    for surface_name in required_surfaces:
+        surface = surfaces.get(surface_name)
+        if not isinstance(surface, dict):
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=policy_path.as_posix(),
+                    message=f"required coverage surface {surface_name} is missing.",
+                )
+            )
+            continue
+        evidence = surface.get("evidence")
+        if not isinstance(evidence, dict):
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=policy_path.as_posix(),
+                    message=f"{surface_name}.evidence must map tests and docs.",
+                )
+            )
+            continue
+        issues.extend(
+            _coverage_reference_issues(
+                repo_root=repo_root,
+                policy_path=policy_path,
+                surface_name=surface_name,
+                reference_kind="test",
+                references=evidence.get("tests"),
+                required=True,
+            )
+        )
+        issues.extend(
+            _coverage_reference_issues(
+                repo_root=repo_root,
+                policy_path=policy_path,
+                surface_name=surface_name,
+                reference_kind="doc",
+                references=evidence.get("docs"),
+                required=False,
+            )
+        )
+    return issues
+
+
+def _coverage_reference_issues(
+    *,
+    repo_root: Path,
+    policy_path: Path,
+    surface_name: str,
+    reference_kind: str,
+    references: object,
+    required: bool,
+) -> list[ReleaseCheckIssue]:
+    if references is None:
+        if not required:
+            return []
+        return [
+            ReleaseCheckIssue(
+                severity="error",
+                path=policy_path.as_posix(),
+                message=f"{surface_name}.evidence.{reference_kind}s must list files.",
+            )
+        ]
+    if not _string_list(references):
+        return [
+            ReleaseCheckIssue(
+                severity="error",
+                path=policy_path.as_posix(),
+                message=f"{surface_name}.evidence.{reference_kind}s must list files.",
+            )
+        ]
+
+    issues: list[ReleaseCheckIssue] = []
+    for reference in references:
+        relative = _coverage_reference_file(reference)
+        if Path(relative).is_absolute() or ".." in Path(relative).parts:
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=policy_path.as_posix(),
+                    message=f"referenced {reference_kind} {reference} must be repo-relative.",
+                )
+            )
+            continue
+        if not (repo_root / relative).exists():
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=policy_path.as_posix(),
+                    message=f"referenced {reference_kind} {reference} is missing.",
+                )
+            )
+    return issues
+
+
+def _coverage_reference_file(reference: str) -> str:
+    cleaned = reference.split("::", 1)[0].split("#", 1)[0].strip()
+    if ":" not in cleaned:
+        return cleaned
+    possible_path, possible_line = cleaned.rsplit(":", 1)
+    return possible_path if possible_line.isdigit() else cleaned
+
+
+def _string_list(value: object) -> bool:
+    return isinstance(value, list) and bool(value) and all(
+        isinstance(item, str) and item.strip() for item in value
+    )
 
 
 def _dataset_validation_issues(

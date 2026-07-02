@@ -193,7 +193,8 @@ LiteLLM proxy service. `INFINITY_API_KEY` is an internal token shared by LiteLLM
 and the `reranker` service, not by application runtimes. The reranker service
 gets that token from a dedicated reranker env file instead of the LiteLLM env
 file. Add other provider keys only when aliases use those providers. The
-backend and KB-service should hold only LiteLLM virtual/service keys.
+backend, KB-service, and eval runners should hold only scoped LiteLLM
+virtual/service keys.
 
 The project-owned LiteLLM image is defined in
 `deploy/docker/Dockerfile.litellm` and uses `deploy/litellm/config.yaml` for
@@ -209,9 +210,10 @@ model aliases:
 
 Create environment-specific LiteLLM virtual/service keys that follow the
 non-secret policy manifest at
-`backend/evals/release/litellm_virtual_key_policy.yaml`: backend and KB-service
-keys have budget duration, `max_budget`, `rpm_limit`, and model allowlists, and
-the eval key is lower-budget for release/nightly runs. The release checks
+`backend/evals/release/litellm_virtual_key_policy.yaml`: backend, KB-service,
+and eval keys have budget duration, `max_budget`, `rpm_limit`, and model
+allowlists; the eval key is lower-budget for release/nightly runs and can access
+`playbook-chat`, `playbook-fast`, and `playbook-embed`. The release checks
 validate the manifest shape, while actual generated key values stay in LiteLLM
 and the secrets manager.
 

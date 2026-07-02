@@ -26,6 +26,7 @@ hard import. Imports are lazy so the harness still loads when ragas is absent.
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 from dataclasses import dataclass, field
@@ -40,6 +41,8 @@ logger = structlog.get_logger(__name__)
 
 # Cache of lazily-imported ragas symbols, populated by _ragas().
 _RAGAS: dict[str, Any] = {}
+RAGAS_DO_NOT_TRACK_ENV = "RAGAS_DO_NOT_TRACK"
+CONTEXT_REQUIRED_METRICS = {"context_precision", "context_recall", "faithfulness"}
 
 
 def _install_ragas_compat_shim() -> None:
@@ -68,6 +71,7 @@ def _ragas() -> dict[str, Any]:
     """Import ragas once (after installing the compat shim) and cache its symbols."""
     if _RAGAS:
         return _RAGAS
+    os.environ.setdefault(RAGAS_DO_NOT_TRACK_ENV, "true")
     _install_ragas_compat_shim()
     from ragas import SingleTurnSample
     from ragas.embeddings import LangchainEmbeddingsWrapper
@@ -117,6 +121,15 @@ def _retrieved_contexts(run: GraphRun) -> list[str]:
     return retrieved
 
 
+def _expected_source_ids(expected_output: object) -> list[str]:
+    if not isinstance(expected_output, dict):
+        return []
+    raw = expected_output.get("expected_source_ids")
+    if not isinstance(raw, list):
+        return []
+    return [str(source_id) for source_id in raw if str(source_id).strip()]
+
+
 @dataclass
 class RagasJudge:
     """RAG retrieval/generation judge backed by injected LiteLLM models."""
@@ -131,6 +144,7 @@ class RagasJudge:
         """Import ragas (with shim) and wrap the models on first use — never at import."""
         if self._ready:
             return
+        os.environ.setdefault(RAGAS_DO_NOT_TRACK_ENV, "true")
         r = _ragas()
         self._llm = r["LangchainLLMWrapper"](self.chat_model)
         self._emb = r["LangchainEmbeddingsWrapper"](self.embeddings) if self.embeddings else None
@@ -167,14 +181,37 @@ class RagasJudge:
     ) -> list[Score]:
         self._ensure_ready()
         r = _ragas()
+        retrieved_contexts = _retrieved_contexts(run)
+        expects_retrieval = bool(_expected_source_ids(expected_output))
         sample = r["SingleTurnSample"](
             user_input=_question(run),
             response=_response(run),
-            retrieved_contexts=_retrieved_contexts(run) or None,
+            retrieved_contexts=retrieved_contexts or None,
             reference=str(expected_output),
         )
         scores: list[Score] = []
         for name, metric in self._build_metrics(rubric):
+            if name in CONTEXT_REQUIRED_METRICS and not retrieved_contexts:
+                if expects_retrieval:
+                    scores.append(
+                        Score(
+                            name=name,
+                            value=0.0,
+                            data_type="NUMERIC",
+                            comment=f"ragas:{name} expected context was missing",
+                        )
+                    )
+                else:
+                    logger.info("ragas_metric_skipped", metric=name, reason="no_retrieved_contexts")
+                    scores.append(
+                        Score(
+                            name=name,
+                            value="skipped",
+                            data_type="CATEGORICAL",
+                            comment="skipped: no retrieved contexts expected for this sample",
+                        )
+                    )
+                continue
             if metric is None:
                 logger.info("ragas_metric_skipped", metric=name, reason="no_embeddings")
                 scores.append(

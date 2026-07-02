@@ -23,7 +23,11 @@ workers can attach runtime traces. The `evals` dependency group adds `ragas` and
 
 Set in `.env`: `LANGFUSE_ENABLED=true`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
 `LANGFUSE_BASE_URL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `KB_PROVIDER_MODE`
-(`local` for real RAG scoring; `mock` only smoke-tests the pipe).
+(`local` for real RAG scoring; `mock` only smoke-tests the pipe). For strict
+RAG scoring, prefer a scoped `EVAL_LITELLM_API_KEY` with access to
+`playbook-chat`, `playbook-fast`, and `playbook-embed`; the harness falls back
+to `LITELLM_API_KEY` when the eval key is blank. `EVAL_EMBEDDINGS_MODEL`
+defaults to the LiteLLM alias `playbook-embed`.
 
 Author or update the dataset + rubric YAMLs first (see `datasets/README.md`,
 `rubrics/README.md`). Offline dataset validation does not require Langfuse:
@@ -36,7 +40,7 @@ uv run --group evals python -m evals.cli sync-datasets  # mirror datasets into L
 uv run --group evals python -m evals.cli run --agent athlete_chat --max-concurrency 5
 uv run --group evals python -m evals.cli run --agent admin_chat --max-concurrency 5
 uv run --group evals python -m evals.cli run --agent dashboard_insights --max-concurrency 5
-uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
+DEBUG=true RAGAS_DO_NOT_TRACK=true uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5
 ```
 
 `--max-concurrency` controls concurrent dataset item execution per spec. It
@@ -49,6 +53,8 @@ LLM/KB load stays bounded; each spec's items run concurrently.
 
 The runner uses the current Langfuse v4 `run_experiment(data=dataset.items, ...)`
 API and falls back to the legacy `dataset=` keyword for older SDKs.
+The Ragas judge sets `RAGAS_DO_NOT_TRACK=true` before importing Ragas so release
+evals do not make Ragas usage-telemetry calls.
 
 `release-checks` is offline and does not initialize Langfuse. It validates
 dataset YAML, the non-secret LiteLLM virtual-key budget/rate policy manifest,

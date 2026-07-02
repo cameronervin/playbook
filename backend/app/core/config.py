@@ -123,10 +123,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = Field(default=None, repr=False)
 
     # --- Eval harness (dev/CI only — see backend/evals) ---
+    # Optional scoped LiteLLM virtual key for eval judge/embedding calls.
+    EVAL_LITELLM_API_KEY: str = Field(default="", repr=False)
     # Judge LLM for the eval harness; falls back to LLM_CHAT_MODEL when empty
     EVAL_JUDGE_MODEL: str = ""
     # Embeddings model for Ragas answer_relevancy (routed through LiteLLM)
-    EVAL_EMBEDDINGS_MODEL: str = "text-embedding-3-small"
+    EVAL_EMBEDDINGS_MODEL: str = "playbook-embed"
 
     # --- Knowledgebase ---------------------------------------------------------
     # Provider mode: local | mock (see knowledgebase.factory.KBProviderMode)

@@ -53,5 +53,6 @@ criteria:
 ```
 
 > `answer_relevancy` needs an embeddings model (`EVAL_EMBEDDINGS_MODEL`, routed
-> through the LiteLLM gateway). If that setting is blank, the metric is skipped
-> with a note; `faithfulness` still covers generation grounding.
+> through the LiteLLM gateway; default `playbook-embed`). If that setting is
+> blank, the metric is skipped with a note; `faithfulness` still covers
+> generation grounding.

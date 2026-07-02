@@ -82,6 +82,8 @@ def test_settings_use_playbook_local_defaults() -> None:
     assert settings.CORS_ORIGINS == ["http://localhost:3000"]
     assert settings.LLM_PROVIDER_MODE == "direct"
     assert settings.LLM_CHAT_MODEL
+    assert settings.EVAL_LITELLM_API_KEY == ""
+    assert settings.EVAL_EMBEDDINGS_MODEL == "playbook-embed"
     assert settings.LANGFUSE_BASE_URL == "https://cloud.langfuse.com"
     assert settings.SENTRY_ENABLED is False
     assert settings.SENTRY_DSN == ""

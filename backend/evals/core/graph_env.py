@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 # --------------------------------------------------------------------------- #
 # Evaluator models — pinned to LiteLLM (OpenAI-compatible).
 # --------------------------------------------------------------------------- #
+def _eval_litellm_api_key(settings: Any) -> str:
+    """Return the scoped eval key, falling back to the backend LiteLLM key."""
+    return settings.EVAL_LITELLM_API_KEY or settings.LITELLM_API_KEY or "x"
+
+
 @lru_cache
 def get_eval_chat_model() -> "BaseChatModel":
     """Judge LLM, routed through LiteLLM."""
@@ -40,7 +45,7 @@ def get_eval_chat_model() -> "BaseChatModel":
     return ChatOpenAI(
         model=settings.EVAL_JUDGE_MODEL or settings.LLM_CHAT_MODEL,
         base_url=settings.LITELLM_BASE_URL,
-        api_key=settings.LITELLM_API_KEY or "x",
+        api_key=_eval_litellm_api_key(settings),
         temperature=0,
         timeout=settings.LLM_TIMEOUT,
     )
@@ -65,7 +70,7 @@ def get_eval_embeddings() -> "Embeddings | None":
         return OpenAIEmbeddings(
             model=model,
             base_url=settings.LITELLM_BASE_URL,
-            api_key=settings.LITELLM_API_KEY or "x",
+            api_key=_eval_litellm_api_key(settings),
         )
     except Exception:  # noqa: BLE001 — embeddings optional; skip the metric instead
         return None

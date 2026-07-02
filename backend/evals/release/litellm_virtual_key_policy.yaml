@@ -23,6 +23,7 @@ virtual_keys:
   - name: eval
     allowed_models:
       - playbook-chat
+      - playbook-fast
       - playbook-embed
     max_budget: 25
     budget_duration: 30d

@@ -62,7 +62,8 @@ same token from its own dedicated env file, for example
 `deploy/envs/.env.reranker.example`, so it does not inherit LiteLLM provider
 keys or admin secrets.
 
-Backend and KB-service should only receive scoped LiteLLM virtual keys.
+Backend, KB-service, and eval runs should only receive scoped LiteLLM virtual
+keys.
 
 ## Keys
 
@@ -74,23 +75,26 @@ key for backend or KB-service.
 secret, stable, and backed up. Do not rotate it after storing credentials in
 LiteLLM.
 
-Provision two virtual keys:
+Provision three local virtual keys:
 
 | Service | Models |
 |---------|--------|
 | Backend | `playbook-chat`, `playbook-fast` |
-| KB-service | `playbook-embed`, `playbook-fast`, `playbook-rerank` |
+| KB-service | `playbook-embed`, `playbook-fast`, `playbook-rerank`, `playbook-ocr` |
+| Eval harness | `playbook-chat`, `playbook-fast`, `playbook-embed` |
 
-Only add `playbook-ocr` to the KB-service virtual key when scanned PDF OCR is
-enabled with `OCR_PROVIDER=vlm`. Keep `playbook-rerank` available to the
-KB-service key so later reranker-provider phases can turn on
-`KB_RERANK_ENABLED=true` without using the LiteLLM master key.
+Keep `playbook-ocr` on the local KB-service key for convenience, even though it
+is only used when scanned PDF OCR is enabled with `OCR_PROVIDER=vlm`. Keep
+`playbook-rerank` available to the KB-service key so later reranker-provider
+phases can turn on `KB_RERANK_ENABLED=true` without using the LiteLLM master
+key.
 
 Set them here:
 
 ```env
 # deploy/envs/.env.local or prod secret
 LITELLM_API_KEY=<backend-virtual-key>
+EVAL_LITELLM_API_KEY=<eval-virtual-key>
 
 # deploy/envs/.env.kb-service.local or prod secret
 LITELLM_API_KEY=<kb-service-virtual-key>
@@ -194,7 +198,12 @@ curl -s -X POST "http://localhost:4000/key/generate" \
 curl -s -X POST "http://localhost:4000/key/generate" \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"key_alias":"playbook-kb-local","models":["playbook-embed","playbook-fast","playbook-rerank"],"metadata":{"service":"kb-service","environment":"local"}}'
+  -d '{"key_alias":"playbook-kb-local","models":["playbook-embed","playbook-fast","playbook-rerank","playbook-ocr"],"metadata":{"service":"kb-service","environment":"local"}}'
+
+curl -s -X POST "http://localhost:4000/key/generate" \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"key_alias":"playbook-eval-local","models":["playbook-chat","playbook-fast","playbook-embed"],"metadata":{"service":"eval","environment":"local"}}'
 ```
 
 After writing generated keys into the app env files, restart app services:
@@ -209,8 +218,8 @@ docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d --fo
 - Keep the LiteLLM DB, proxy, and reranker service on private networking.
 - Store `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, provider keys, virtual keys,
   and `INFINITY_API_KEY` in a secrets manager.
-- Generate backend and KB-service virtual keys during provisioning/deploy, then
-  inject those keys into the services.
+- Generate backend, KB-service, and eval virtual keys during
+  provisioning/deploy, then inject those keys into the services or eval runner.
 - Do not give backend or KB-service the master key.
 
 Keys survive LiteLLM container restarts because they are stored in the LiteLLM

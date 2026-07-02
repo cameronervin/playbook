@@ -10,6 +10,7 @@ from evals.core.release_checks import (
     check_affiliation_copy,
     check_litellm_gateway_controls,
     check_litellm_virtual_key_policy,
+    check_production_coverage_policy,
     check_rate_limit_release_config,
 )
 
@@ -141,6 +142,32 @@ def test_litellm_policy_requires_budget_and_rate_fields(tmp_path: Path) -> None:
     }
 
 
+def test_litellm_policy_documents_scoped_backend_kb_and_eval_keys() -> None:
+    policy_path = (
+        Path(__file__).resolve().parents[3]
+        / "evals"
+        / "release"
+        / "litellm_virtual_key_policy.yaml"
+    )
+    loaded = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
+
+    policies = {
+        item["name"]: set(item["allowed_models"])
+        for item in loaded["virtual_keys"]
+    }
+
+    assert policies == {
+        "backend": {"playbook-chat", "playbook-fast"},
+        "kb-service": {
+            "playbook-embed",
+            "playbook-fast",
+            "playbook-rerank",
+            "playbook-ocr",
+        },
+        "eval": {"playbook-chat", "playbook-fast", "playbook-embed"},
+    }
+
+
 def test_litellm_gateway_controls_require_policy_models_in_proxy_config(
     tmp_path: Path,
 ) -> None:
@@ -219,6 +246,112 @@ def test_rate_limit_release_config_requires_url_value(tmp_path: Path) -> None:
 
     assert issues
     assert "RATE_LIMIT_VALKEY_URL must be set" in issues[0].message
+
+
+def test_production_coverage_policy_accepts_required_surface_evidence(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "backstage" / "production" / "coverage-policy.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "required_surfaces": ["auth"],
+                "surfaces": {
+                    "auth": {
+                        "description": "Authentication tests exist.",
+                        "evidence": {
+                            "tests": ["backend/tests/integration/test_auth_routes.py"],
+                            "docs": ["backstage/production/coverage-policy.md"],
+                        },
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    tmp_path.joinpath("backend/tests/integration").mkdir(parents=True)
+    tmp_path.joinpath("backend/tests/integration/test_auth_routes.py").write_text(
+        "def test_auth() -> None:\n    assert True\n",
+        encoding="utf-8",
+    )
+    tmp_path.joinpath("backstage/production/coverage-policy.md").write_text(
+        "# Coverage Policy\n",
+        encoding="utf-8",
+    )
+
+    assert check_production_coverage_policy(repo_root=tmp_path) == []
+
+
+def test_production_coverage_policy_requires_all_required_surfaces(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "backstage" / "production" / "coverage-policy.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "required_surfaces": ["auth", "privacy"],
+                "surfaces": {
+                    "auth": {
+                        "evidence": {
+                            "tests": ["backend/tests/integration/test_auth_routes.py"],
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    tmp_path.joinpath("backend/tests/integration").mkdir(parents=True)
+    tmp_path.joinpath("backend/tests/integration/test_auth_routes.py").write_text(
+        "def test_auth() -> None:\n    assert True\n",
+        encoding="utf-8",
+    )
+
+    issues = check_production_coverage_policy(repo_root=tmp_path)
+
+    assert any("required coverage surface privacy is missing" in issue.message for issue in issues)
+
+
+def test_production_coverage_policy_requires_referenced_files(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "backstage" / "production" / "coverage-policy.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "required_surfaces": ["uploads"],
+                "surfaces": {
+                    "uploads": {
+                        "evidence": {
+                            "tests": [
+                                "backend/tests/unit/test_direct_upload_workflows.py",
+                            ],
+                            "docs": ["backstage/production/missing-doc.md"],
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    issues = check_production_coverage_policy(repo_root=tmp_path)
+
+    assert any(
+        "referenced test backend/tests/unit/test_direct_upload_workflows.py is missing"
+        in issue.message
+        for issue in issues
+    )
+    assert any(
+        "referenced doc backstage/production/missing-doc.md is missing" in issue.message
+        for issue in issues
+    )
 
 
 def test_release_checks_cli_reports_failures_without_langfuse(monkeypatch) -> None:
