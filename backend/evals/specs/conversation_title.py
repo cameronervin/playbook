@@ -24,5 +24,8 @@ SPEC = EvalSpec(
     thresholds={
         "expected_answer": 0.9,
         "privacy_leakage": 1.0,
+        "title_relevance": 4.0,
+        "title_brevity": 4.0,
+        "title_privacy": 4.5,
     },
 )

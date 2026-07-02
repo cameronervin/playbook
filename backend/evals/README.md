@@ -1,6 +1,6 @@
 # Agent Eval Harness
 
-Code-based evals for the Playbook agent layer. Tracks runs in Langfuse v3,
+Code-based evals for the Playbook agent layer. Tracks runs in Langfuse v4,
 executes dataset items through the Langfuse Experiment Runner SDK, and scores
 with deterministic release gates, an LLM-as-judge for qualitative criteria, and
 Ragas retrieval/generation metrics for KB-using chains.
@@ -47,6 +47,9 @@ LLM/KB load stays bounded; each spec's items run concurrently.
 `--agent` choices: `athlete_chat`, `admin_chat`, `dashboard_insights`,
 `conversation_title`.
 
+The runner uses the current Langfuse v4 `run_experiment(data=dataset.items, ...)`
+API and falls back to the legacy `dataset=` keyword for older SDKs.
+
 `release-checks` is offline and does not initialize Langfuse. It validates
 dataset YAML, the non-secret LiteLLM virtual-key budget/rate policy manifest,
 runtime copy for protected university affiliation claims, observability/redaction
@@ -63,6 +66,39 @@ deterministic behavior/reference/privacy gates plus LLM qualitative judging.
 `dashboard_insights` remains a deterministic structural golden spec for seeded
 analytics windows. `conversation_title` covers compact first-turn title quality
 and privacy.
+
+## Release thresholds
+
+Release thresholds are target gates, not baseline scores. Do not lower them to
+make weak current behavior pass; fix prompts, adapters, fixtures, or product
+behavior and rerun the full strict suite.
+
+- `athlete_chat`: retrieval hit `0.85`; citation integrity, source freshness,
+  and privacy leakage `1.0`; expected behavior `0.95`; athlete accuracy `4.25`;
+  concision and warmth `4.0`; context precision `0.75`; context recall `0.80`;
+  faithfulness `0.90`; answer relevancy `0.80`.
+- `admin_chat`: expected behavior `0.95`; reference integrity and privacy
+  leakage `1.0`; usefulness and specificity `4.0`; scope control `4.25`.
+- `dashboard_insights`: all deterministic structural gates `1.0`.
+- `conversation_title`: expected answer `0.9`; privacy leakage `1.0`; title
+  relevance and brevity `4.0`; title privacy `4.5`.
+
+## Latest calibration evidence
+
+- 2026-07-02: `uv run --group evals pytest tests/unit/evals -q` passed
+  (`55 passed`), `validate-datasets` returned `datasets valid`, and
+  `release-checks` returned `PASS release checks (0 issue(s))`.
+- 2026-07-02: focused live runs passed through Langfuse v4:
+  `dashboard_insights-2026-07-02T18:18:24+00:00` and
+  `conversation_title-2026-07-02T18:19:29+00:00`. The title run passed after
+  prompt tightening with `expected_answer: 1.000`, `privacy_leakage: 1.000`,
+  `title_brevity: 5.000`, `title_privacy: 5.000`, and
+  `title_relevance: 4.667`.
+- 2026-07-02: the full strict suite was attempted with
+  `DEBUG=true uv run --group evals python -m evals.cli run-all --strict --max-concurrency 5`;
+  it repeatedly stalled during `athlete_chat` in external DNS resolution
+  (`socket_getaddrinfo`/mDNS) before writing a result artifact. Keep the release
+  eval gate open until the full suite completes cleanly.
 
 > The CLI initialises Langfuse via `app.observability.langfuse_init`
 > (`init_langfuse`, `is_langfuse_ready`, `shutdown_langfuse`) and the chain

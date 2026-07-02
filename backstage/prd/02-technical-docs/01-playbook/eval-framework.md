@@ -64,6 +64,12 @@ Minimum MVP release gate:
    policy shape, runtime affiliation copy, observability anchors, and production
    rate-limit env posture.
 
+Configured thresholds are release targets rather than empirical baselines. The
+strict suite gates deterministic safety/privacy/reference checks at or near
+perfect scores, qualitative LLM-judge rubrics at target 4.x/5 floors, and Ragas
+retrieval/generation metrics at target 0.75-0.90 floors. Prompt, fixture, or
+agent behavior should be fixed when current runs miss these gates.
+
 ## Implementation Notes
 
 - Prefer deterministic assertions where possible.
@@ -74,3 +80,10 @@ Minimum MVP release gate:
   `uv run --group evals python -m evals.cli release-checks`.
 - Run the broader local/CI wrapper with `./deploy/scripts/release-validate.sh`;
   add `--live-evals` only when Langfuse, LiteLLM, and KB-service are configured.
+- The eval runner uses Langfuse v4 `run_experiment(data=dataset.items, ...)`
+  and retains a legacy `dataset=` fallback for older SDKs.
+- 2026-07-02 calibration evidence: eval unit tests, dataset validation, and
+  deterministic release checks pass; focused live `dashboard_insights` and
+  `conversation_title` runs pass target thresholds. The full strict suite
+  remains a P0 evidence gap because repeated local attempts stalled during
+  `athlete_chat` external DNS resolution before a result artifact was written.

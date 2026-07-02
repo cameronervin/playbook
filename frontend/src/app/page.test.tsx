@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RootRedirect from '@/src/app/page'
+import { useCurrentUser } from '@/src/hooks/useAuth'
 import type { CurrentUser } from '@/src/types/auth'
 
 const replace = vi.fn()
@@ -14,13 +15,14 @@ vi.mock('@/src/hooks/useAuth', () => ({
   useCurrentUser: vi.fn(),
 }))
 
-async function mockCurrentUser(returnValue: { data?: CurrentUser; isLoading?: boolean; isError?: boolean }) {
-  const mod = await import('@/src/hooks/useAuth')
-  vi.mocked(mod.useCurrentUser).mockReturnValue({
+const mockUseCurrentUser = vi.mocked(useCurrentUser)
+
+function mockCurrentUser(returnValue: { data?: CurrentUser; isLoading?: boolean; isError?: boolean }) {
+  mockUseCurrentUser.mockReturnValue({
     data: returnValue.data,
     isLoading: returnValue.isLoading ?? false,
     isError: returnValue.isError ?? false,
-  } as ReturnType<typeof mod.useCurrentUser>)
+  } as ReturnType<typeof useCurrentUser>)
 }
 
 function renderWithQuery(ui: React.ReactElement) {
@@ -29,15 +31,20 @@ function renderWithQuery(ui: React.ReactElement) {
 }
 
 describe('RootRedirect', () => {
+  beforeEach(() => {
+    replace.mockReset()
+    mockUseCurrentUser.mockReset()
+  })
+
   it('sends unauthenticated users to login', async () => {
-    await mockCurrentUser({ isError: true })
+    mockCurrentUser({ isError: true })
     renderWithQuery(<RootRedirect />)
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'))
   })
 
   it('sends incomplete athletes to profile', async () => {
-    await mockCurrentUser({
+    mockCurrentUser({
       data: {
         id: 'user-1',
         organization_id: 'org-1',
@@ -54,7 +61,7 @@ describe('RootRedirect', () => {
   })
 
   it('sends admins to admin', async () => {
-    await mockCurrentUser({
+    mockCurrentUser({
       data: {
         id: 'user-1',
         organization_id: 'org-1',
@@ -71,7 +78,7 @@ describe('RootRedirect', () => {
   })
 
   it('renders a branded loading state while resolving auth', async () => {
-    await mockCurrentUser({ isLoading: true })
+    mockCurrentUser({ isLoading: true })
     renderWithQuery(<RootRedirect />)
 
     expect(screen.getByTestId('playbook-brand-loader')).toBeInTheDocument()

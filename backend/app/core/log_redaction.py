@@ -25,9 +25,22 @@ _SENSITIVE_KEY_PARTS = (
     "signed_url",
     "raw_text",
     "extracted_text",
+    "source_text",
+    "source_content",
     "file_contents",
+    "prompt",
     "model_input",
     "model_inputs",
+    "client_ip",
+    "raw_ip",
+    "ip_address",
+    "remote_addr",
+    "athlete_name",
+    "athlete_email",
+    "user_name",
+    "user_email",
+    "provider_subject",
+    "provider_sub",
 )
 
 _ASSIGNMENT_RE = re.compile(

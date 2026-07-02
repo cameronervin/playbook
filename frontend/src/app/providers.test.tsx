@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -26,12 +26,19 @@ function ExpiringMutationButton() {
         retryable: false,
       })
     },
+    retry: false,
   })
   return <button onClick={() => mutation.mutate()} type="button">Expire session</button>
 }
 
 describe('Providers auth expiry handling', () => {
+  beforeEach(() => {
+    routerMocks.replace.mockReset()
+    useUIStore.getState().resetSessionState()
+  })
+
   it('clears session UI state and redirects when a mutation fails with an expired session', async () => {
+    const user = userEvent.setup({ delay: null })
     useUIStore.setState({
       activeConversationId: 'conversation-1',
       adminChatOpen: true,
@@ -44,7 +51,7 @@ describe('Providers auth expiry handling', () => {
       </Providers>,
     )
 
-    await userEvent.click(screen.getByRole('button', { name: /expire session/i }))
+    await user.click(screen.getByRole('button', { name: /expire session/i }))
 
     await waitFor(() =>
       expect(routerMocks.replace).toHaveBeenCalledWith(`${ROUTES.login}?reason=session_expired`),

@@ -87,8 +87,15 @@ run_step() {
     "$@"
 }
 
-run_step "deploy shell syntax checks" \
-    bash -c "cd '$ROOT_DIR' && bash -n deploy/scripts/*.sh"
+check_deploy_shell_syntax() {
+    local script
+
+    for script in "$ROOT_DIR"/deploy/scripts/*.sh; do
+        bash -n "$script"
+    done
+}
+
+run_step "deploy shell syntax checks" check_deploy_shell_syntax
 
 run_backend_local_gate() {
     run_step "backend unit, eval, logging, auth, readiness, and rate-limit tests" \
@@ -98,6 +105,7 @@ run_backend_local_gate() {
             tests/unit/test_logging_config.py \
             tests/unit/test_log_redaction.py \
             tests/unit/test_langfuse_init.py \
+            tests/unit/test_sentry_init.py \
             tests/unit/test_agent_trace.py \
             tests/unit/test_auth_dependencies.py \
             tests/unit/test_core_config.py \
@@ -111,6 +119,7 @@ run_backend_local_gate() {
             tests/integration/test_auth_routes.py::test_oauth_callback_redirects_browser_callers_after_setting_cookie \
             tests/integration/test_conversation_routes.py::test_create_conversation_rate_limit_returns_429_before_dispatch \
             tests/integration/test_admin_user_routes.py \
+            tests/integration/test_release_authz_gates.py \
             tests/integration/test_audit_repository.py \
             tests/integration/test_admin_analytics_dashboard_insights.py::test_admin_analytics_summary_and_queries_anonymize_athlete_identity \
             -q"
@@ -150,6 +159,7 @@ if [[ "$RUN_KB" == "true" ]]; then
                 tests/test_app/test_api_contract_routes.py \
                 tests/test_core/test_logging_config.py \
                 tests/test_core/test_log_redaction.py \
+                tests/test_core/test_sentry_init.py \
                 -q"
     fi
 fi

@@ -52,7 +52,7 @@ class FakeLangfuseClient:
         self,
         *,
         name: str,
-        dataset: Any,
+        data: list[FakeDatasetItem],
         task: Any,
         evaluators: list[Any],
         max_concurrency: int,
@@ -61,7 +61,7 @@ class FakeLangfuseClient:
         self.run_experiment_calls.append(
             {
                 "name": name,
-                "dataset": dataset,
+                "data": data,
                 "task": task,
                 "evaluators": evaluators,
                 "max_concurrency": max_concurrency,
@@ -85,7 +85,7 @@ class FakeLangfuseClient:
                         expected_output=item.expected_output,
                     )
 
-            await asyncio.gather(*(_run_one(item) for item in dataset.items))
+            await asyncio.gather(*(_run_one(item) for item in data))
 
         asyncio.run(_run_items())
         return FakeExperimentResult()
@@ -173,7 +173,7 @@ async def test_run_spec_uses_langfuse_experiment_runner(
 
     assert result.passed is True
     assert client.run_experiment_calls[0]["max_concurrency"] == 5
-    assert client.run_experiment_calls[0]["dataset"] is client.dataset
+    assert client.run_experiment_calls[0]["data"] is client.dataset.items
     assert client.flushed is True
     assert result.mean_scores == {"quality_score": 1.0}
     assert sorted(client.evaluations_by_item) == ["one", "two"]
@@ -217,3 +217,53 @@ async def test_run_spec_records_agent_failures_without_blocking_other_items(
     assert result.errors == ["agent run on item bad: agent exploded"]
     assert result.failures == ["errors: 1 isolated run/judge errors recorded"]
     assert sorted(client.evaluations_by_item) == ["good"]
+
+
+@pytest.mark.asyncio
+async def test_run_spec_supports_legacy_langfuse_dataset_keyword(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class LegacyLangfuseClient(FakeLangfuseClient):
+        def run_experiment(
+            self,
+            *,
+            name: str,
+            dataset: Any,
+            task: Any,
+            evaluators: list[Any],
+            max_concurrency: int,
+            description: str,
+        ) -> FakeExperimentResult:
+            self.run_experiment_calls.append(
+                {
+                    "name": name,
+                    "dataset": dataset,
+                    "task": task,
+                    "evaluators": evaluators,
+                    "max_concurrency": max_concurrency,
+                    "description": description,
+                }
+            )
+            return FakeExperimentResult()
+
+    client = LegacyLangfuseClient([FakeDatasetItem("one", {"question": "Q1"}, "A1")])
+    _install_fake_langfuse(monkeypatch, client)
+    _patch_runner_io(monkeypatch, tmp_path)
+
+    async def adapter(*, item: FakeDatasetItem) -> GraphRun:
+        return GraphRun(input=item.input, output=f"answer-{item.id}")
+
+    spec = EvalSpec(
+        name="example",
+        dataset_path="evals/datasets/example.yaml",
+        adapter=adapter,
+        rubrics=["rubrics/quality.yaml"],
+        judge=FakeJudge(),
+        thresholds={},
+    )
+
+    result = await runner.run_spec(spec, run_name="legacy-run", max_concurrency=1)
+
+    assert result.passed is True
+    assert client.run_experiment_calls[0]["dataset"] is client.dataset

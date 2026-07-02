@@ -8,9 +8,92 @@ from click.testing import CliRunner
 from evals import cli as eval_cli
 from evals.core.release_checks import (
     check_affiliation_copy,
+    check_litellm_gateway_controls,
     check_litellm_virtual_key_policy,
     check_rate_limit_release_config,
 )
+
+_GATEWAY_ALIASES = [
+    "playbook-chat",
+    "playbook-fast",
+    "playbook-embed",
+    "playbook-ocr",
+    "playbook-rerank",
+]
+
+
+def _write_gateway_fixture(
+    repo_root: Path,
+    *,
+    config_model_names: list[str] | None = None,
+    policy_models: list[str] | None = None,
+    prod_env_extra: str = "",
+) -> None:
+    config_dir = repo_root / "deploy" / "litellm"
+    config_dir.mkdir(parents=True)
+    config_dir.joinpath("config.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "model_list": [
+                    {
+                        "model_name": model_name,
+                        "litellm_params": {
+                            "model": f"os.environ/{model_name.upper().replace('-', '_')}_MODEL",
+                            "api_key": "os.environ/OPENAI_API_KEY",
+                        },
+                    }
+                    for model_name in (config_model_names or _GATEWAY_ALIASES)
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    policy_dir = repo_root / "backend" / "evals" / "release"
+    policy_dir.mkdir(parents=True)
+    policy_dir.joinpath("litellm_virtual_key_policy.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "virtual_keys": [
+                    {
+                        "name": "backend-api",
+                        "allowed_models": policy_models or _GATEWAY_ALIASES,
+                        "max_budget": 100,
+                        "budget_duration": "1d",
+                        "rpm_limit": 60,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    env_dir = repo_root / "deploy" / "envs"
+    env_dir.mkdir(parents=True)
+    env_dir.joinpath(".env.prod.example").write_text(
+        "\n".join(
+            [
+                "LLM_PROVIDER_MODE=litellm",
+                "ALLOW_DIRECT_LLM_IN_PROD=false",
+                "LLM_CHAT_MODEL=playbook-chat",
+                "LITELLM_BASE_URL=http://litellm:4000",
+                "LITELLM_API_KEY=${LITELLM_API_KEY}",
+                "LITELLM_EMBED_MODEL=playbook-embed",
+                "LITELLM_SUMMARY_MODEL=playbook-fast",
+                "LITELLM_RERANK_MODEL=playbook-rerank",
+                prod_env_extra,
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env_dir.joinpath(".env.backend.prod.example").write_text(
+        "SENTRY_DSN=${BACKEND_SENTRY_DSN}\n",
+        encoding="utf-8",
+    )
+    env_dir.joinpath(".env.kb-service.prod.example").write_text(
+        "SENTRY_DSN=${KB_SERVICE_SENTRY_DSN}\n",
+        encoding="utf-8",
+    )
 
 
 def test_affiliation_copy_check_flags_protected_university_claim(
@@ -56,6 +139,49 @@ def test_litellm_policy_requires_budget_and_rate_fields(tmp_path: Path) -> None:
         "virtual_keys[0].budget_duration is required.",
         "virtual_keys[0].rpm_limit must be a positive number.",
     }
+
+
+def test_litellm_gateway_controls_require_policy_models_in_proxy_config(
+    tmp_path: Path,
+) -> None:
+    _write_gateway_fixture(
+        tmp_path,
+        policy_models=[*_GATEWAY_ALIASES, "raw-provider-model"],
+    )
+
+    issues = check_litellm_gateway_controls(repo_root=tmp_path)
+
+    assert any(
+        "raw-provider-model is not defined in deploy/litellm/config.yaml"
+        in issue.message
+        for issue in issues
+    )
+
+
+def test_litellm_gateway_controls_reject_wildcard_proxy_models(
+    tmp_path: Path,
+) -> None:
+    _write_gateway_fixture(tmp_path, config_model_names=[*_GATEWAY_ALIASES, "*"])
+
+    issues = check_litellm_gateway_controls(repo_root=tmp_path)
+
+    assert any("wildcard LiteLLM proxy model aliases are not allowed" in issue.message for issue in issues)
+
+
+def test_litellm_gateway_controls_reject_provider_keys_in_app_env_examples(
+    tmp_path: Path,
+) -> None:
+    _write_gateway_fixture(tmp_path, prod_env_extra="OPENAI_API_KEY=${OPENAI_API_KEY}")
+
+    issues = check_litellm_gateway_controls(repo_root=tmp_path)
+
+    assert any("must not set OPENAI_API_KEY" in issue.message for issue in issues)
+
+
+def test_litellm_gateway_controls_accept_alias_only_prod_config(tmp_path: Path) -> None:
+    _write_gateway_fixture(tmp_path)
+
+    assert check_litellm_gateway_controls(repo_root=tmp_path) == []
 
 
 def test_rate_limit_release_config_accepts_internal_valkey_url(tmp_path: Path) -> None:

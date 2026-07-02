@@ -25,5 +25,8 @@ SPEC = EvalSpec(
         "expected_behavior": 0.95,
         "admin_reference_integrity": 1.0,
         "privacy_leakage": 1.0,
+        "admin_usefulness": 4.0,
+        "admin_specificity": 4.0,
+        "admin_scope_control": 4.25,
     },
 )

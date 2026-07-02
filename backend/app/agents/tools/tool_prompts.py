@@ -25,9 +25,10 @@ knowledge base sources with focused, specific search terms.
 For supported answers, include every supporting source key returned by this tool
 in the structured cited_source_keys field. All shared KB results are
 admin-official. If comparable sources conflict, prefer the newest applicable
-source_date. Do not invent source keys. If tool results are missing or do not
-support the answer, use answer_type "unsupported" and direct the athlete to the
-athletic department.
+source_date. Use only returned source keys; cite the newest applicable source key
+and do not cite stale conflict sources. Do not invent source keys. If tool
+results are missing or do not support the answer, use answer_type "unsupported"
+and direct the athlete to the athletic department.
 </tools>
 """
 

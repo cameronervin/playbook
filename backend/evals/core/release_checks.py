@@ -60,6 +60,30 @@ PROTECTED_AFFILIATION_TERMS = (
     "on behalf of",
 )
 LITELLM_POLICY_PATH = Path("backend/evals/release/litellm_virtual_key_policy.yaml")
+LITELLM_CONFIG_PATH = Path("deploy/litellm/config.yaml")
+LITELLM_APP_ENV_PATHS = (
+    Path("deploy/envs/.env.prod.example"),
+    Path("deploy/envs/.env.backend.prod.example"),
+    Path("deploy/envs/.env.kb-service.prod.example"),
+)
+EXPECTED_LITELLM_SERVICE_ALIASES = {
+    "playbook-chat",
+    "playbook-fast",
+    "playbook-embed",
+    "playbook-ocr",
+    "playbook-rerank",
+}
+APP_LITELLM_ALIAS_ENV_KEYS = (
+    "LLM_CHAT_MODEL",
+    "LITELLM_EMBED_MODEL",
+    "LITELLM_SUMMARY_MODEL",
+    "LITELLM_RERANK_MODEL",
+)
+DISALLOWED_APP_PROVIDER_KEYS = (
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+)
 OBSERVABILITY_REQUIRED_SNIPPETS = {
     Path("backend/app/core/logging_config.py"): (
         "redact_event_dict",
@@ -114,14 +138,31 @@ def run_release_checks(
     root = repo_root or _repo_root()
     issues: list[ReleaseCheckIssue] = []
     issues.extend(_dataset_validation_issues(specs=specs))
-    issues.extend(check_litellm_virtual_key_policy(root / LITELLM_POLICY_PATH))
+    issues.extend(check_litellm_gateway_controls(repo_root=root))
     issues.extend(check_affiliation_copy(repo_root=root))
     issues.extend(check_observability_baseline(repo_root=root))
     issues.extend(check_rate_limit_release_config(repo_root=root))
     return ReleaseCheckResult(issues=issues)
 
 
-def check_litellm_virtual_key_policy(policy_path: Path) -> list[ReleaseCheckIssue]:
+def check_litellm_gateway_controls(*, repo_root: Path) -> list[ReleaseCheckIssue]:
+    """Validate deterministic LiteLLM proxy, policy, and app-env controls."""
+    aliases, issues = _litellm_model_aliases(repo_root / LITELLM_CONFIG_PATH)
+    issues.extend(
+        check_litellm_virtual_key_policy(
+            repo_root / LITELLM_POLICY_PATH,
+            allowed_aliases=aliases or None,
+        )
+    )
+    issues.extend(_check_litellm_app_env_examples(repo_root=repo_root, allowed_aliases=aliases))
+    return issues
+
+
+def check_litellm_virtual_key_policy(
+    policy_path: Path,
+    *,
+    allowed_aliases: set[str] | None = None,
+) -> list[ReleaseCheckIssue]:
     """Validate the non-secret LiteLLM virtual-key budget/rate policy manifest."""
     if not policy_path.exists():
         return [
@@ -175,9 +216,207 @@ def check_litellm_virtual_key_policy(policy_path: Path) -> list[ReleaseCheckIssu
                     message=f"{item_path}.allowed_models must list model aliases.",
                 )
             )
+        else:
+            for model in models:
+                if model == "*":
+                    issues.append(
+                        ReleaseCheckIssue(
+                            severity="error",
+                            path=str(policy_path),
+                            message=f"{item_path}.allowed_models must not include wildcard access.",
+                        )
+                    )
+                if allowed_aliases is not None and model not in allowed_aliases:
+                    issues.append(
+                        ReleaseCheckIssue(
+                            severity="error",
+                            path=str(policy_path),
+                            message=(
+                                f"{item_path}.allowed_models entry {model} "
+                                "is not defined in deploy/litellm/config.yaml."
+                            ),
+                        )
+                    )
         issues.extend(_required_positive_number(item, "max_budget", item_path, policy_path))
         issues.extend(_required_string(item, "budget_duration", item_path, policy_path))
         issues.extend(_required_positive_number(item, "rpm_limit", item_path, policy_path))
+    return issues
+
+
+def _litellm_model_aliases(config_path: Path) -> tuple[set[str], list[ReleaseCheckIssue]]:
+    if not config_path.exists():
+        return set(), [
+            ReleaseCheckIssue(
+                severity="error",
+                path=LITELLM_CONFIG_PATH.as_posix(),
+                message="LiteLLM proxy config is missing.",
+            )
+        ]
+
+    loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        return set(), [
+            ReleaseCheckIssue(
+                severity="error",
+                path=LITELLM_CONFIG_PATH.as_posix(),
+                message="LiteLLM proxy config must be a mapping.",
+            )
+        ]
+
+    model_list = loaded.get("model_list")
+    if not isinstance(model_list, list) or not model_list:
+        return set(), [
+            ReleaseCheckIssue(
+                severity="error",
+                path=LITELLM_CONFIG_PATH.as_posix(),
+                message="LiteLLM proxy config must define at least one model alias.",
+            )
+        ]
+
+    aliases: set[str] = set()
+    issues: list[ReleaseCheckIssue] = []
+    for index, item in enumerate(model_list):
+        item_path = f"model_list[{index}]"
+        if not isinstance(item, dict):
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=LITELLM_CONFIG_PATH.as_posix(),
+                    message=f"{item_path} must be a mapping.",
+                )
+            )
+            continue
+        model_name = item.get("model_name")
+        if not isinstance(model_name, str) or not model_name.strip():
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=LITELLM_CONFIG_PATH.as_posix(),
+                    message=f"{item_path}.model_name is required.",
+                )
+            )
+            continue
+        model_name = model_name.strip()
+        aliases.add(model_name)
+        if model_name == "*":
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=LITELLM_CONFIG_PATH.as_posix(),
+                    message="wildcard LiteLLM proxy model aliases are not allowed.",
+                )
+            )
+
+        params = item.get("litellm_params")
+        if not isinstance(params, dict):
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=LITELLM_CONFIG_PATH.as_posix(),
+                    message=f"{item_path}.litellm_params must be a mapping.",
+                )
+            )
+            continue
+        provider_model = params.get("model")
+        if not _is_env_reference(provider_model):
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=LITELLM_CONFIG_PATH.as_posix(),
+                    message=(
+                        f"{item_path}.litellm_params.model must use an "
+                        "os.environ reference, not a literal provider model."
+                    ),
+                )
+            )
+        provider_key = params.get("api_key")
+        if provider_key is not None and not _is_env_reference(provider_key):
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=LITELLM_CONFIG_PATH.as_posix(),
+                    message=(
+                        f"{item_path}.litellm_params.api_key must use an "
+                        "os.environ reference, not a literal provider key."
+                    ),
+                )
+            )
+
+    for alias in sorted(EXPECTED_LITELLM_SERVICE_ALIASES - aliases):
+        issues.append(
+            ReleaseCheckIssue(
+                severity="error",
+                path=LITELLM_CONFIG_PATH.as_posix(),
+                message=f"required LiteLLM service alias {alias} is missing.",
+            )
+        )
+    return aliases, issues
+
+
+def _check_litellm_app_env_examples(
+    *,
+    repo_root: Path,
+    allowed_aliases: set[str],
+) -> list[ReleaseCheckIssue]:
+    issues: list[ReleaseCheckIssue] = []
+    for relative_path in LITELLM_APP_ENV_PATHS:
+        path = repo_root / relative_path
+        if not path.exists():
+            issues.append(
+                ReleaseCheckIssue(
+                    severity="error",
+                    path=relative_path.as_posix(),
+                    message="production app env example is missing.",
+                )
+            )
+            continue
+        assignments = _env_assignments(path.read_text(encoding="utf-8", errors="ignore"))
+        for key in DISALLOWED_APP_PROVIDER_KEYS:
+            if key in assignments:
+                issues.append(
+                    ReleaseCheckIssue(
+                        severity="error",
+                        path=relative_path.as_posix(),
+                        message=f"app service env examples must not set {key}.",
+                    )
+                )
+        if relative_path.name != ".env.prod.example":
+            continue
+        issues.extend(_require_env_value(assignments, "LLM_PROVIDER_MODE", "litellm", relative_path))
+        issues.extend(
+            _require_env_value(assignments, "ALLOW_DIRECT_LLM_IN_PROD", "false", relative_path)
+        )
+        for key in ("LITELLM_BASE_URL", "LITELLM_API_KEY"):
+            if not assignments.get(key):
+                issues.append(
+                    ReleaseCheckIssue(
+                        severity="error",
+                        path=relative_path.as_posix(),
+                        message=f"{key} is required for the production LiteLLM gateway.",
+                    )
+                )
+        for key in APP_LITELLM_ALIAS_ENV_KEYS:
+            value = assignments.get(key)
+            if not value:
+                issues.append(
+                    ReleaseCheckIssue(
+                        severity="error",
+                        path=relative_path.as_posix(),
+                        message=f"{key} must be set to a LiteLLM proxy alias.",
+                    )
+                )
+                continue
+            if allowed_aliases and value not in allowed_aliases:
+                issues.append(
+                    ReleaseCheckIssue(
+                        severity="error",
+                        path=relative_path.as_posix(),
+                        message=(
+                            f"{key}={value} must reference an alias from "
+                            "deploy/litellm/config.yaml."
+                        ),
+                    )
+                )
     return issues
 
 
@@ -323,6 +562,41 @@ def _env_value(text: str, key: str) -> str | None:
             continue
         return stripped[len(prefix) :].split("#", 1)[0].strip()
     return None
+
+
+def _env_assignments(text: str) -> dict[str, str]:
+    assignments: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        assignments[key] = value.split("#", 1)[0].strip().strip("'\"")
+    return assignments
+
+
+def _is_env_reference(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("os.environ/")
+
+
+def _require_env_value(
+    assignments: dict[str, str],
+    key: str,
+    expected: str,
+    relative_path: Path,
+) -> list[ReleaseCheckIssue]:
+    if assignments.get(key) == expected:
+        return []
+    return [
+        ReleaseCheckIssue(
+            severity="error",
+            path=relative_path.as_posix(),
+            message=f"{key}={expected} is required for the production LiteLLM gateway.",
+        )
+    ]
 
 
 def _required_string(

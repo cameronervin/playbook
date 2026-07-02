@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import subprocess
 from dataclasses import dataclass, field
@@ -34,6 +35,28 @@ logger = structlog.get_logger(__name__)
 
 
 DEFAULT_MAX_CONCURRENCY = 5
+
+
+def _run_experiment_accepts_data(run_experiment: Any) -> bool:
+    """Whether the installed Langfuse SDK expects dataset items via ``data=``."""
+    try:
+        signature = inspect.signature(run_experiment)
+    except (TypeError, ValueError):
+        return True
+    parameters = signature.parameters
+    if "data" in parameters:
+        return True
+    if "dataset" in parameters:
+        return False
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+
+
+def _experiment_data(dataset: Any) -> Any:
+    """Return the item list expected by Langfuse v4, preserving legacy fallback."""
+    return getattr(dataset, "items", dataset)
 
 
 @dataclass
@@ -218,16 +241,24 @@ async def run_spec(
         return _langfuse_evaluations(scores)
 
     def _run_experiment() -> Any:
-        return langfuse.run_experiment(
-            name=run_name,
-            dataset=dataset,
-            task=_task,
-            evaluators=[_evaluator],
-            max_concurrency=max_concurrency,
-            description=(
+        common_kwargs = {
+            "name": run_name,
+            "task": _task,
+            "evaluators": [_evaluator],
+            "max_concurrency": max_concurrency,
+            "description": (
                 f"Playbook eval for {spec.name}; "
                 f"judge={type(spec.judge).__name__}; concurrency={max_concurrency}"
             ),
+        }
+        if _run_experiment_accepts_data(langfuse.run_experiment):
+            return langfuse.run_experiment(
+                data=_experiment_data(dataset),
+                **common_kwargs,
+            )
+        return langfuse.run_experiment(
+            dataset=dataset,
+            **common_kwargs,
         )
 
     # The SDK runner is synchronous while supporting async tasks. Run it in a

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AdminShell } from '@/src/components/features/admin/AdminShell'
@@ -1236,11 +1236,12 @@ describe('AdminShell', () => {
   })
 
   it('lets super admins create KB collections with title, description, and icon', async () => {
+    const user = userEvent.setup({ delay: null })
     currentUser.role = 'super_admin'
     useUIStore.setState({ adminTab: 'kb' })
     renderAdmin()
 
-    await userEvent.click(screen.getByRole('button', { name: /New collection/i }))
+    await user.click(screen.getByRole('button', { name: /New collection/i }))
 
     const dialog = screen.getByRole('dialog', { name: /New collection/i })
     const iconOptions = Array.from(dialog.querySelectorAll('.pb-admin-kb-icon-option'))
@@ -1253,9 +1254,11 @@ describe('AdminShell', () => {
       expect(option.querySelectorAll('svg')).toHaveLength(1)
     }
 
-    await userEvent.type(within(dialog).getByLabelText(/Title/i), 'Sport rules')
-    await userEvent.type(within(dialog).getByLabelText(/Description/i), 'Sport-specific rules and team policies.')
-    await userEvent.click(bookOption)
+    fireEvent.change(within(dialog).getByLabelText(/Title/i), { target: { value: 'Sport rules' } })
+    fireEvent.change(within(dialog).getByLabelText(/Description/i), {
+      target: { value: 'Sport-specific rules and team policies.' },
+    })
+    await user.click(bookOption)
 
     expect(within(dialog).getByRole('button', { name: /^Book$/i, pressed: true })).toHaveClass('is-selected')
     expect(within(dialog).getByRole('button', { name: /^Shield$/i, pressed: false })).not.toHaveClass(
@@ -1265,7 +1268,7 @@ describe('AdminShell', () => {
       expect(option.querySelectorAll('svg')).toHaveLength(1)
     }
 
-    await userEvent.click(within(dialog).getByRole('button', { name: /Create collection/i }))
+    await user.click(within(dialog).getByRole('button', { name: /Create collection/i }))
 
     expect(createCollectionMutateAsync).toHaveBeenCalledWith({
       title: 'Sport rules',
@@ -1430,6 +1433,7 @@ describe('AdminShell', () => {
   })
 
   it('uploads a KB document with dialog metadata, local progress, and queued status', async () => {
+    const user = userEvent.setup({ delay: null })
     currentUser.role = 'super_admin'
     useUIStore.setState({ adminTab: 'kb' })
     uploadDocumentMutate.mockImplementation(async (request) => {
@@ -1438,18 +1442,17 @@ describe('AdminShell', () => {
     })
     renderAdmin()
 
-    await userEvent.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
-    await userEvent.upload(
+    await user.click(screen.getByRole('button', { name: /Compliance & NIL collection/i }))
+    await user.upload(
       getKnowledgeBaseUploadInput(),
       new File(['hello'], 'athlete-handbook.pdf', { type: 'application/pdf' }),
     )
     const dialog = screen.getByRole('dialog', { name: /Upload document/i })
-    await userEvent.clear(within(dialog).getByLabelText(/Title/i))
-    await userEvent.type(within(dialog).getByLabelText(/Title/i), 'Athlete handbook')
-    await userEvent.click(within(dialog).getByRole('button', { name: /Add NIL/i }))
-    await userEvent.click(within(dialog).getByRole('button', { name: /Add Compliance/i }))
-    await userEvent.type(within(dialog).getByLabelText(/Source date/i), '2026-06-29')
-    await userEvent.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
+    fireEvent.change(within(dialog).getByLabelText(/Title/i), { target: { value: 'Athlete handbook' } })
+    await user.click(within(dialog).getByRole('button', { name: /Add NIL/i }))
+    await user.click(within(dialog).getByRole('button', { name: /Add Compliance/i }))
+    fireEvent.change(within(dialog).getByLabelText(/Source date/i), { target: { value: '2026-06-29' } })
+    await user.click(within(dialog).getByRole('button', { name: /^Upload$/i }))
 
     expect(uploadDocumentMutate).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -10,6 +10,9 @@ from app.agents.chains import (
 from app.agents.context.prompt_composers.athlete_chat_prompt_composer import (
     build_athlete_chat_prompt,
 )
+from app.agents.prompts.conversation_title_prompt import (
+    CONVERSATION_TITLE_SYSTEM_PROMPT,
+)
 from app.agents.runtime_context import (
     AthleteChatRuntimeContext,
     ConversationTitleRuntimeContext,
@@ -64,6 +67,33 @@ def test_athlete_chat_prompt_includes_scope_refusal_and_grounding_policy() -> No
     assert "steer the athlete back to athletics" in prompt
     assert "NIL, compliance, recruiting" in prompt
     assert "retrieved Playbook knowledge base sources" in prompt
+
+
+def test_athlete_kb_prompt_requires_returned_and_fresh_source_keys() -> None:
+    prompt = build_athlete_chat_prompt(
+        "athlete_chat",
+        ["search_playbook_knowledgebase"],
+    )
+
+    assert "Use only returned source keys" in prompt
+    assert "cite the newest applicable source key" in prompt
+    assert "do not cite stale conflict sources" in prompt
+
+
+def test_conversation_title_prompt_requires_canonical_eval_labels() -> None:
+    prompt = CONVERSATION_TITLE_SYSTEM_PROMPT
+
+    assert "<role>" in prompt
+    assert "<rules>" in prompt
+    assert "NIL disclosure" in prompt
+    assert "recruiting" in prompt
+    assert "emergency support" in prompt
+    assert "travel receipts" in prompt
+    assert "study hall" in prompt
+    assert "contract approval" in prompt
+    assert "ticket benefits" in prompt
+    assert "3 to 7 words" in prompt
+    assert "Never include private names" in prompt
 
 
 def test_create_conversation_title_chain_wires_structured_agent(monkeypatch) -> None:

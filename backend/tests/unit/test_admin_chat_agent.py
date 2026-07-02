@@ -322,6 +322,8 @@ def test_admin_chat_prompt_includes_tool_use_policy_and_stop_guidance() -> None:
     assert "final structured response tool" in prompt
     assert "After a relevant data tool result" in prompt
     assert "Do not call the same data tool with equivalent arguments twice" in prompt
+    assert "Every final reference must come from Allowed References" in prompt
+    assert "Include references for every metric, query, or dashboard insight used" in prompt
 
 
 def test_admin_chat_tools_expose_described_argument_schemas() -> None:

@@ -9,11 +9,18 @@ from app.core.log_redaction import redact_secrets
 def test_redact_secrets_masks_nested_secret_values() -> None:
     payload = {
         "LITELLM_API_KEY": "sk-litellm-secret",
+        "client_ip": "203.0.113.30",
+        "athlete_name": "Jordan Athlete",
+        "athlete_email": "jordan.athlete@example.com",
+        "provider_subject": "google-oauth-subject",
         "presigned_url": "https://storage.test/file.pdf?signature=source-secret",
+        "prompt": "private retrieval prompt",
+        "source_text": "private source document text",
         "model_inputs": ["private summary prompt"],
         "nested": {
             "KB_WEBHOOK_SECRET": "webhook-secret",
             "items": [{"Authorization": "Bearer token-secret"}],
+            "raw_ip_address": "198.51.100.30",
             "extracted_text": "full extracted source text",
             "file_contents": "binary-ish private file contents",
         },
@@ -24,7 +31,14 @@ def test_redact_secrets_masks_nested_secret_values() -> None:
     rendered = repr(redacted)
 
     assert "sk-litellm-secret" not in rendered
+    assert "203.0.113.30" not in rendered
+    assert "198.51.100.30" not in rendered
+    assert "Jordan Athlete" not in rendered
+    assert "jordan.athlete@example.com" not in rendered
+    assert "google-oauth-subject" not in rendered
     assert "source-secret" not in rendered
+    assert "private retrieval prompt" not in rendered
+    assert "private source document text" not in rendered
     assert "private summary prompt" not in rendered
     assert "full extracted source text" not in rendered
     assert "binary-ish private file contents" not in rendered
