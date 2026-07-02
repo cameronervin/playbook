@@ -27,7 +27,6 @@ import {
   useSubmitConversationMessage,
   useUploadConversationFile,
 } from '@/src/hooks/useConversations'
-import { useSessionActivity } from '@/src/hooks/useSessionActivity'
 import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { getChatWorkspaceRedirect } from '@/src/lib/authRouting'
 import { useUIStore } from '@/src/lib/store/uiStore'
@@ -79,7 +78,6 @@ export function ChatShell() {
     uploadConversationFile: uploadConversationFileMutation,
   })
   const logout = useLogout()
-  useSessionActivity({ enabled: Boolean(user) && !userLoading })
 
   useEffect(() => {
     if (!user || userLoading) return

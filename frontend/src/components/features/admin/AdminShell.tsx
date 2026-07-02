@@ -48,7 +48,6 @@ import {
   useUpdateKBDocumentMetadata,
   useUploadKBDocument,
 } from '@/src/hooks/useKBDocuments'
-import { useSessionActivity } from '@/src/hooks/useSessionActivity'
 import { QUERY_KEYS, ROUTES } from '@/src/lib/constants/config'
 import { useUIStore } from '@/src/lib/store/uiStore'
 import type { AdminAnalyticsQueryFilters } from '@/src/types/adminAnalytics'
@@ -136,7 +135,6 @@ export function AdminShell() {
     submitAdminChatMessage.isError
   const adminChatLoading = Boolean(adminChatSessionId) && adminChatSessionQuery.isLoading && adminChatMessages.length === 0
   const failedDocsCount = documents.filter((document) => document.processing_status === 'failed').length
-  useSessionActivity({ enabled: Boolean(user) && !isLoading })
 
   useEffect(() => {
     if (!isSuperAdmin && adminTab === 'users') setAdminTab('insights')

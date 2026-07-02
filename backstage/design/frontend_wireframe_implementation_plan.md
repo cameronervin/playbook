@@ -24,10 +24,11 @@ Target route model:
 - `/admin` for default admin-only operations.
 - `/` as an auth-aware redirect to the appropriate route.
 
-Current route organization keeps `/login` and `/profile` under `src/app/(auth)/`
-for the shared auth stage, and `/chat` and `/admin` under
-`src/app/(workspace)/` for the shared left/main/right workspace geometry. Route
-groups must not change the public URL paths above.
+Current route organization keeps public `/login` under `src/app/(auth)/`, wraps
+authenticated routes in `src/app/(protected)/`, keeps `/profile` under
+`src/app/(protected)/(auth)/` for the shared auth stage, and keeps `/chat` and
+`/admin` under `src/app/(protected)/(workspace)/` for the shared left/main/right
+workspace geometry. Route groups must not change the public URL paths above.
 
 Implementation should wire currently implemented backend APIs immediately and isolate planned-but-missing APIs behind typed fixture adapters so each phase can land cleanly.
 
