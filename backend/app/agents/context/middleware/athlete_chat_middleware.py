@@ -100,7 +100,6 @@ def _filter_blank_messages(
 def _build_runtime_context(state: dict[str, Any]) -> str:
     """Build compact, non-authoritative context for the active athlete turn."""
     question = _string_value(state.get("user_message_content"), "Unknown")
-    requires_kb_support = bool(state.get("requires_kb_support", False))
     topic_labels = _string_list(state.get("topic_labels"))
     risk_labels = _string_list(state.get("risk_labels"))
     attached_file_ids = _string_list(state.get("attached_file_ids"))
@@ -110,7 +109,6 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
         [
             "## Athlete Chat Runtime Context",
             f"Current question: {question}",
-            f"Requires KB support: {_bool_text(requires_kb_support)}",
             f"Topic labels: {_csv_or_none(topic_labels)}",
             f"Risk labels: {_csv_or_none(risk_labels)}",
             f"Attached file count: {len(attached_file_ids)}",
@@ -122,6 +120,12 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
                 "Data tools are optional. Use search tools only when the current "
                 "question needs official KB evidence or ready uploaded-file "
                 "evidence."
+            ),
+            (
+                "Policy/process claims should use official KB evidence from "
+                "search_playbook_knowledgebase. If no returned source supports "
+                'the answer, submit answer_type "unsupported" and direct the '
+                "athlete to the athletic department."
             ),
             (
                 "If Ready conversation file count is 0, do not call "
@@ -216,10 +220,6 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, Sequence):
         return [str(item).strip() for item in value if str(item).strip()]
     return [str(value).strip()] if str(value).strip() else []
-
-
-def _bool_text(value: bool) -> str:
-    return "true" if value else "false"
 
 
 def _csv_or_none(values: Sequence[str]) -> str:

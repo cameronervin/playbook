@@ -269,5 +269,6 @@ LangGraph updates  -> graph_update progress with safe node metadata only
 ```
 
 The graph publishes the final assistant chunk only from `save_state`, after
-required KB source support and citation keys are validated. This avoids
-streaming an unsupported policy answer before citation checks complete.
+final text is available and any model-requested citation keys are filtered
+against sources actually returned by tools. This avoids streaming fabricated
+citations or unvalidated placeholder text.

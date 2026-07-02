@@ -222,6 +222,25 @@ class NoToolChain:
         }
 
 
+class FabricatedCitationChain:
+    async def ainvoke(
+        self,
+        input: dict,
+        config: dict | None = None,
+        context: object | None = None,
+    ) -> dict[str, AthleteChatStructuredResponse]:
+        assert "requires_kb_support" not in input
+        return {
+            "structured_response": AthleteChatStructuredResponse(
+                answer="Use the made-up source.",
+                answer_type="grounded_answer",
+                cited_source_keys=["S-fabricated"],
+                topic_labels=["nil"],
+                risk_labels=["compliance"],
+            )
+        }
+
+
 class TitleChain:
     async def ainvoke(
         self,
@@ -370,6 +389,10 @@ def fake_chain_with_multi_source_tool(
 
 def fake_chain_without_tool(**_: object) -> NoToolChain:
     return NoToolChain()
+
+
+def fake_chain_with_fabricated_citation(**_: object) -> FabricatedCitationChain:
+    return FabricatedCitationChain()
 
 
 def fake_title_chain(**_: object) -> TitleChain:
@@ -753,7 +776,7 @@ async def test_athlete_chat_executor_persists_citations_in_kb_service_order(
 
 
 @pytest.mark.asyncio
-async def test_athlete_chat_executor_converts_required_no_source_answer_to_refusal(
+async def test_athlete_chat_executor_preserves_no_citation_model_answer(
     db_session,
     test_settings,
     monkeypatch,
@@ -788,7 +811,7 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
         role="assistant",
         content="",
         status="streaming",
-        metadata={"task_id": "task-refusal", "user_message_id": str(user_message.id)},
+        metadata={"task_id": "task-no-citation", "user_message_id": str(user_message.id)},
     )
 
     provider = InMemoryAgentStreamProvider()
@@ -800,7 +823,7 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
         stream_service=AgentStreamService(provider),
         settings=test_settings,
     ).execute(
-        task_id="task-refusal",
+        task_id="task-no-citation",
         conversation_id=conversation.id,
         athlete_user_id=athlete.id,
         user_message_id=user_message.id,
@@ -814,7 +837,8 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
         assistant_message.id
     )
     records = [
-        record async for record in provider.iter_events("task-refusal", after_id="0-0")
+        record
+        async for record in provider.iter_events("task-no-citation", after_id="0-0")
     ]
     chunk_text = "".join(
         str(record.event.data["content"])
@@ -822,14 +846,83 @@ async def test_athlete_chat_executor_converts_required_no_source_answer_to_refus
         if record.event.event_type.value == "chunk"
     )
 
-    assert result["answer_type"] == "unsupported"
+    assert result["answer_type"] == "grounded_answer"
     assert updated is not None
     assert updated.status == "complete"
-    assert "athletic department" in updated.content
-    assert updated.safety_outcome == "unsupported"
+    assert updated.content == "Yes, you can accept it."
+    assert updated.safety_outcome == "grounded_answer"
     assert citations == []
-    assert "Yes, you can accept it." not in chunk_text
     assert chunk_text == updated.content
+
+
+@pytest.mark.asyncio
+async def test_athlete_chat_executor_filters_fabricated_source_keys_without_fallback(
+    db_session,
+    test_settings,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        chains_builder,
+        "create_athlete_chat_chain",
+        fake_chain_with_fabricated_citation,
+    )
+    organization = await OrganizationRepository(db_session).create(
+        name="Playbook Athletics",
+        slug="playbook-agent-fabricated-source",
+    )
+    athlete = await UserRepository(db_session).create(
+        organization_id=organization.id,
+        email="athlete-fabricated@example.com",
+        name="Jordan Athlete",
+        auth_provider="google",
+        provider_subject="athlete-fabricated",
+    )
+    conversation = await ConversationRepository(db_session).create(
+        organization_id=organization.id,
+        athlete_id=athlete.id,
+    )
+    user_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="user",
+        content="Can I accept this NIL deal?",
+    )
+    assistant_message = await ConversationMessageRepository(db_session).create(
+        conversation_id=conversation.id,
+        role="assistant",
+        content="",
+        status="streaming",
+        metadata={
+            "task_id": "task-fabricated-source",
+            "user_message_id": str(user_message.id),
+        },
+    )
+
+    result = await AthleteChatExecutor(
+        session=db_session,
+        chat_model=object(),
+        knowledgebase_provider=FakeKnowledgebaseProvider(),
+        stream_service=AgentStreamService(InMemoryAgentStreamProvider()),
+        settings=test_settings,
+    ).execute(
+        task_id="task-fabricated-source",
+        conversation_id=conversation.id,
+        athlete_user_id=athlete.id,
+        user_message_id=user_message.id,
+        assistant_message_id=assistant_message.id,
+        organization_id=organization.id,
+        attached_file_ids=[],
+    )
+
+    updated = await ConversationMessageRepository(db_session).get(assistant_message.id)
+    citations = await MessageCitationRepository(db_session).list_by_message(
+        assistant_message.id
+    )
+
+    assert result["answer_type"] == "grounded_answer"
+    assert updated is not None
+    assert updated.content == "Use the made-up source."
+    assert updated.message_metadata["source_keys"] == []
+    assert citations == []
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,10 @@ from app.agents.chains.athlete_chat_chain import create_athlete_chat_chain
 from app.agents.chains.conversation_title_chain import (
     create_conversation_title_chain,
 )
-from app.agents.states.athlete_chat_state import AthleteChatStructuredResponse
+from app.agents.states.athlete_chat_state import (
+    AthleteChatState,
+    AthleteChatStructuredResponse,
+)
 from app.agents.states.conversation_title_state import (
     ConversationTitleStructuredResponse,
 )
@@ -99,3 +102,7 @@ async def test_athlete_chat_chain_preserves_structured_response(test_settings) -
         answer="You should disclose the NIL deal.",
     )
     assert model.calls == 1
+
+
+def test_athlete_chat_state_has_no_keyword_kb_requirement_flag() -> None:
+    assert "requires_kb_support" not in AthleteChatState.__annotations__

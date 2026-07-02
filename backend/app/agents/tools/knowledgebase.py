@@ -77,8 +77,9 @@ ATHLETE_KB_TOOL_PROFILE = KnowledgebaseToolProfile(
     description=(
         "Search official Playbook athletic department knowledge base sources for "
         "athlete NIL, compliance, recruiting, reporting, and process guidance. "
-        "Use this before making policy or process claims, then stop once enough "
-        "official evidence is found."
+        "Use this before making unsupported policy or process claims. If no "
+        "returned source supports the answer, stop searching and answer "
+        "unsupported."
     ),
     metadata_filter={"visibility_policy": {"scope": "all_athletes"}},
 )
@@ -108,7 +109,8 @@ class KnowledgebaseSearchInput(BaseModel):
         description=(
             "focused official policy or process search terms for the athlete's "
             "current NIL, compliance, recruiting, reporting, or department "
-            "process question."
+            "process question. Do not repeat an equivalent query in the same "
+            "answer."
         )
     )
     max_docs: int | None = Field(

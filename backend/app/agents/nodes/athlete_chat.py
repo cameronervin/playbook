@@ -136,22 +136,16 @@ def create_athlete_chat_nodes(
         if decision.bypass_agent:
             return {
                 "should_bypass_agent": True,
-                "requires_kb_support": decision.requires_kb_support,
                 "answer": decision.response_text,
                 "answer_type": decision.answer_type,
                 "cited_source_keys": [],
-                "topic_labels": decision.topic_labels,
-                "risk_labels": decision.risk_labels,
                 "safety_outcome": decision.safety_outcome,
             }
 
         return {
             "should_bypass_agent": False,
-            "requires_kb_support": decision.requires_kb_support,
             "answer_type": decision.answer_type,
             "cited_source_keys": [],
-            "topic_labels": decision.topic_labels,
-            "risk_labels": decision.risk_labels,
             "safety_outcome": decision.safety_outcome,
         }
 
@@ -240,7 +234,6 @@ def create_athlete_chat_nodes(
                         "conversation_file_manifest",
                         "",
                     ),
-                    "requires_kb_support": state.get("requires_kb_support", False),
                     "topic_labels": state.get("topic_labels", []),
                     "risk_labels": state.get("risk_labels", []),
                 },
@@ -288,9 +281,6 @@ def create_athlete_chat_nodes(
         )
         answer = state.get("answer", "").strip()
         answer_type = state.get("answer_type", "grounded_answer")
-        if state.get("requires_kb_support") and not cited_sources:
-            answer = UNSUPPORTED_RESPONSE
-            answer_type = "unsupported"
         if not answer:
             answer = UNSUPPORTED_RESPONSE
             answer_type = "unsupported"

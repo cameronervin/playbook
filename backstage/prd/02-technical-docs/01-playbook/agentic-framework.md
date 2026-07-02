@@ -102,7 +102,7 @@ and steered back to athletics or department support topics.
 2. Message submit API dispatches a Celery task and returns `task_id` plus stream metadata.
 3. Celery worker loads the conversation/message context and resumes the LangGraph thread.
 4. Classify topic/risk labels for analytics.
-5. Run safety pre-check for emergency, medical, legal, mental-health, harassment/reporting, recruiting, NIL, and compliance risk.
+5. Run deterministic safety pre-check for emergency, medical, legal, and mental-health guardrails.
 6. Retrieve KB context using organization and visibility filters.
 7. Retrieve conversation file context from ready, nonempty files. Attached file
    IDs narrow retrieval; when no files are attached, search all ready files in

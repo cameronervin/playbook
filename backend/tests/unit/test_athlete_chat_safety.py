@@ -11,6 +11,7 @@ def test_emergency_prompts_bypass_agent_with_instruction() -> None:
     assert decision.safety_outcome == "emergency"
     assert "911" in decision.response_text
     assert "988" in decision.response_text
+    assert not hasattr(decision, "requires_kb_support")
 
 
 def test_medical_and_legal_prompts_decline_without_agent() -> None:
@@ -22,14 +23,16 @@ def test_medical_and_legal_prompts_decline_without_agent() -> None:
     assert medical.safety_outcome == "medical"
     assert legal.bypass_agent is True
     assert legal.safety_outcome == "legal"
+    assert not hasattr(medical, "requires_kb_support")
+    assert not hasattr(legal, "requires_kb_support")
 
 
-def test_nil_and_compliance_prompts_require_kb_support() -> None:
+def test_nil_and_compliance_prompts_do_not_set_kb_guardrail_metadata() -> None:
     decision = evaluate_athlete_message_safety(
         "Can I accept this NIL deal under compliance rules?"
     )
 
     assert decision.bypass_agent is False
-    assert decision.requires_kb_support is True
-    assert decision.topic_labels == ["nil", "compliance"]
-    assert "compliance" in decision.risk_labels
+    assert decision.answer_type == "grounded_answer"
+    assert decision.safety_outcome is None
+    assert not hasattr(decision, "requires_kb_support")

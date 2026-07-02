@@ -60,7 +60,6 @@ class AthleteChatState(AgentState[AthleteChatStructuredResponse], total=False):
     conversation_file_ready_file_ids: list[str]
     conversation_file_manifest: str
     should_bypass_agent: bool
-    requires_kb_support: bool
 
     answer: str
     answer_type: AthleteChatAnswerType

@@ -108,7 +108,6 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
                 "user_message_content": "Can I accept this NIL deal?",
                 "attached_file_ids": ["file-1", "file-2"],
                 "conversation_file_ready_file_ids": ["file-1"],
-                "requires_kb_support": True,
                 "topic_labels": ["nil"],
                 "risk_labels": ["compliance"],
             },
@@ -118,14 +117,14 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
     context = messages[-1].content
     assert "## Athlete Chat Runtime Context" in context
     assert "Can I accept this NIL deal?" in context
-    assert "Requires KB support: true" in context
     assert "Topic labels: nil" in context
     assert "Risk labels: compliance" in context
     assert "Attached file count: 2" in context
     assert "Attached file IDs: file-1, file-2" in context
     assert "Ready conversation file count: 1" in context
     assert "### Tool Guidance Reminder" in context
-    assert "Requires KB support is true" in context
+    assert "Requires KB support" not in context
+    assert "Policy/process claims should use official KB evidence" in context
     assert "If Ready conversation file count is 0, do not call search_conversation_files" in context
     assert "After a relevant tool result, produce the final structured response" in context
     assert "Do not call the same search tool with equivalent arguments twice" in context
