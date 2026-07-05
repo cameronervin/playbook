@@ -1,20 +1,12 @@
-"""LLM provider factory.
-
-Factory pattern for creating LLM providers based on LLM_PROVIDER_MODE.
-
-Modes:
-    - gateway: route all requests through a LiteLLM (OpenAI-compatible) gateway.
-    - direct:  per-use-case provider configuration (Anthropic-first).
-
-Pattern: StrEnum mode + @lru_cache factory + FastAPI dependency + clear_all_caches.
-"""
+"""LLM provider factory."""
 
 from enum import StrEnum
-from functools import lru_cache
+from typing import Annotated
 
 import structlog
+from fastapi import Depends
 
-from app.core.config import settings
+from app.core.config import Settings, get_request_settings, get_settings
 from app.infrastructure.llm.providers.base import BaseLLMProvider
 
 logger = structlog.get_logger()
@@ -23,18 +15,42 @@ logger = structlog.get_logger()
 class LLMProviderMode(StrEnum):
     """Available LLM provider modes."""
 
-    GATEWAY = "gateway"  # Route all operations through the LiteLLM gateway
-    DIRECT = "direct"    # Per-use-case provider configuration
+    DIRECT = "direct"
+    LITELLM = "litellm"
 
 
 PROVIDER_MODE_DESCRIPTIONS = {
-    LLMProviderMode.GATEWAY: "LiteLLM gateway — unified API access to multiple providers",
-    LLMProviderMode.DIRECT: "Per-use-case provider selection with direct SDK access",
+    LLMProviderMode.DIRECT: "Direct provider SDK access",
+    LLMProviderMode.LITELLM: "LiteLLM proxy — unified API access to multiple providers",
 }
 
 
-@lru_cache
-def get_llm_provider(mode: LLMProviderMode | None = None) -> BaseLLMProvider:
+_provider_cache: dict[tuple[LLMProviderMode, str], BaseLLMProvider] = {}
+
+
+def _build_llm_provider(
+    mode: LLMProviderMode,
+    app_settings: Settings,
+) -> BaseLLMProvider:
+    logger.info("Initializing LLM provider", mode=mode.value)
+
+    if mode == LLMProviderMode.LITELLM:
+        from app.infrastructure.llm.providers.gateway import LiteLLMProvider
+
+        return LiteLLMProvider(app_settings)
+
+    if mode == LLMProviderMode.DIRECT:
+        from app.infrastructure.llm.providers.direct import DirectLLMProvider
+
+        return DirectLLMProvider(app_settings)
+
+    raise ValueError(f"Unknown LLM provider mode: {mode}")
+
+
+def get_llm_provider(
+    mode: LLMProviderMode | None = None,
+    app_settings: Settings | None = None,
+) -> BaseLLMProvider:
     """Get the configured LLM provider (cached singleton).
 
     Args:
@@ -43,34 +59,27 @@ def get_llm_provider(mode: LLMProviderMode | None = None) -> BaseLLMProvider:
     Raises:
         ValueError: If the mode is invalid.
     """
-    mode = mode or LLMProviderMode(settings.LLM_PROVIDER_MODE)
-
-    logger.info("Initializing LLM provider", mode=mode.value)
-
-    if mode == LLMProviderMode.GATEWAY:
-        from app.infrastructure.llm.providers.gateway import GatewayLLMProvider
-
-        return GatewayLLMProvider()
-
-    if mode == LLMProviderMode.DIRECT:
-        from app.infrastructure.llm.providers.direct import DirectLLMProvider
-
-        return DirectLLMProvider()
-
-    raise ValueError(f"Unknown LLM provider mode: {mode}")
+    settings = app_settings or get_settings()
+    resolved_mode = mode or LLMProviderMode(settings.LLM_PROVIDER_MODE)
+    cache_key = (resolved_mode, settings.model_dump_json())
+    if cache_key not in _provider_cache:
+        _provider_cache[cache_key] = _build_llm_provider(resolved_mode, settings)
+    return _provider_cache[cache_key]
 
 
-def get_llm_provider_dependency(mode: LLMProviderMode | None = None) -> BaseLLMProvider:
+def get_llm_provider_dependency(
+    app_settings: Annotated[Settings, Depends(get_request_settings)],
+) -> BaseLLMProvider:
     """FastAPI dependency for the LLM provider. Use with Depends()."""
-    return get_llm_provider(mode)
+    return get_llm_provider(app_settings=app_settings)
 
 
 def clear_all_caches() -> None:
     """Clear the factory cache and all provider-specific model caches."""
-    get_llm_provider.cache_clear()
+    _provider_cache.clear()
 
     from app.infrastructure.llm.providers.direct import clear_caches as clear_direct
-    from app.infrastructure.llm.providers.gateway import clear_caches as clear_gateway
+    from app.infrastructure.llm.providers.gateway import clear_caches as clear_litellm
 
-    clear_gateway()
+    clear_litellm()
     clear_direct()

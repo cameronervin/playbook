@@ -12,7 +12,9 @@ build/
 *.log
 .coverage
 .pytest_cache/
+.ruff_cache/
 coverage/
+.artifacts/
 
 # Environment files - never commit secrets
 .env
@@ -40,3 +42,8 @@ celerybeat-schedule
 celerybeat-schedule.bak
 celerybeat-schedule.dir
 celerybeat-schedule.dat
+
+# Eval run artifacts
+/backend/evals/results/*.json
+/backend/evals/results/*.md
+!/backend/evals/results/README.md

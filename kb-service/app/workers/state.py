@@ -43,7 +43,9 @@ class _WorkerState:
         if client is None:
             if self._embed_client_factory is None:
                 # init never ran — fall back to building from scratch.
-                from app.infrastructure.embedders.factory import build_fresh_embed_provider
+                from app.infrastructure.embedders.factory import (
+                    build_fresh_embed_provider,
+                )
 
                 self._embed_client_factory = build_fresh_embed_provider
             client = self._embed_client_factory()

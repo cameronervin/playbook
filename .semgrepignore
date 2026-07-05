@@ -1,0 +1,15 @@
+.git/
+.artifacts/
+.next/
+.pytest_cache/
+.ruff_cache/
+.venv/
+backend/.venv/
+kb-service/.venv/
+node_modules/
+frontend/.next/
+frontend/node_modules/
+coverage/
+dist/
+build/
+backstage/design/design-reference/

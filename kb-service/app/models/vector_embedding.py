@@ -8,8 +8,8 @@ from __future__ import annotations
 import uuid
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import ForeignKey, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Computed, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -30,4 +30,12 @@ class VectorEmbedding(Base):
     # Dimension fixed at 1536 to match settings.KB_EMBED_DIMENSIONS.
     embedding: Mapped[list[float] | None] = mapped_column(VECTOR(1536), nullable=True)
     document: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector('english'::regconfig, coalesce(document, ''))",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     cmetadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

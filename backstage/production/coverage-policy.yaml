@@ -1,0 +1,128 @@
+version: 1
+last_reviewed: "2026-07-02"
+required_surfaces:
+  - auth
+  - authz
+  - privacy_redaction
+  - uploads
+  - kb_ingest_search
+  - evals
+  - admin_analytics
+  - tracing_sentry
+  - rate_limits
+surfaces:
+  auth:
+    description: OAuth/session bootstrap, app-session validation, and frontend auth API behavior.
+    evidence:
+      tests:
+        - backend/tests/integration/test_auth_routes.py
+        - backend/tests/unit/test_auth_dependencies.py
+        - frontend/src/lib/api/endpoints/auth.test.ts
+      docs:
+        - backstage/prd/02-technical-docs/01-playbook/security.md
+        - backstage/production/coverage-policy.md
+  authz:
+    description: Athlete/admin/super-admin boundaries across backend APIs and protected frontend layouts.
+    evidence:
+      tests:
+        - backend/tests/integration/test_release_authz_gates.py
+        - backend/tests/integration/test_admin_user_routes.py
+        - frontend/src/app/(protected)/layout.test.tsx
+        - frontend/src/app/(protected)/(workspace)/layout.test.tsx
+      docs:
+        - backstage/prd/02-technical-docs/01-playbook/security.md
+        - backstage/api/endpoints.md
+  privacy_redaction:
+    description: Privacy-safe analytics, logs, traces, and monitoring payloads.
+    evidence:
+      tests:
+        - backend/tests/unit/test_log_redaction.py
+        - backend/tests/unit/test_logging_config.py
+        - backend/tests/unit/test_langfuse_init.py
+        - backend/tests/integration/test_admin_analytics_dashboard_insights.py
+        - kb-service/tests/test_core/test_log_redaction.py
+        - kb-service/tests/test_core/test_logging_config.py
+      docs:
+        - backstage/prd/02-technical-docs/01-playbook/security.md
+        - backstage/prd/02-technical-docs/02-kb-service/operations-security.md
+  uploads:
+    description: Direct-upload contracts, storage verification, stale request cleanup, and conversation-scoped file boundaries.
+    evidence:
+      tests:
+        - backend/tests/unit/test_direct_upload_schemas.py
+        - backend/tests/unit/test_direct_upload_workflows.py
+        - backend/tests/integration/test_upload_request_reconciliation.py
+        - backend/tests/integration/test_upload_request_repositories.py
+        - frontend/src/hooks/useDirectUploads.test.tsx
+        - frontend/src/lib/api/directUpload.test.ts
+      docs:
+        - backstage/architecture/direct-upload-flow.md
+        - backstage/prd/02-technical-docs/01-playbook/integration-spec.md
+  kb_ingest_search:
+    description: Backend KB provider/outbox/webhooks plus KB-service ingest, retrieval, chunk, vector, and cleanup behavior.
+    evidence:
+      tests:
+        - backend/tests/unit/test_local_kb_provider.py
+        - backend/tests/unit/test_kb_source_contracts.py
+        - backend/tests/integration/test_kb_ingest_outbox_worker.py
+        - backend/tests/integration/test_kb_webhook_routes.py
+        - kb-service/tests/test_services/test_ingestion_service.py
+        - kb-service/tests/test_services/test_search_service.py
+        - kb-service/tests/test_worker/test_finalize_task.py
+        - kb-service/tests/test_app/test_repositories/test_vector_repository.py
+      docs:
+        - backstage/prd/02-technical-docs/02-kb-service/ingestion-pipeline.md
+        - backstage/prd/02-technical-docs/02-kb-service/retrieval.md
+  evals:
+    description: Dataset validation, spec registration, runner/aggregate behavior, release checks, and deterministic/LLM/RAG judges.
+    evidence:
+      tests:
+        - backend/tests/unit/evals/test_cli.py
+        - backend/tests/unit/evals/test_dataset_validation.py
+        - backend/tests/unit/evals/test_eval_specs_registered.py
+        - backend/tests/unit/evals/test_runner.py
+        - backend/tests/unit/evals/test_deterministic_judges.py
+        - backend/tests/unit/evals/test_release_checks.py
+      docs:
+        - backstage/prd/02-technical-docs/01-playbook/eval-framework.md
+        - backend/evals/README.md
+  admin_analytics:
+    description: Admin dashboard/query anonymization, insight generation, admin chat references, and frontend admin analytics wiring.
+    evidence:
+      tests:
+        - backend/tests/unit/test_admin_analytics_service.py
+        - backend/tests/unit/test_dashboard_insights_agent.py
+        - backend/tests/unit/test_admin_chat_agent.py
+        - backend/tests/integration/test_admin_analytics_dashboard_insights.py
+        - backend/tests/integration/test_admin_chat_routes.py
+        - frontend/src/hooks/useAdminAnalytics.test.ts
+        - frontend/src/lib/api/endpoints/adminAnalytics.test.ts
+        - frontend/src/components/features/admin/AdminChatPanel.test.tsx
+      docs:
+        - backstage/prd/03-implementation/phase-4-admin-analytics-and-insights.md
+        - backstage/prd/02-technical-docs/01-playbook/agentic-framework.md
+  tracing_sentry:
+    description: Privacy-safe tracing and Sentry setup for frontend, backend API/workers, and KB API/workers.
+    evidence:
+      tests:
+        - backend/tests/unit/test_agent_trace.py
+        - backend/tests/unit/test_langfuse_init.py
+        - backend/tests/unit/test_sentry_init.py
+        - backend/tests/unit/test_worker_tracing_lifecycle.py
+        - kb-service/tests/test_core/test_sentry_init.py
+        - kb-service/tests/test_worker/test_sentry_lifecycle.py
+        - frontend/src/lib/observability/sentry.test.ts
+      docs:
+        - backstage/guides/deployment.md
+        - backstage/prd/02-technical-docs/01-playbook/agentic-framework.md
+  rate_limits:
+    description: App-level rate-limit configuration, service behavior, route-level 429 handling, and abuse telemetry posture.
+    evidence:
+      tests:
+        - backend/tests/unit/test_rate_limit_service.py
+        - backend/tests/integration/test_conversation_routes.py
+        - backend/tests/integration/test_admin_chat_routes.py
+        - backend/tests/integration/test_auth_routes.py
+      docs:
+        - backstage/prd/02-technical-docs/01-playbook/security.md
+        - backstage/guides/deployment.md

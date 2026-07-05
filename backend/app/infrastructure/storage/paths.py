@@ -1,32 +1,65 @@
-"""Storage path utilities for consistent S3 key generation.
-
-Centralizes key construction so files are organized consistently in the bucket:
-
-- Uploaded files:  examples/{example_id}/uploads/{filename}
-- Generated files: examples/{example_id}/generated/{category}/{filename}
-
-Replace the ``examples/...`` prefixes with your own entity hierarchy as the
-app grows. Keeping key construction here (not inline) keeps the layout easy to
-evolve.
-"""
+"""Storage path utilities for consistent Playbook S3 key generation."""
 
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 UPLOADS_PREFIX = "uploads"
 GENERATED_PREFIX = "generated"
+KB_ORIGINALS_PREFIX = "kb/originals"
+CONVERSATION_UPLOADS_PREFIX = "conversations"
+CONVERSATION_FILE_ORIGINALS_PREFIX = "conversation-files/originals"
 
 # Default category folder under generated/.
 CATEGORY_EXPORTS = "exports"
 
 
-def uploaded_file_key(example_id: UUID, filename: str) -> str:
-    """Generate an S3 key for user-uploaded files.
+def _safe_filename(filename: str) -> str:
+    """Return a storage-key-safe filename segment."""
+    cleaned = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
+    return cleaned or "upload.bin"
 
-    Returns:
-        examples/{example_id}/uploads/{filename}
-    """
-    return f"examples/{example_id}/{UPLOADS_PREFIX}/{filename}"
+
+def kb_original_file_key(
+    organization_id: UUID,
+    filename: str,
+    document_id: UUID | None = None,
+) -> str:
+    """Generate an S3 key for an admin-uploaded KB original."""
+    resource_id = document_id or uuid4()
+    return (
+        f"{KB_ORIGINALS_PREFIX}/{organization_id}/{resource_id}/"
+        f"{_safe_filename(filename)}"
+    )
+
+
+def conversation_upload_file_key(
+    organization_id: UUID,
+    conversation_id: UUID,
+    filename: str,
+) -> str:
+    """Generate an S3 key for a conversation-scoped athlete upload."""
+    return (
+        f"{CONVERSATION_UPLOADS_PREFIX}/{organization_id}/{conversation_id}/"
+        f"{uuid4()}/{_safe_filename(filename)}"
+    )
+
+
+def conversation_file_original_key(
+    organization_id: UUID,
+    conversation_id: UUID,
+    conversation_file_id: UUID,
+    filename: str,
+) -> str:
+    """Generate an S3 key for a conversation-file original binary."""
+    return (
+        f"{CONVERSATION_FILE_ORIGINALS_PREFIX}/{organization_id}/"
+        f"{conversation_id}/{conversation_file_id}/{_safe_filename(filename)}"
+    )
+
+
+def uploaded_file_key(example_id: UUID, filename: str) -> str:
+    """Compatibility wrapper for older scaffold call sites."""
+    return f"legacy/{example_id}/{UPLOADS_PREFIX}/{_safe_filename(filename)}"
 
 
 def generated_file_key(
@@ -34,19 +67,14 @@ def generated_file_key(
     filename: str,
     category: str = CATEGORY_EXPORTS,
 ) -> str:
-    """Generate a timestamped S3 key for generated files (keeps version history).
-
-    Returns:
-        examples/{example_id}/generated/{category}/{timestamp}_{filename}
-    """
+    """Generate a timestamped S3 key for generated files."""
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    return f"examples/{example_id}/{GENERATED_PREFIX}/{category}/{timestamp}_{filename}"
+    return (
+        f"legacy/{example_id}/{GENERATED_PREFIX}/{category}/"
+        f"{timestamp}_{_safe_filename(filename)}"
+    )
 
 
 def generated_file_key_static(example_id: UUID, filename: str, category: str) -> str:
-    """Generate a fixed S3 key for files that should be overwritten on re-generation.
-
-    Returns:
-        examples/{example_id}/generated/{category}/{filename}
-    """
-    return f"examples/{example_id}/{GENERATED_PREFIX}/{category}/{filename}"
+    """Generate a fixed S3 key for files that should be overwritten."""
+    return f"legacy/{example_id}/{GENERATED_PREFIX}/{category}/{_safe_filename(filename)}"

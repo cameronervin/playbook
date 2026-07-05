@@ -23,11 +23,12 @@ never imported.
 
 | Component        | Interface / entry            | Modes                | Real backend         |
 |------------------|------------------------------|----------------------|----------------------|
-| **LLM**          | `llm/` — `BaseLLMProvider`   | `direct`, `gateway`  | Anthropic / LiteLLM  |
+| **LLM**          | `llm/` — `BaseLLMProvider`   | `direct`, `litellm`  | Anthropic / LiteLLM  |
 | **Knowledgebase**| `knowledgebase/` — `BaseKnowledgebaseProvider` | `mock`, `local` | KB service (httpx)   |
-| **Storage**      | `storage/` — `StorageProvider` | (single)           | S3 / LocalStack (boto3) |
+| **Storage**      | `storage/` — `StorageProvider` | (single)           | S3-compatible / AWS S3 (boto3) |
 | **Database**     | `db/` — engine/session helpers | (single)           | Postgres (SQLAlchemy) |
 | **Checkpointer** | `checkpointer.py`            | (single)             | Postgres (LangGraph) |
+| **Streaming**    | `streaming/` — `BaseAgentStreamProvider` | (single) | Valkey Streams + pub/sub |
 
 See each subpackage's `STUBS.md` for the extension guide.
 
@@ -47,6 +48,7 @@ Shutdown happens in reverse order:
 
 - Shutdown observability
 - Close checkpointer pool (`cleanup_checkpointer_pool`)
+- Close agent stream provider (`cleanup_agent_stream_provider`)
 - Close KB provider (`provider.close()`)
 - Cleanup storage (`cleanup_storage_provider`)
 - Dispose DB engine (`cleanup_db_engine`)

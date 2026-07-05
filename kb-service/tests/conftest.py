@@ -21,8 +21,9 @@ from types import SimpleNamespace
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://kb:kb@localhost:5432/kb")
 os.environ.setdefault("KB_WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault("KB_API_SECRET", "test-api-secret")
-os.environ.setdefault("KB_LLM_PROVIDER_MODE", "direct")
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
+os.environ.setdefault("LLM_PROVIDER_MODE", "litellm")
+os.environ.setdefault("LITELLM_BASE_URL", "http://litellm:4000")
+os.environ.setdefault("LITELLM_API_KEY", "test-key")
 
 # ── pgvector shim ──────────────────────────────────────────────────────────────
 # pgvector is a C extension not available outside the container. Stub it so unit

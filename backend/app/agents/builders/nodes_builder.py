@@ -1,50 +1,58 @@
-"""Node-set construction for the example workflow.
-
-Pattern: the nodes builder takes the chains dict and infrastructure handles
-(session factory, storage) and produces the ``{node_name -> node_fn}`` dict the
-graph registers. It keeps node wiring out of both the chains builder and the
-graph topology.
-"""
+"""Node-set construction for Playbook agent workflows."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from app.agents.nodes.example.chains import create_example_nodes
-from app.infrastructure.storage import StorageProvider
+from app.agents.nodes.admin_chat import create_admin_chat_nodes
+from app.agents.nodes.athlete_chat import create_athlete_chat_nodes
+from app.agents.nodes.conversation_title import create_conversation_title_nodes
+from app.agents.nodes.dashboard_insights import create_dashboard_insights_nodes
 
 
-def create_example_node_set(
+def create_athlete_chat_node_set(
     *,
     chains: dict[str, Any],
-    get_session: Callable,
-    storage: StorageProvider | None = None,
 ) -> dict[str, Any]:
-    """Create the node set for the example workflow.
-
-    ``storage`` is accepted to mirror the production signature (some nodes need
-    blob storage); the example nodes don't use it yet.
-    """
+    """Create the node set for the athlete chat workflow."""
     return {
-        "example": create_example_nodes(
+        "athlete_chat": create_athlete_chat_nodes(
             chains=chains,
-            get_session=get_session,
         )
     }
 
 
-def create_all_nodes(
+def create_conversation_title_node_set(
     *,
     chains: dict[str, Any],
-    get_session: Callable,
-    storage: StorageProvider | None = None,
 ) -> dict[str, Any]:
-    """Create all node sets for the agent subsystem (currently just example)."""
+    """Create the node set for the conversation title workflow."""
     return {
-        **create_example_node_set(
+        "conversation_title": create_conversation_title_nodes(
             chains=chains,
-            get_session=get_session,
-            storage=storage,
+        )
+    }
+
+
+def create_dashboard_insights_node_set(
+    *,
+    chains: dict[str, Any],
+) -> dict[str, Any]:
+    """Create the node set for the dashboard insights workflow."""
+    return {
+        "dashboard_insights": create_dashboard_insights_nodes(
+            chains=chains,
+        )
+    }
+
+
+def create_admin_chat_node_set(
+    *,
+    chains: dict[str, Any],
+) -> dict[str, Any]:
+    """Create the node set for the admin chat workflow."""
+    return {
+        "admin_chat": create_admin_chat_nodes(
+            chains=chains,
         )
     }

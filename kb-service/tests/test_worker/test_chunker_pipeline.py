@@ -53,6 +53,31 @@ def test_page_index_tracks_source_page() -> None:
     assert page_indices == {0, 1}
 
 
+def test_segment_records_preserve_source_locator_metadata() -> None:
+    pages = [
+        {
+            "text": " ".join(["contract"] * 400),
+            "source_locator": {
+                "type": "page",
+                "page_index": 4,
+                "page_number": 5,
+            },
+        }
+    ]
+
+    chunks = list(iter_chunks_from_pages(pages, {"document_id": "doc-1"}))
+
+    assert chunks, "expected at least one chunk"
+    metadata = chunks[0]["metadata"]
+    assert metadata["source_segment_index"] == 0
+    assert metadata["page_index"] == 4
+    assert metadata["source_locator"] == {
+        "type": "page",
+        "page_index": 4,
+        "page_number": 5,
+    }
+
+
 def test_chunk_pages_is_deterministic_and_does_not_mutate_metadata() -> None:
     pages = [" ".join(["alpha"] * 400)]
     metadata = {"document_id": "doc-1", "source": "unit-test"}
@@ -73,3 +98,8 @@ def test_empty_and_blank_pages_produce_no_chunks() -> None:
 def test_non_string_page_raises_type_error() -> None:
     with pytest.raises(TypeError):
         list(iter_chunks_from_pages(["valid page", 123], {"document_id": "doc-1"}))
+
+
+def test_segment_record_without_string_text_raises_type_error() -> None:
+    with pytest.raises(TypeError):
+        list(iter_chunks_from_pages([{"text": 123}], {"document_id": "doc-1"}))

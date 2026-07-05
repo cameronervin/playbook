@@ -26,9 +26,42 @@ services:
         limits:
           memory: 512M
 
+  litellm:
+    env_file:
+      - ../envs/.env.prod
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  reranker:
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env.reranker.prod
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
+
   backend:
     env_file:
       - ../envs/.env.prod
+      - path: ../envs/.env.backend.prod
+        required: false
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     deploy:
       replicas: 3
@@ -64,6 +97,72 @@ services:
   celery-worker:
     env_file:
       - ../envs/.env.prod
+      - path: ../envs/.env.backend.prod
+        required: false
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+
+  kb-api:
+    env_file:
+      - ../envs/.env.prod
+      - path: ../envs/.env.kb-service.prod
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  kb-valkey:
+    env_file:
+      - ../envs/.env.prod
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  kb-worker-cpu:
+    env_file:
+      - ../envs/.env.prod
+      - path: ../envs/.env.kb-service.prod
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+
+  kb-worker-io:
+    env_file:
+      - ../envs/.env.prod
+      - path: ../envs/.env.kb-service.prod
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      kb-valkey:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
     deploy:
       replicas: 2
       resources:
@@ -73,17 +172,49 @@ services:
   # Reverse proxy — serves frontend, proxies /api → backend.
   nginx:
     image: nginx:alpine
+    entrypoint: ["nginx"]
+    command: ["-g", "daemon off;"]
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ../docker/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "nginx -t && wget -qO- --no-check-certificate https://127.0.0.1/healthz >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     deploy:
       replicas: 2
       resources:
         limits:
           memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"

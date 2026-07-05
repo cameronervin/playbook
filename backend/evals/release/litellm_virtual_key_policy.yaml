@@ -1,0 +1,30 @@
+# Non-secret release manifest for the LiteLLM virtual/service keys Playbook
+# expects operators to create per environment. Real key values are generated and
+# stored in the LiteLLM proxy/secrets manager; this file validates policy shape.
+virtual_keys:
+  - name: backend
+    allowed_models:
+      - playbook-chat
+      - playbook-fast
+    max_budget: 100
+    budget_duration: 30d
+    rpm_limit: 120
+
+  - name: kb-service
+    allowed_models:
+      - playbook-embed
+      - playbook-fast
+      - playbook-rerank
+      - playbook-ocr
+    max_budget: 100
+    budget_duration: 30d
+    rpm_limit: 120
+
+  - name: eval
+    allowed_models:
+      - playbook-chat
+      - playbook-fast
+      - playbook-embed
+    max_budget: 25
+    budget_duration: 30d
+    rpm_limit: 60

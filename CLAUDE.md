@@ -11,7 +11,7 @@ The product is built on a reusable **FastAPI + LangGraph** backend, **Next.js (A
 
 ## First Principles
 
-1. **DOCS** -> Read `docs/` before changes. Update docs after changes.
+1. **DOCS** -> Read `backstage/` before changes. Update docs after changes.
 2. **SEARCH** -> Library exists? Use it. (>1k stars, <6mo updated, MIT/Apache)
 3. **ASK** -> Unclear? Ask the user. Never assume.
 4. **ANALYZE** -> List files changed + dependencies + risks before coding.
@@ -31,14 +31,15 @@ Ask before deciding when: multiple approaches exist, requirements are ambiguous,
 
 ```
 backend/app/ api/v1/ -> services/ -> repositories/ -> models/
-frontend/ app/ -> features/ -> components/ -> hooks -> lib/store
+frontend/src/{app,components,hooks,lib,types}/
 kb-service/ api/ -> services/ -> repositories/ -> models/   (+ workers/ Celery pipeline)
 ```
 
 The backend reaches `kb-service` over HTTP via `LocalKBProvider`
 (`backend/app/infrastructure/knowledgebase/`). `kb-service` is the RAG pipeline:
 docling parsing -> tiktoken chunking -> OpenAI/LiteLLM embeddings -> pgvector
-similarity search. See `kb-service/README.md` and `kb-service/app/infrastructure/STUBS.md`.
+similarity search. See `kb-service/README.md` and
+`backstage/guides/kb_service_extension_points.md`.
 
 ---
 
@@ -75,7 +76,7 @@ similarity search. See `kb-service/README.md` and `kb-service/app/infrastructure
 ## Documentation (Read First, Update After)
 
 ```
-docs/
+backstage/
 ├── architecture/
 │   ├── overview.md
 │   ├── db.md
@@ -91,7 +92,7 @@ docs/
 │   ├── deployment.md
 │   ├── contributing.md
 │   ├── postgresql_setup.md
-│   └── localstack_setup.md
+│   └── minio_setup.md
 └── agents/
     ├── tools.md
     └── context-engineering.md
@@ -99,44 +100,44 @@ docs/
 
 | Change Type | Update Doc |
 |-------------|------------|
-| New endpoint | `docs/api/endpoints.md` |
-| New tool | `docs/agents/tools.md` |
-| Context engineering | `docs/agents/context-engineering.md` |
-| Architecture change | Create ADR in `docs/architecture/decisions/` |
-| Setup change | `docs/guides/setup.md` |
-| Deploy change | `docs/guides/deployment.md` |
-| Bug found / tracked | `docs/development/bug-log.md` |
-| Tech debt identified | `docs/development/tech-debt-tracker.md` |
+| New endpoint | `backstage/api/endpoints.md` |
+| New tool | `backstage/agents/tools.md` |
+| Context engineering | `backstage/agents/context-engineering.md` |
+| Architecture change | Create ADR in `backstage/architecture/decisions/` |
+| Setup change | `backstage/guides/setup.md` |
+| Deploy change | `backstage/guides/deployment.md` |
+| Bug found / tracked | `backstage/development/bug-log.md` |
+| Tech debt identified | `backstage/development/tech-debt-tracker.md` |
 
 ---
 
 ## PRD
 
-Specification docs live in `prd/`. Previous scaffold PRD files are archived in `prd-v1-unstructured/`.
+Specification docs live in `backstage/prd/`. Previous scaffold PRD files are archived in `backstage/prd-v1-unstructured/`.
 
-- User stories: `prd/01-user-stories/_master-user-stories.md`
-- Implementation: `prd/03-implementation/_implementation-plan.md`
-- Phase 1: `prd/03-implementation/phase-1-foundations.md`
-- Data model: `prd/02-technical-docs/01-playbook/data-model.md`
-- API specification: `prd/02-technical-docs/01-playbook/api-specification.md`
-- Agentic framework: `prd/02-technical-docs/01-playbook/agentic-framework.md`
-- Security: `prd/02-technical-docs/01-playbook/security.md`
-- Integrations: `prd/02-technical-docs/01-playbook/integration-spec.md`
-- Evaluation framework: `prd/02-technical-docs/01-playbook/eval-framework.md`
-- KB service architecture: `prd/02-technical-docs/02-kb-service/architecture.md`
-- KB service data model: `prd/02-technical-docs/02-kb-service/data-model.md`
-- KB service API contracts: `prd/02-technical-docs/02-kb-service/api-contracts.md`
-- KB service ingestion: `prd/02-technical-docs/02-kb-service/ingestion-pipeline.md`
-- KB service retrieval: `prd/02-technical-docs/02-kb-service/retrieval.md`
-- KB service operations/security: `prd/02-technical-docs/02-kb-service/operations-security.md`
+- User stories: `backstage/prd/01-user-stories/_master-user-stories.md`
+- Implementation: `backstage/prd/03-implementation/_implementation-plan.md`
+- Phase 1: `backstage/prd/03-implementation/phase-1-foundations.md`
+- Data model: `backstage/prd/02-technical-docs/01-playbook/data-model.md`
+- API specification: `backstage/prd/02-technical-docs/01-playbook/api-specification.md`
+- Agentic framework: `backstage/prd/02-technical-docs/01-playbook/agentic-framework.md`
+- Security: `backstage/prd/02-technical-docs/01-playbook/security.md`
+- Integrations: `backstage/prd/02-technical-docs/01-playbook/integration-spec.md`
+- Evaluation framework: `backstage/prd/02-technical-docs/01-playbook/eval-framework.md`
+- KB service architecture: `backstage/prd/02-technical-docs/02-kb-service/architecture.md`
+- KB service data model: `backstage/prd/02-technical-docs/02-kb-service/data-model.md`
+- KB service API contracts: `backstage/prd/02-technical-docs/02-kb-service/api-contracts.md`
+- KB service ingestion: `backstage/prd/02-technical-docs/02-kb-service/ingestion-pipeline.md`
+- KB service retrieval: `backstage/prd/02-technical-docs/02-kb-service/retrieval.md`
+- KB service operations/security: `backstage/prd/02-technical-docs/02-kb-service/operations-security.md`
 
 V1/unstructured reference:
-- Archived scaffold PRD: `prd-v1-unstructured/`
+- Archived scaffold PRD: `backstage/prd-v1-unstructured/`
 
 ## Product & Implementation (Read for Context)
 
 ```
-prd/
+backstage/prd/
 ├── README.md
 ├── 01-user-stories/
 │   ├── _master-user-stories.md
@@ -161,12 +162,16 @@ prd/
     └── _implementation-plan.md
 ```
 
+Frontend wireframe work must also read `backstage/design/README.md`,
+`backstage/design/frontend_wireframe_implementation_plan.md`, and the reference
+screens in `backstage/design/design-reference/` before changing UI code.
+
 | Need | Read |
 |------|------|
-| User stories | `prd/01-user-stories/_master-user-stories.md` |
-| Playbook technical specs | `prd/02-technical-docs/01-playbook/*.md` |
-| KB service technical specs | `prd/02-technical-docs/02-kb-service/*.md` |
-| Implementation plan | `prd/03-implementation/_implementation-plan.md` |
+| User stories | `backstage/prd/01-user-stories/_master-user-stories.md` |
+| Playbook technical specs | `backstage/prd/02-technical-docs/01-playbook/*.md` |
+| KB service technical specs | `backstage/prd/02-technical-docs/02-kb-service/*.md` |
+| Implementation plan | `backstage/prd/03-implementation/_implementation-plan.md` |
 
 ---
 
@@ -224,7 +229,7 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 | Context / agent engineering | [.claude/skills/context-engineering/SKILL.md](.claude/skills/context-engineering/SKILL.md) | [reference](.claude/skills/context-engineering/references/reference.md), [examples](.claude/skills/context-engineering/references/examples.md) |
 | Sprint progress / status | [.claude/skills/sprint-progress/SKILL.md](.claude/skills/sprint-progress/SKILL.md) | -- |
 | Harness / agent setup | [.claude/skills/harness-v2/SKILL.md](.claude/skills/harness-v2/SKILL.md) | -- |
-| Handoff / EOD note | [.claude/skills/handoff-note-builder/SKILL.md](.claude/skills/handoff-note-builder/SKILL.md) | [voice-and-structure](.claude/skills/handoff-note-builder/references/voice-and-structure.md), [common-scenarios](.claude/skills/handoff-note-builder/references/common-scenarios.md), [team-and-products](.claude/skills/handoff-note-builder/references/team-and-products.md) |
+| Handoff / EOD note | [.cursor/skills/handoff-note-builder/SKILL.md](.cursor/skills/handoff-note-builder/SKILL.md) | [voice-and-structure](.cursor/skills/handoff-note-builder/references/voice-and-structure.md), [common-scenarios](.cursor/skills/handoff-note-builder/references/common-scenarios.md), [team-and-products](.cursor/skills/handoff-note-builder/references/team-and-products.md) |
 
 ---
 
@@ -232,7 +237,7 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 
 | Task | Reference |
 |------|-----------|
-| Start dev services (Postgres, LocalStack, Valkey, backend, frontend) | [.claude/commands/start-services.md](.claude/commands/start-services.md) |
+| Start dev services (Postgres, MinIO, Valkey, backend, frontend) | [.claude/commands/start-services.md](.claude/commands/start-services.md) |
 | Git commit conventions | [.claude/commands/git-commits.md](.claude/commands/git-commits.md) |
 | Bug squash workflow | [.claude/commands/bug-squasher.md](.claude/commands/bug-squasher.md) |
 | Code review workflow | [.claude/commands/code-review.md](.claude/commands/code-review.md) |
@@ -251,7 +256,8 @@ Skills are detailed how-to guides. Read the relevant SKILL.md before starting th
 ./deploy/scripts/deploy.sh dev --build --detach
 
 # Backend standalone
-cd backend && uvicorn app.main:app --reload && pytest -v
+cd backend && uv run uvicorn app.main:app --reload
+cd backend && uv run pytest -v
 
 # Frontend standalone
 cd frontend && npm run dev && npm test

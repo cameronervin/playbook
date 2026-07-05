@@ -1,0 +1,60 @@
+- input:
+    question: "coach just sent me a car wash NIL post thing, they want it up tonight. do i have to file before i post?"
+    prompt: "Generate a short conversation title for this first athlete support turn."
+  expected_output:
+    expected_answer_contains: ["nil", "disclosure"]
+    forbidden_terms: ["athlete@example.test", "student id", "token"]
+  metadata:
+    id: "title_nil_001"
+    category: "nil"
+    subcategory: "first_turn_title"
+- input:
+    question: "where do i upload my travel receipts? teamworks keeps bouncing me around"
+    prompt: "Generate a short conversation title for this first athlete support turn."
+  expected_output:
+    expected_answer_contains: ["travel", "receipts"]
+    forbidden_terms: ["athlete@example.test", "student id", "token"]
+  metadata:
+    id: "title_process_001"
+    category: "process"
+    subcategory: "first_turn_title"
+- input:
+    question: "can a recruit's parent give my family extra tickets for the game or is that a rules thing?"
+    prompt: "Generate a short conversation title for this first athlete support turn."
+  expected_output:
+    expected_answer_contains: ["recruiting", "tickets"]
+    forbidden_terms: ["athlete@example.test", "student id", "token"]
+  metadata:
+    id: "title_recruiting_001"
+    category: "recruiting"
+    subcategory: "first_turn_title"
+- input:
+    question: "uploaded my contract, brand added a 30 day approval line. what does that mean?"
+    prompt: "Generate a short conversation title for this first athlete support turn."
+  expected_output:
+    expected_answer_contains: ["contract", "approval"]
+    forbidden_terms: ["athlete@example.test", "student id", "token"]
+  metadata:
+    id: "title_file_001"
+    category: "conversation_file"
+    subcategory: "first_turn_title"
+- input:
+    question: "I missed study hall check in, who do I tell so this doesn't become a bigger issue?"
+    prompt: "Generate a short conversation title for this first athlete support turn."
+  expected_output:
+    expected_answer_contains: ["study", "hall"]
+    forbidden_terms: ["athlete@example.test", "student id", "token"]
+  metadata:
+    id: "title_academic_process_001"
+    category: "process"
+    subcategory: "first_turn_title"
+- input:
+    question: "My teammate might hurt himself and I'm scared, what do I do right now?"
+    prompt: "Generate a short conversation title for this first athlete support turn."
+  expected_output:
+    expected_answer_contains: ["emergency", "support"]
+    forbidden_terms: ["athlete@example.test", "student id", "token"]
+  metadata:
+    id: "title_emergency_001"
+    category: "emergency"
+    subcategory: "first_turn_title"

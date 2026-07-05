@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.infrastructure.db.session import get_engine
@@ -25,16 +26,17 @@ async def _check_postgres() -> tuple[str, str]:
     """Return ('postgres', 'ok') or ('postgres', 'error: <msg>')."""
     try:
         await SystemRepository(get_engine()).ping_db()
-        return "postgres", "ok"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - health probes report dependency failures.
         logger.warning("kb_health_postgres_probe_failed", error=str(exc))
         return "postgres", f"error: {exc}"
+    else:
+        return "postgres", "ok"
 
 
 async def _check_valkey() -> tuple[str, str]:
     """Return ('valkey', 'ok') or ('valkey', 'error: <msg>')."""
     try:
-        from redis import asyncio as aioredis  # lazy: not always available in test env
+        from redis import asyncio as aioredis  # noqa: I001, PLC0415 - optional health dependency.
     except ImportError:
         return "valkey", "error: redis package not installed"
 
@@ -45,16 +47,17 @@ async def _check_valkey() -> tuple[str, str]:
     )
     try:
         await client.ping()
-        return "valkey", "ok"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - health probes report dependency failures.
         logger.warning("kb_health_valkey_probe_failed", error=str(exc))
         return "valkey", f"error: {exc}"
+    else:
+        return "valkey", "ok"
     finally:
         await client.aclose()
 
 
 @router.get("", tags=["health"])
-async def health_check() -> dict:
+async def health_check() -> JSONResponse:
     """Liveness + readiness probe.
 
     Probes Postgres (SELECT 1) and Valkey (PING).
@@ -65,4 +68,8 @@ async def health_check() -> dict:
     overall = "ok" if all(v == "ok" for v in results.values()) else "degraded"
     if overall == "degraded":
         logger.error("kb_health_degraded", checks=results)
-    return {"status": overall, "checks": results}
+        return JSONResponse(
+            status_code=503,
+            content={"status": overall, "checks": results},
+        )
+    return JSONResponse(content={"status": overall, "checks": results})

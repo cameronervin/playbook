@@ -1,0 +1,32 @@
+title = "Playbook Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated, dependency, cache, and local artifact paths."
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)\.venv/''',
+  '''(^|/)\.artifacts/''',
+  '''(^|/)\.pytest_cache/''',
+  '''(^|/)\.ruff_cache/''',
+  '''(^|/)coverage/''',
+  '''(^|/)dist/''',
+  '''(^|/)build/''',
+]
+
+[[allowlists]]
+description = "Committed placeholder values documented for local examples."
+regexTarget = "match"
+regexes = [
+  '''replace-with-a-long-random-value''',
+  '''sk-local-litellm-master-key''',
+  '''<service key>''',
+  '''<public key>''',
+  '''<secret key>''',
+  '''<host>''',
+  '''<host-or-internal-litellm>''',
+  '''<host-or-internal-reranker>''',
+]

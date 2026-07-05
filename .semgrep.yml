@@ -1,0 +1,81 @@
+rules:
+  - id: playbook.python.subprocess-shell-true
+    message: Avoid shell=True; pass argument arrays to subprocess APIs.
+    severity: ERROR
+    languages:
+      - python
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: $PROC.$FUNC(..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: ^(run|call|check_call|check_output|Popen)$
+    metadata:
+      category: security
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+
+  - id: playbook.python.unsafe-yaml-load
+    message: Use yaml.safe_load or an explicit SafeLoader when parsing YAML.
+    severity: ERROR
+    languages:
+      - python
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
+    metadata:
+      category: security
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+
+  - id: playbook.python.debug-fastapi-enabled
+    message: Do not instantiate FastAPI with debug=True in committed app code.
+    severity: ERROR
+    languages:
+      - python
+    pattern: FastAPI(..., debug=True, ...)
+    metadata:
+      category: security
+
+  - id: playbook.python.cors-wildcard-with-credentials
+    message: CORS wildcard origins must not be combined with credentials.
+    severity: ERROR
+    languages:
+      - python
+    patterns:
+      - pattern: |
+          CORSMiddleware(..., allow_origins=["*"], allow_credentials=True, ...)
+    metadata:
+      category: security
+      cwe:
+        - "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+
+  - id: playbook.typescript.dangerously-set-inner-html
+    message: Avoid dangerouslySetInnerHTML unless content is sanitized in the same component.
+    severity: ERROR
+    languages:
+      - typescript
+    pattern: dangerouslySetInnerHTML={...}
+    metadata:
+      category: security
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation"
+
+  - id: playbook.typescript.browser-token-storage
+    message: Do not store auth tokens or secrets in browser storage; use HttpOnly cookies.
+    severity: ERROR
+    languages:
+      - typescript
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, $VALUE)
+          - pattern: sessionStorage.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(token|secret|jwt|api[_-]?key|password).*
+    metadata:
+      category: security
+      cwe:
+        - "CWE-922: Insecure Storage of Sensitive Information"

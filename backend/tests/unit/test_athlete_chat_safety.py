@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from app.agents.guardrails.safety import evaluate_athlete_message_safety
+
+
+def test_emergency_prompts_bypass_agent_with_instruction() -> None:
+    decision = evaluate_athlete_message_safety("My teammate might hurt himself")
+
+    assert decision.bypass_agent is True
+    assert decision.answer_type == "emergency_instruction"
+    assert decision.safety_outcome == "emergency"
+    assert "911" in decision.response_text
+    assert "988" in decision.response_text
+    assert not hasattr(decision, "requires_kb_support")
+
+
+def test_medical_and_legal_prompts_decline_without_agent() -> None:
+    medical = evaluate_athlete_message_safety("Can you diagnose my concussion?")
+    legal = evaluate_athlete_message_safety("Is this contract legally binding?")
+
+    assert medical.bypass_agent is True
+    assert medical.answer_type == "refusal"
+    assert medical.safety_outcome == "medical"
+    assert legal.bypass_agent is True
+    assert legal.safety_outcome == "legal"
+    assert not hasattr(medical, "requires_kb_support")
+    assert not hasattr(legal, "requires_kb_support")
+
+
+def test_lease_drafting_prompts_decline_as_legal_boundary() -> None:
+    decision = evaluate_athlete_message_safety(
+        "My lease says no sublet. What should I write to my landlord?"
+    )
+
+    assert decision.bypass_agent is True
+    assert decision.answer_type == "refusal"
+    assert decision.safety_outcome == "legal"
+    assert "legal advice" in decision.response_text
+    assert not hasattr(decision, "requires_kb_support")
+
+
+def test_nil_and_compliance_prompts_do_not_set_kb_guardrail_metadata() -> None:
+    decision = evaluate_athlete_message_safety(
+        "Can I accept this NIL deal under compliance rules?"
+    )
+
+    assert decision.bypass_agent is False
+    assert decision.answer_type == "grounded_answer"
+    assert decision.safety_outcome is None
+    assert not hasattr(decision, "requires_kb_support")

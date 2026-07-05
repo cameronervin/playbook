@@ -1,12 +1,12 @@
 """Celery application for the KB service ingest pipeline.
 
 Worker queues (split CPU vs I/O for optimal throughput):
-  kb-cpu     — parse_task, chunk_task, embed_task dispatcher (CPU-bound)
+  kb-cpu     — parse_task, chunk_task, summarize_task, embed_task dispatcher
                Use prefork pool, --concurrency=2
   kb-io      — embed_batch_task, load_vector_task, reconcile_stuck_embeds
-               (I/O-bound: gateway HTTP + per-batch DB writes)
+               (I/O-bound: LiteLLM HTTP + per-batch DB writes)
                Use threads pool, --concurrency=50 so a single process can hold
-               many in-flight gateway calls.
+               many in-flight LiteLLM calls.
   kb-notify  — notify_status_task (dedicated to avoid head-of-line blocking)
 
 Start workers (recommended layout on a 3 CPU / 2 GB host)::
@@ -15,7 +15,7 @@ Start workers (recommended layout on a 3 CPU / 2 GB host)::
   celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2 \\
          --loglevel=info -n kb-cpu@%h
 
-  # I/O worker: threads pool — 50 OS threads multiplex gateway calls in one process
+  # I/O worker: threads pool — 50 OS threads multiplex LiteLLM calls in one process
   celery -A app.workers.app worker -Q kb-io --pool=threads --concurrency=50 \\
          --loglevel=info -n kb-io@%h
 
@@ -39,16 +39,23 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import structlog
-from celery import Celery
-from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
+from celery import Celery, signals as celery_signals
+from celery.signals import (
+    worker_process_init,
+    worker_process_shutdown,
+    worker_ready,
+)
 
 from app.core.config import settings
+from app.core.logging_config import configure_logging, install_secret_redaction_filter
 from app.infrastructure.embedders.factory import build_fresh_embed_provider
+from app.observability.sentry_init import init_sentry
 
+configure_logging(settings.LOG_LEVEL)
 logger = structlog.get_logger(__name__)
 
 # Public Celery app object. Named ``kb_worker`` and imported by the service
-# layer (ingestion/status services) as well as ``tasks.py``.
+# layer (ingestion/status services) as well as the ``tasks`` package.
 kb_worker = Celery("kb", broker=settings.CELERY_BROKER_URL)
 
 kb_worker.conf.update(
@@ -58,13 +65,14 @@ kb_worker.conf.update(
     task_routes={
         # Notifications: dedicated low-latency queue.
         "app.workers.tasks.notify_status_task": {"queue": "kb-notify"},
-        # I/O-bound — gateway HTTP, DB writes. Routed to kb-io.
+        # I/O-bound — LiteLLM HTTP, DB writes. Routed to kb-io.
         "app.workers.tasks.embed_batch_task":       {"queue": "kb-io"},
         "app.workers.tasks.load_vector_task":       {"queue": "kb-io"},
         "app.workers.tasks.reconcile_stuck_embeds": {"queue": "kb-io"},
         # CPU-bound — parse (Docling) and chunk (tiktoken). Routed to kb-cpu.
         "app.workers.tasks.parse_task": {"queue": "kb-cpu"},
         "app.workers.tasks.chunk_task": {"queue": "kb-cpu"},
+        "app.workers.tasks.summarize_task": {"queue": "kb-cpu"},
         "app.workers.tasks.embed_task": {"queue": "kb-cpu"},  # dispatcher only — fans out to kb-io
         # Catch-all fallback.
         "app.workers.tasks.*": {"queue": "kb-cpu"},
@@ -89,7 +97,20 @@ kb_worker.conf.update(
 )
 
 
-import app.workers.tasks  # noqa: F401, E402 — must import to register tasks with kb_worker
+def configure_celery_logging(logger=None, **kwargs) -> None:
+    """Ensure Celery-managed loggers use the shared redaction filter."""
+    configure_logging(settings.LOG_LEVEL)
+    if logger is not None:
+        install_secret_redaction_filter(logger)
+
+
+for _signal_name in ("after_setup_logger", "after_setup_task_logger"):
+    _signal = getattr(celery_signals, _signal_name, None)
+    if _signal is not None:
+        _signal.connect(configure_celery_logging)
+
+
+import app.workers.tasks  # noqa: F401, E402, I001 — must import to register tasks with kb_worker
 
 
 # Module-level singletons — populated on worker startup.
@@ -117,7 +138,7 @@ def run_async(coro):
       * threads / gevent (many concurrent tasks share one process) → the shared
         worker loop can't be re-entered, so each task spins up its own loop via
         ``asyncio.run``. Slight per-task overhead but lets I/O workers multiplex
-        50+ in-flight gateway calls.
+        50+ in-flight LiteLLM calls.
       * tests / scripts (no worker init at all) → ``asyncio.run`` fallback.
     """
     global _worker_loop, _worker_loop_owner_thread
@@ -169,6 +190,8 @@ def init_worker_resources(**kwargs) -> None:
         return
 
     global _worker_loop, _worker_loop_owner_thread
+
+    init_sentry(settings, service_name="kb-worker", include_celery=True)
 
     from sqlalchemy import create_engine
     from sqlalchemy.engine.url import make_url

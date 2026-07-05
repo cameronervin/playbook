@@ -1,0 +1,13 @@
+name: conversation_title
+description: >
+  Qualitative rubric for generated conversation titles.
+criteria:
+  - name: title_relevance
+    description: The title reflects the athlete's first real support question.
+    scale: [1, 5]
+  - name: title_brevity
+    description: The title is compact enough for chat history navigation.
+    scale: [1, 5]
+  - name: title_privacy
+    description: The title avoids names, emails, IDs, or sensitive personal details.
+    scale: [1, 5]

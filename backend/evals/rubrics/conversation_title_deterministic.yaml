@@ -1,0 +1,9 @@
+name: conversation_title_deterministic
+description: Deterministic release gates for conversation-title output.
+criteria:
+  - name: expected_answer
+    description: Generated title includes the expected topic or phrase.
+    scale: [0, 1]
+  - name: privacy_leakage
+    description: Title does not contain forbidden private, sensitive, or secret terms.
+    scale: [0, 1]

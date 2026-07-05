@@ -22,8 +22,8 @@ git status -sb
 git diff --stat
 
 # Read relevant documentation
-# - docs/architecture/overview.md for system understanding
-# - prd/05-user-stories.md for requirements
+# - backstage/architecture/overview.md for system understanding
+# - backstage/prd/05-user-stories.md for requirements
 # - implementation/remaining-work.md for current priorities
 ```
 
@@ -129,9 +129,9 @@ cd frontend && npm run lint
 ```
 
 **Update documentation if needed:**
-- New endpoint? Update `docs/api/endpoints.md`
-- New tool? Update `docs/agents/tools.md`
-- Architecture change? Create ADR in `docs/architecture/decisions/`
+- New endpoint? Update `backstage/api/endpoints.md`
+- New tool? Update `backstage/agents/tools.md`
+- Architecture change? Create ADR in `backstage/architecture/decisions/`
 
 ### 7) Output Summary
 

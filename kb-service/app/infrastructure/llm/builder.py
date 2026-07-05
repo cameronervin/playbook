@@ -7,16 +7,16 @@ overhead.
 
 Each builder is ``@lru_cache``d so a single client (and its connection pool) is
 shared process-wide. ``from openai import OpenAI`` is imported lazily inside
-each builder so this module compiles without ``openai`` installed.
-
-NOTE: the source service also exposed an async ``get_vlm_client`` for the VLM
-OCR path. That has been dropped along with the VLM provider — see
-``app/infrastructure/STUBS.md``.
+each builder so this module compiles without ``openai`` installed. The VLM OCR
+provider builds its own LiteLLM chat client because it has different timeout
+and lifecycle needs than embeddings.
 """
 from __future__ import annotations
 
 from functools import lru_cache
 from typing import TYPE_CHECKING
+
+import httpx
 
 from app.core.config import settings
 
@@ -24,8 +24,10 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
 _ERR_DIRECT_KEY_REQUIRED = "OPENAI_API_KEY must be set when using direct provider mode"
-_ERR_GATEWAY_URL_REQUIRED = "LLM_GATEWAY_BASE_URL must be set when using gateway provider mode"
-_ERR_GATEWAY_KEY_REQUIRED = "LLM_GATEWAY_API_KEY must be set when using gateway provider mode"
+_ERR_LITELLM_URL_REQUIRED = "LITELLM_BASE_URL must be set when using LiteLLM mode"
+_ERR_LITELLM_KEY_REQUIRED = "LITELLM_API_KEY must be set when using LiteLLM mode"
+
+_litellm_rerank_client: httpx.Client | None = None
 
 
 @lru_cache
@@ -42,21 +44,48 @@ def get_direct_embed_client() -> "OpenAI":
 
 
 @lru_cache
-def get_gateway_embed_client() -> "OpenAI":
+def get_litellm_embed_client() -> "OpenAI":
     from openai import OpenAI
 
-    if not settings.LLM_GATEWAY_BASE_URL:
-        raise ValueError(_ERR_GATEWAY_URL_REQUIRED)
-    if not settings.LLM_GATEWAY_API_KEY:
-        raise ValueError(_ERR_GATEWAY_KEY_REQUIRED)
+    if not settings.LITELLM_BASE_URL:
+        raise ValueError(_ERR_LITELLM_URL_REQUIRED)
+    if not settings.LITELLM_API_KEY:
+        raise ValueError(_ERR_LITELLM_KEY_REQUIRED)
     return OpenAI(
-        base_url=settings.LLM_GATEWAY_BASE_URL,
-        api_key=settings.LLM_GATEWAY_API_KEY,
+        base_url=settings.LITELLM_BASE_URL,
+        api_key=settings.LITELLM_API_KEY,
         timeout=settings.KB_EMBED_REQUEST_TIMEOUT_SECONDS,
         max_retries=0,
     )
 
 
+def get_litellm_rerank_client() -> httpx.Client:
+    """Return the cached sync HTTP client for LiteLLM /rerank."""
+    global _litellm_rerank_client
+    if _litellm_rerank_client is not None:
+        return _litellm_rerank_client
+    if not settings.LITELLM_BASE_URL:
+        raise ValueError(_ERR_LITELLM_URL_REQUIRED)
+    if not settings.LITELLM_API_KEY:
+        raise ValueError(_ERR_LITELLM_KEY_REQUIRED)
+    _litellm_rerank_client = httpx.Client(
+        base_url=settings.LITELLM_BASE_URL,
+        timeout=httpx.Timeout(settings.KB_RERANK_TIMEOUT_SECONDS),
+        headers={"Authorization": f"Bearer {settings.LITELLM_API_KEY}"},
+    )
+    return _litellm_rerank_client
+
+
+def close_litellm_rerank_client() -> None:
+    """Close and clear the cached LiteLLM /rerank HTTP client if it exists."""
+    global _litellm_rerank_client
+    if _litellm_rerank_client is None:
+        return
+    _litellm_rerank_client.close()
+    _litellm_rerank_client = None
+
+
 def clear_client_caches() -> None:
     get_direct_embed_client.cache_clear()
-    get_gateway_embed_client.cache_clear()
+    get_litellm_embed_client.cache_clear()
+    close_litellm_rerank_client()

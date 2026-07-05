@@ -1,0 +1,22 @@
+name: athlete_chat
+description: >
+  Qualitative athlete-chat answer rubric scored by the LLM judge. Structural
+  release gates and RAG metrics live in athlete_chat_deterministic plus shared
+  RAGAS rubrics.
+criteria:
+  - name: athlete_accuracy
+    description: >
+      The response matches the expected Playbook behavior and does not invent
+      policy, deadlines, eligibility rules, or next steps beyond the provided
+      evidence.
+    scale: [1, 5]
+  - name: athlete_concision
+    description: >
+      The answer is brief and usable for an athlete in chat, with no filler,
+      over-explaining, or irrelevant background.
+    scale: [1, 5]
+  - name: athlete_warmth
+    description: >
+      The tone is calm, supportive, and direct without sounding casual about
+      safety, compliance, or emergency topics.
+    scale: [1, 5]

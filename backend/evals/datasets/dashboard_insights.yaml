@@ -1,0 +1,705 @@
+- input:
+    scenario: "nil-disclosure-volume"
+    question: "Generate dashboard insight output for the seeded NIL disclosure window."
+    source_counts:
+      query_count: 5
+      unanswered_count: 1
+      topics:
+        nil: 4
+        compliance: 1
+      risks:
+        compliance: 2
+      source_message_ids:
+        - "nil-msg-1"
+        - "nil-msg-2"
+        - "nil-msg-3"
+        - "nil-msg-4"
+        - "nil-msg-5"
+    generated_output:
+      summary: "NIL disclosure timing is the top athlete support gap in this window."
+      headline_cards:
+        - title: "NIL disclosure timing"
+          value: "4 related questions"
+          severity: "medium"
+      topic_breakdown:
+        - label: "nil"
+          count: 4
+        - label: "compliance"
+          count: 1
+      unanswered_questions:
+        - message_id: "nil-msg-5"
+          reason: "Unsupported NIL disclosure timing edge case."
+      risk_breakdown:
+        - label: "compliance"
+          count: 2
+      recommended_attention_areas:
+        - "Clarify when athletes must disclose NIL activity before promotion."
+      source_message_ids:
+        - "nil-msg-1"
+        - "nil-msg-2"
+        - "nil-msg-5"
+  expected_output:
+    expected_topic_labels: ["nil", "compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 5
+      unanswered_count: 1
+      topics:
+        nil: 4
+        compliance: 1
+      risks:
+        compliance: 2
+      source_message_ids:
+        - "nil-msg-1"
+        - "nil-msg-2"
+        - "nil-msg-3"
+        - "nil-msg-4"
+        - "nil-msg-5"
+  metadata:
+    id: "dashboard_nil_disclosure_volume"
+    category: "nil"
+- input:
+    scenario: "compliance-benefits-risk"
+    question: "Generate dashboard insight output for the seeded compliance benefits window."
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        compliance: 4
+      risks:
+        compliance: 3
+      source_message_ids:
+        - "comp-msg-1"
+        - "comp-msg-2"
+        - "comp-msg-3"
+        - "comp-msg-4"
+    generated_output:
+      summary: "Athletes are repeatedly asking whether benefits or meals are permissible."
+      headline_cards:
+        - title: "Benefit eligibility"
+          value: "4 compliance questions"
+          severity: "high"
+      topic_breakdown:
+        - label: "compliance"
+          count: 4
+      unanswered_questions: []
+      risk_breakdown:
+        - label: "compliance"
+          count: 3
+      recommended_attention_areas:
+        - "Review extra-benefit guidance for common team travel scenarios."
+      source_message_ids:
+        - "comp-msg-1"
+        - "comp-msg-2"
+        - "comp-msg-3"
+  expected_output:
+    expected_topic_labels: ["compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        compliance: 4
+      risks:
+        compliance: 3
+      source_message_ids:
+        - "comp-msg-1"
+        - "comp-msg-2"
+        - "comp-msg-3"
+        - "comp-msg-4"
+  metadata:
+    id: "dashboard_compliance_benefits_risk"
+    category: "compliance"
+- input:
+    scenario: "recruiting-contact-risk"
+    question: "Generate dashboard insight output for the seeded recruiting risk window."
+    source_counts:
+      query_count: 3
+      unanswered_count: 1
+      topics:
+        recruiting: 3
+      risks:
+        recruiting: 2
+      source_message_ids:
+        - "rec-msg-1"
+        - "rec-msg-2"
+        - "rec-msg-3"
+    generated_output:
+      summary: "Recruiting contact timing questions need staff review."
+      headline_cards:
+        - title: "Recruiting contact timing"
+          value: "3 related questions"
+          severity: "high"
+      topic_breakdown:
+        - label: "recruiting"
+          count: 3
+      unanswered_questions:
+        - message_id: "rec-msg-3"
+          reason: "Unsupported prospect-contact edge case."
+      risk_breakdown:
+        - label: "recruiting"
+          count: 2
+      recommended_attention_areas:
+        - "Confirm recruiting-contact guidance for staff and athletes."
+      source_message_ids:
+        - "rec-msg-1"
+        - "rec-msg-2"
+        - "rec-msg-3"
+  expected_output:
+    expected_topic_labels: ["recruiting"]
+    expected_risk_labels: ["recruiting"]
+    source_counts:
+      query_count: 3
+      unanswered_count: 1
+      topics:
+        recruiting: 3
+      risks:
+        recruiting: 2
+      source_message_ids:
+        - "rec-msg-1"
+        - "rec-msg-2"
+        - "rec-msg-3"
+  metadata:
+    id: "dashboard_recruiting_contact_risk"
+    category: "recruiting"
+- input:
+    scenario: "unanswered-support-gap"
+    question: "Generate dashboard insight output for the seeded unanswered support gap."
+    source_counts:
+      query_count: 2
+      unanswered_count: 2
+      topics:
+        nil: 1
+        compliance: 1
+      risks:
+        compliance: 1
+      source_message_ids:
+        - "gap-msg-1"
+        - "gap-msg-2"
+    generated_output:
+      summary: "Two athlete questions were unsupported and should be reviewed."
+      headline_cards:
+        - title: "Unsupported questions"
+          value: "2 unanswered"
+          severity: "medium"
+      topic_breakdown:
+        - label: "nil"
+          count: 1
+        - label: "compliance"
+          count: 1
+      unanswered_questions:
+        - message_id: "gap-msg-1"
+          reason: "No approved answer for local NIL collective policy."
+        - message_id: "gap-msg-2"
+          reason: "No approved answer for compliance appeal process."
+      risk_breakdown:
+        - label: "compliance"
+          count: 1
+      recommended_attention_areas:
+        - "Add reviewed guidance for unanswered NIL and compliance edge cases."
+      source_message_ids:
+        - "gap-msg-1"
+        - "gap-msg-2"
+  expected_output:
+    expected_topic_labels: ["nil", "compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 2
+      unanswered_count: 2
+      topics:
+        nil: 1
+        compliance: 1
+      risks:
+        compliance: 1
+      source_message_ids:
+        - "gap-msg-1"
+        - "gap-msg-2"
+  metadata:
+    id: "dashboard_unanswered_support_gap"
+    category: "unanswered"
+- input:
+    scenario: "teamworks-process-confusion"
+    question: "Generate dashboard insight output for seeded Teamworks travel/process confusion."
+    source_counts:
+      query_count: 6
+      unanswered_count: 1
+      topics:
+        process: 5
+        teamworks: 4
+        academics: 1
+      risks: {}
+      source_message_ids:
+        - "proc-msg-1"
+        - "proc-msg-2"
+        - "proc-msg-3"
+        - "proc-msg-4"
+        - "proc-msg-5"
+        - "proc-msg-6"
+    generated_output:
+      summary: "Teamworks travel and absence-letter questions are clustering before the weekend trip."
+      headline_cards:
+        - title: "Travel process confusion"
+          value: "5 process questions"
+          severity: "medium"
+      topic_breakdown:
+        - label: "process"
+          count: 5
+        - label: "teamworks"
+          count: 4
+        - label: "academics"
+          count: 1
+      unanswered_questions:
+        - message_id: "proc-msg-6"
+          reason: "No local owner listed for late per diem question."
+      risk_breakdown: []
+      recommended_attention_areas:
+        - "Pin Teamworks trip-card and absence-letter instructions before travel days."
+      source_message_ids:
+        - "proc-msg-1"
+        - "proc-msg-2"
+        - "proc-msg-6"
+  expected_output:
+    expected_topic_labels: ["process", "teamworks", "academics"]
+    expected_risk_labels: []
+    source_counts:
+      query_count: 6
+      unanswered_count: 1
+      topics:
+        process: 5
+        teamworks: 4
+        academics: 1
+      risks: {}
+      source_message_ids:
+        - "proc-msg-1"
+        - "proc-msg-2"
+        - "proc-msg-3"
+        - "proc-msg-4"
+        - "proc-msg-5"
+        - "proc-msg-6"
+  metadata:
+    id: "dashboard_teamworks_process_confusion"
+    category: "process"
+- input:
+    scenario: "opendorse-account-setup"
+    question: "Generate dashboard insight output for seeded Opendorse/NILGO setup friction."
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        nil: 3
+        process: 3
+        opendorse: 2
+      risks:
+        legal: 1
+      source_message_ids:
+        - "open-msg-1"
+        - "open-msg-2"
+        - "open-msg-3"
+        - "open-msg-4"
+    generated_output:
+      summary: "NIL platform setup questions are mostly answerable, with one international-athlete legal boundary."
+      headline_cards:
+        - title: "NIL platform setup"
+          value: "3 process questions"
+          severity: "low"
+      topic_breakdown:
+        - label: "nil"
+          count: 3
+        - label: "process"
+          count: 3
+        - label: "opendorse"
+          count: 2
+      unanswered_questions: []
+      risk_breakdown:
+        - label: "legal"
+          count: 1
+      recommended_attention_areas:
+        - "Refresh Opendorse verification and NILGO pending-review instructions."
+      source_message_ids:
+        - "open-msg-1"
+        - "open-msg-2"
+        - "open-msg-4"
+  expected_output:
+    expected_topic_labels: ["nil", "process", "opendorse"]
+    expected_risk_labels: ["legal"]
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        nil: 3
+        process: 3
+        opendorse: 2
+      risks:
+        legal: 1
+      source_message_ids:
+        - "open-msg-1"
+        - "open-msg-2"
+        - "open-msg-3"
+        - "open-msg-4"
+  metadata:
+    id: "dashboard_opendorse_account_setup"
+    category: "platform_process"
+- input:
+    scenario: "harassment-reporting-path"
+    question: "Generate dashboard insight output for seeded harassment/reporting questions."
+    source_counts:
+      query_count: 3
+      unanswered_count: 0
+      topics:
+        harassment: 2
+        reporting: 3
+      risks:
+        harassment: 2
+      source_message_ids:
+        - "har-msg-1"
+        - "har-msg-2"
+        - "har-msg-3"
+    generated_output:
+      summary: "Athletes are asking where to report team conduct concerns, not for Playbook to investigate them."
+      headline_cards:
+        - title: "Reporting-path questions"
+          value: "3 reporting questions"
+          severity: "medium"
+      topic_breakdown:
+        - label: "harassment"
+          count: 2
+        - label: "reporting"
+          count: 3
+      unanswered_questions: []
+      risk_breakdown:
+        - label: "harassment"
+          count: 2
+      recommended_attention_areas:
+        - "Make reporting-line and Title IX paths easier to find in athlete guidance."
+      source_message_ids:
+        - "har-msg-1"
+        - "har-msg-2"
+  expected_output:
+    expected_topic_labels: ["harassment", "reporting"]
+    expected_risk_labels: ["harassment"]
+    source_counts:
+      query_count: 3
+      unanswered_count: 0
+      topics:
+        harassment: 2
+        reporting: 3
+      risks:
+        harassment: 2
+      source_message_ids:
+        - "har-msg-1"
+        - "har-msg-2"
+        - "har-msg-3"
+  metadata:
+    id: "dashboard_harassment_reporting_path"
+    category: "harassment_reporting"
+- input:
+    scenario: "emergency-crisis-spike"
+    question: "Generate dashboard insight output for seeded emergency/crisis support prompts."
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        emergency: 3
+        mental_health: 2
+        medical: 1
+      risks:
+        emergency: 3
+        mental_health: 2
+        medical: 1
+      source_message_ids:
+        - "safe-msg-1"
+        - "safe-msg-2"
+        - "safe-msg-3"
+        - "safe-msg-4"
+    generated_output:
+      summary: "Emergency and crisis prompts were handled as safety escalations and should be reviewed for support readiness."
+      headline_cards:
+        - title: "Emergency prompts"
+          value: "3 emergency-risk questions"
+          severity: "high"
+      topic_breakdown:
+        - label: "emergency"
+          count: 3
+        - label: "mental_health"
+          count: 2
+        - label: "medical"
+          count: 1
+      unanswered_questions: []
+      risk_breakdown:
+        - label: "emergency"
+          count: 3
+        - label: "mental_health"
+          count: 2
+        - label: "medical"
+          count: 1
+      recommended_attention_areas:
+        - "Confirm emergency and crisis instructions remain visible in athlete-facing support."
+      source_message_ids:
+        - "safe-msg-1"
+        - "safe-msg-2"
+        - "safe-msg-3"
+  expected_output:
+    expected_topic_labels: ["emergency", "mental_health", "medical"]
+    expected_risk_labels: ["emergency", "mental_health", "medical"]
+    source_counts:
+      query_count: 4
+      unanswered_count: 0
+      topics:
+        emergency: 3
+        mental_health: 2
+        medical: 1
+      risks:
+        emergency: 3
+        mental_health: 2
+        medical: 1
+      source_message_ids:
+        - "safe-msg-1"
+        - "safe-msg-2"
+        - "safe-msg-3"
+        - "safe-msg-4"
+  metadata:
+    id: "dashboard_emergency_crisis_spike"
+    category: "emergency"
+- input:
+    scenario: "medical-legal-sensitive-refusals"
+    question: "Generate dashboard insight output for seeded medical/legal boundary prompts."
+    source_counts:
+      query_count: 5
+      unanswered_count: 0
+      topics:
+        medical: 2
+        legal: 2
+        nil: 1
+      risks:
+        medical: 2
+        legal: 2
+      source_message_ids:
+        - "sens-msg-1"
+        - "sens-msg-2"
+        - "sens-msg-3"
+        - "sens-msg-4"
+        - "sens-msg-5"
+    generated_output:
+      summary: "Sensitive medical and legal prompts were declined rather than answered as policy guidance."
+      headline_cards:
+        - title: "Sensitive-topic boundaries"
+          value: "4 medical/legal risk questions"
+          severity: "medium"
+      topic_breakdown:
+        - label: "medical"
+          count: 2
+        - label: "legal"
+          count: 2
+        - label: "nil"
+          count: 1
+      unanswered_questions: []
+      risk_breakdown:
+        - label: "medical"
+          count: 2
+        - label: "legal"
+          count: 2
+      recommended_attention_areas:
+        - "Review sensitive-topic refusal copy for medical, legal, and NIL contract questions."
+      source_message_ids:
+        - "sens-msg-1"
+        - "sens-msg-2"
+        - "sens-msg-4"
+  expected_output:
+    expected_topic_labels: ["medical", "legal", "nil"]
+    expected_risk_labels: ["medical", "legal"]
+    source_counts:
+      query_count: 5
+      unanswered_count: 0
+      topics:
+        medical: 2
+        legal: 2
+        nil: 1
+      risks:
+        medical: 2
+        legal: 2
+      source_message_ids:
+        - "sens-msg-1"
+        - "sens-msg-2"
+        - "sens-msg-3"
+        - "sens-msg-4"
+        - "sens-msg-5"
+  metadata:
+    id: "dashboard_medical_legal_sensitive_refusals"
+    category: "sensitive_refusal"
+- input:
+    scenario: "nil-conflict-policy-update"
+    question: "Generate dashboard insight output for seeded NIL source-freshness conflict prompts."
+    source_counts:
+      query_count: 4
+      unanswered_count: 1
+      topics:
+        nil: 4
+        compliance: 3
+      risks:
+        compliance: 3
+      source_message_ids:
+        - "conf-msg-1"
+        - "conf-msg-2"
+        - "conf-msg-3"
+        - "conf-msg-4"
+    generated_output:
+      summary: "Athletes are finding old NIL disclosure screenshots that conflict with the current timing update."
+      headline_cards:
+        - title: "NIL source freshness"
+          value: "4 conflict-timing questions"
+          severity: "high"
+      topic_breakdown:
+        - label: "nil"
+          count: 4
+        - label: "compliance"
+          count: 3
+      unanswered_questions:
+        - message_id: "conf-msg-4"
+          reason: "No staff-reviewed answer for already-missed disclosure timing."
+      risk_breakdown:
+        - label: "compliance"
+          count: 3
+      recommended_attention_areas:
+        - "Archive or clearly mark superseded NIL disclosure timing FAQs."
+      source_message_ids:
+        - "conf-msg-1"
+        - "conf-msg-2"
+        - "conf-msg-4"
+  expected_output:
+    expected_topic_labels: ["nil", "compliance"]
+    expected_risk_labels: ["compliance"]
+    source_counts:
+      query_count: 4
+      unanswered_count: 1
+      topics:
+        nil: 4
+        compliance: 3
+      risks:
+        compliance: 3
+      source_message_ids:
+        - "conf-msg-1"
+        - "conf-msg-2"
+        - "conf-msg-3"
+        - "conf-msg-4"
+  metadata:
+    id: "dashboard_nil_conflict_policy_update"
+    category: "conflict"
+- input:
+    scenario: "no-data-window"
+    question: "Generate dashboard insight output for an empty analytics window."
+    source_counts:
+      query_count: 0
+      unanswered_count: 0
+      topics: {}
+      risks: {}
+      source_message_ids: []
+    generated_output:
+      summary: "No athlete query data is available for this window."
+      headline_cards:
+        - title: "No recent queries"
+          value: "0 questions"
+          severity: "low"
+      topic_breakdown: []
+      unanswered_questions: []
+      risk_breakdown: []
+      recommended_attention_areas:
+        - "No action recommended until athlete query data is available."
+      source_message_ids: []
+  expected_output:
+    expected_topic_labels: []
+    expected_risk_labels: []
+    source_counts:
+      query_count: 0
+      unanswered_count: 0
+      topics: {}
+      risks: {}
+      source_message_ids: []
+  metadata:
+    id: "dashboard_no_data_window"
+    category: "no_data"
+- input:
+    scenario: "mixed-week-hotspots"
+    question: "Generate dashboard insight output for a mixed high-volume week."
+    source_counts:
+      query_count: 9
+      unanswered_count: 2
+      topics:
+        nil: 3
+        compliance: 3
+        process: 2
+        recruiting: 1
+      risks:
+        compliance: 4
+        recruiting: 1
+      source_message_ids:
+        - "mix-msg-1"
+        - "mix-msg-2"
+        - "mix-msg-3"
+        - "mix-msg-4"
+        - "mix-msg-5"
+        - "mix-msg-6"
+        - "mix-msg-7"
+        - "mix-msg-8"
+        - "mix-msg-9"
+    generated_output:
+      summary: "NIL and compliance questions are tied for volume, while process questions create smaller operational friction."
+      headline_cards:
+        - title: "NIL and compliance tied"
+          value: "3 questions each"
+          severity: "medium"
+        - title: "Unanswered follow-up"
+          value: "2 unsupported"
+          severity: "medium"
+      topic_breakdown:
+        - label: "nil"
+          count: 3
+        - label: "compliance"
+          count: 3
+        - label: "process"
+          count: 2
+        - label: "recruiting"
+          count: 1
+      unanswered_questions:
+        - message_id: "mix-msg-8"
+          reason: "No approved local NIL collective travel guidance."
+        - message_id: "mix-msg-9"
+          reason: "No approved compliance appeal-process source."
+      risk_breakdown:
+        - label: "compliance"
+          count: 4
+        - label: "recruiting"
+          count: 1
+      recommended_attention_areas:
+        - "Review NIL, compliance, and process guidance together before the next athlete communication."
+      source_message_ids:
+        - "mix-msg-1"
+        - "mix-msg-2"
+        - "mix-msg-8"
+        - "mix-msg-9"
+  expected_output:
+    expected_topic_labels: ["nil", "compliance", "process", "recruiting"]
+    expected_risk_labels: ["compliance", "recruiting"]
+    source_counts:
+      query_count: 9
+      unanswered_count: 2
+      topics:
+        nil: 3
+        compliance: 3
+        process: 2
+        recruiting: 1
+      risks:
+        compliance: 4
+        recruiting: 1
+      source_message_ids:
+        - "mix-msg-1"
+        - "mix-msg-2"
+        - "mix-msg-3"
+        - "mix-msg-4"
+        - "mix-msg-5"
+        - "mix-msg-6"
+        - "mix-msg-7"
+        - "mix-msg-8"
+        - "mix-msg-9"
+  metadata:
+    id: "dashboard_mixed_week_hotspots"
+    category: "mixed"

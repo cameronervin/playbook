@@ -34,10 +34,10 @@ and insight generation for department operators.
 | Frontend | Next.js App Router, TypeScript, Tailwind CSS v4, Zustand, TanStack Query |
 | Backend | FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2 |
 | Agents | LangGraph + LangChain, Anthropic-first LLM orchestration |
-| LLM gateway | LiteLLM gateway mode, with direct provider mode for local or break-glass use |
+| LLM gateway | LiteLLM mode, with direct provider mode for local or break-glass use |
 | Knowledge base | Standalone `kb-service` for ingestion, chunking, embeddings, and retrieval |
 | Retrieval | Docling, tiktoken chunking, OpenAI/LiteLLM embeddings, pgvector similarity search |
-| Data and storage | PostgreSQL, pgvector, S3 or LocalStack |
+| Data and storage | PostgreSQL, pgvector, S3-compatible storage (MinIO locally) |
 | Async work | Celery + Valkey for long-running ingestion and background processing |
 | Observability | structlog, audit logs, and privacy-conscious operational logging |
 | Tests | pytest for backend and KB service, Vitest + React Testing Library for frontend |
@@ -71,8 +71,8 @@ Playbook separates the product API, frontend experience, and retrieval pipeline:
 
 | Path | Purpose |
 |------|---------|
-| `prd/` | Playbook user stories, technical specs, and phase implementation plans |
-| `docs/` | Architecture notes, API docs, setup guides, ADRs, and agent documentation |
+| `backstage/prd/` | Playbook user stories, technical specs, and phase implementation plans |
+| `backstage/` | Architecture notes, API docs, setup guides, ADRs, and agent documentation |
 | `backend/` | FastAPI product backend, LangGraph agent runtime, providers, models, and tests |
 | `frontend/` | Next.js App Router frontend for athlete and admin experiences |
 | `kb-service/` | Standalone RAG service for document ingestion and vector retrieval |
@@ -85,13 +85,13 @@ Playbook separates the product API, frontend experience, and retrieval pipeline:
 
 Start with the product docs, then follow the implementation phase plan:
 
-1. Read [`prd/README.md`](prd/README.md) for the MVP overview, priorities, and
+1. Read [`backstage/prd/README.md`](backstage/prd/README.md) for the MVP overview, priorities, and
    document index.
-2. Read [`prd/03-implementation/_implementation-plan.md`](prd/03-implementation/_implementation-plan.md)
+2. Read [`backstage/prd/03-implementation/_implementation-plan.md`](backstage/prd/03-implementation/_implementation-plan.md)
    for the phase roadmap.
-3. Read [`docs/architecture/overview.md`](docs/architecture/overview.md) for the
+3. Read [`backstage/architecture/overview.md`](backstage/architecture/overview.md) for the
    system architecture and request lifecycle.
-4. Use [`docs/guides/setup.md`](docs/guides/setup.md) for local setup details.
+4. Use [`backstage/guides/setup.md`](backstage/guides/setup.md) for local setup details.
 5. Use [`kb-service/README.md`](kb-service/README.md) when working on ingestion,
    embeddings, or retrieval.
 

@@ -1,0 +1,349 @@
+{
+  "agent": "dashboard_insights",
+  "run_name": "codex-threshold-plan-dashboard-compat-20260702",
+  "timestamp": "2026-07-02T17:31:08+00:00",
+  "passed": true,
+  "metadata": {
+    "dataset": "dashboard_insights",
+    "dataset_path": "evals/datasets/dashboard_insights.yaml",
+    "thresholds": {
+      "dashboard_insights_topic_labels": 1.0,
+      "dashboard_insights_risk_labels": 1.0,
+      "dashboard_insights_metric_grounding": 1.0,
+      "dashboard_insights_source_grounding": 1.0,
+      "dashboard_insights_unanswered_coverage": 1.0
+    },
+    "max_concurrency": 1,
+    "commit_sha": "0190230a22ab07fe5db32d066e9900a396d87bc0",
+    "created_at": "2026-07-02T17:31:08+00:00",
+    "environment": "local",
+    "llm_provider_mode": "litellm",
+    "llm_chat_model": "playbook-chat",
+    "eval_judge_model": "playbook-chat",
+    "eval_embeddings_model": "text-embedding-3-small",
+    "kb_provider_mode": "local"
+  },
+  "mean_scores": {
+    "dashboard_insights_topic_labels": 1.0,
+    "dashboard_insights_risk_labels": 1.0,
+    "dashboard_insights_metric_grounding": 1.0,
+    "dashboard_insights_source_grounding": 1.0,
+    "dashboard_insights_unanswered_coverage": 1.0
+  },
+  "failures": [],
+  "errors": [],
+  "per_item": [
+    {
+      "item_id": "4c911246d5259f53",
+      "trace_id": "0399b393ff90379b5c712532b3dfcee5",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "09ac7aedabf87509",
+      "trace_id": "4ddae821572328897bca62ed9b354521",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "9000a36155198255",
+      "trace_id": "a7bc5685c0460f508b2d18213caba7f4",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "299c597c123fc14e",
+      "trace_id": "b7c5dadf37a1f7cd938e7aefaa20fbb2",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "d1732b45a5c7a27a",
+      "trace_id": "907173c8f3c24992892f23f6bfbe9497",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "c2d328bf34a34690",
+      "trace_id": "8a775e1abceeebb38c34e4d8244deaf3",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "a5526a26a3012e95",
+      "trace_id": "762a6bcd070699de4b9476bfac459ad6",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "52060bc3c2321c05",
+      "trace_id": "dc27b6ec282cf2344881879a0672146c",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "011cde6098d0fa53",
+      "trace_id": "8cd8b377213c6adf50778f748c8e8eed",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "2223a276f0de1a4e",
+      "trace_id": "60c6e4d3e17b6f1b63e97610bd10b9cf",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "eca10191b1f39831",
+      "trace_id": "f64ce110779804967d2ac176cafa04cd",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    },
+    {
+      "item_id": "50c72f1bf62b2f80",
+      "trace_id": "ebad98d51ade6e6192b6850f293204d1",
+      "scores": {
+        "dashboard_insights_topic_labels": {
+          "score": 1.0,
+          "reasoning": "expected topic labels present"
+        },
+        "dashboard_insights_risk_labels": {
+          "score": 1.0,
+          "reasoning": "expected risk labels present"
+        },
+        "dashboard_insights_metric_grounding": {
+          "score": 1.0,
+          "reasoning": "generated counts are bounded by source counts"
+        },
+        "dashboard_insights_source_grounding": {
+          "score": 1.0,
+          "reasoning": "source message IDs are present and allowed"
+        },
+        "dashboard_insights_unanswered_coverage": {
+          "score": 1.0,
+          "reasoning": "unanswered output matches seeded unanswered data"
+        }
+      }
+    }
+  ]
+}

@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from evals.core.judges.base import Judge
 from evals.core.judges.composite import CompositeJudge, ScopedJudge
+from evals.core.judges.deterministic import DeterministicJudge
 from evals.core.judges.llm import LLMJudge
 from evals.core.judges.ragas import RagasJudge
 
 JUDGES = {
+    "deterministic": DeterministicJudge,
     "llm": LLMJudge,
     "ragas": RagasJudge,
     "composite": CompositeJudge,
@@ -29,4 +31,13 @@ def build_judge(cfg: dict) -> Judge:
     return JUDGES[kind](**cfg)
 
 
-__all__ = ["Judge", "LLMJudge", "RagasJudge", "CompositeJudge", "ScopedJudge", "build_judge", "JUDGES"]
+__all__ = [
+    "Judge",
+    "LLMJudge",
+    "RagasJudge",
+    "DeterministicJudge",
+    "CompositeJudge",
+    "ScopedJudge",
+    "build_judge",
+    "JUDGES",
+]

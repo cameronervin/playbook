@@ -1,0 +1,37 @@
+model_list:
+  - model_name: playbook-chat
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_CHAT_MODEL
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: os.environ/OPENAI_API_BASE
+
+  - model_name: playbook-fast
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_FAST_MODEL
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: os.environ/OPENAI_API_BASE
+
+  - model_name: playbook-embed
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_EMBED_MODEL
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: os.environ/OPENAI_API_BASE
+
+  - model_name: playbook-ocr
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_OCR_MODEL
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: os.environ/OPENAI_API_BASE
+
+  - model_name: playbook-rerank
+    litellm_params:
+      model: os.environ/LITELLM_PLAYBOOK_RERANK_MODEL
+      api_base: os.environ/INFINITY_API_BASE
+      api_key: os.environ/INFINITY_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL
+
+litellm_settings:
+  drop_params: true

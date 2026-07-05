@@ -1,0 +1,33 @@
+name: dashboard_insights
+description: >
+  Deterministic structural rubric for dashboard insight generation. The judge
+  verifies seeded topic and risk labels, bounded generated counts, source
+  message grounding, and coverage of unanswered support gaps without external
+  LLM calls.
+criteria:
+  - name: topic_labels
+    description: >
+      Generated topic_breakdown contains every expected topic label from the
+      seeded dashboard window.
+    scale: [0, 1]
+  - name: risk_labels
+    description: >
+      Generated risk_breakdown contains every expected risk label from the
+      seeded dashboard window.
+    scale: [0, 1]
+  - name: metric_grounding
+    description: >
+      Generated topic, risk, and unanswered counts do not exceed source/query
+      counts and do not introduce labels absent from the seeded source counts.
+    scale: [0, 1]
+  - name: source_grounding
+    description: >
+      Generated source_message_ids and unanswered question message IDs are
+      present for non-empty windows and are drawn only from seeded source IDs.
+    scale: [0, 1]
+  - name: unanswered_coverage
+    description: >
+      Generated unanswered_questions are empty when the seed has no unanswered
+      questions and present with grounded message IDs when the seed includes
+      unanswered support gaps.
+    scale: [0, 1]

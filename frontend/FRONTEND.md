@@ -1,101 +1,126 @@
 # Frontend
 
-A reusable Next.js (App Router) frontend skeleton: **Next.js 15 + React 19 + Tailwind CSS v4 + TanStack Query + Zustand**, TypeScript strict throughout.
+Playbook’s frontend is a Next.js App Router app: **Next.js 15 + React 19 + Tailwind CSS v4 + TanStack Query + Zustand + Radix primitives**, with strict TypeScript. KB upload dropzones use `react-dropzone`.
 
-## Getting started
+## Getting Started
 
 ```bash
 npm install
-cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL
-npm run dev                          # http://localhost:3000
+cp .env.local.example .env.local
+npm run dev
 ```
 
-Scripts:
+Set `NEXT_PUBLIC_API_URL` to the FastAPI backend, usually `http://localhost:8000`.
+Sentry frontend monitoring is disabled unless `NEXT_PUBLIC_SENTRY_DSN` is set.
+When enabled, it sends errors and traces only, with `sendDefaultPii=false`,
+event scrubbing, no Session Replay, no user feedback widget, and no Sentry Logs.
+Use `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.1` by default; use `1.0` locally
+only for an explicit short smoke test. Source-map upload is a CI/build concern:
+set `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` in the build
+environment, never in committed env files.
 
 | Script | Purpose |
 |--------|---------|
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build |
-| `npm run lint` | ESLint (eslint-config-next) |
+| `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | Vitest unit tests |
+| `npm run test` | Vitest unit/component tests |
 
-## App Router conventions: server vs client components
+## Routes
 
-This project uses the Next.js **App Router** (the `app/` directory).
+| Route | Purpose |
+|-------|---------|
+| `/` | Auth-aware redirect |
+| `/login` | SSO-only login, Microsoft first then Google |
+| `/profile` | First-time athlete profile completion |
+| `/chat` | Athlete-first chat shell with conversation history and sources panel; admins can enter explicitly from the account menu |
+| `/admin` | Default admin shell with insights, KB management, and super-admin users |
 
-- **Server Components are the default.** Every file under `app/` runs on the server unless it opts in to the client. Server components can be `async`, read data directly, and ship zero JS to the browser. Keep pages and layouts as server components where possible.
-- **Client Components opt in with `'use client'`** as the first line of the file. You need this whenever you use React hooks (`useState`, `useEffect`), browser APIs, event handlers, or client libraries like TanStack Query and Zustand.
-- **Pattern:** keep the page a server component and push interactivity into a small `'use client'` child. See `app/page.tsx` (server) rendering `app/ExampleList.tsx` (client, uses the data hook + store).
-- **Route files** (`layout.tsx`, `page.tsx`) use **default exports** — this is required by Next.js. Everything else uses **named exports**.
+The frontend uses the existing FastAPI OAuth/session system. Browser OAuth callbacks redirect from the backend to `FRONTEND_URL + next_route` after the session cookie is set: athletes land on `/chat` after profile completion, and admin-capable users land on `/admin`. Workspace activity calls the backend session-refresh endpoint on a five-minute throttle so active users receive sliding app-session renewal. A global TanStack Query/API-client auth handler clears local UI state and redirects to `/login?reason=session_expired` when the backend returns an expired/revoked 401. Do not add Auth.js/NextAuth for MVP auth.
 
-## Tailwind CSS v4 — design tokens via `@theme`
+## Design System
 
-Tailwind v4 is configured without a `tailwind.config.js` for tokens:
+The visual source of truth is `backstage/design/`, especially `backstage/design/README.md`, `backstage/design/frontend_wireframe_implementation_plan.md`, and `backstage/design/source/colors_and_type.css`.
 
-- `postcss.config.mjs` registers `@tailwindcss/postcss`.
-- `app/globals.css` starts with `@import "tailwindcss";`.
-- Design tokens are declared in a `@theme { ... }` block in `app/globals.css`. Tailwind generates matching utilities automatically — e.g. `--color-primary` → `text-primary` / `bg-primary`, `--radius-md` → `rounded-md`.
+- Fonts are loaded locally in `src/app/layout.tsx`: Archivo, Sora, and Inter.
+- Tailwind v4 tokens live in `src/app/globals.css` using `@theme`.
+- Compact product typography utilities live in `src/app/globals.css`: `pb-page-title`, `pb-page-subtitle`, `pb-card-title`, `pb-ui-sm`, and `pb-ui-xs`.
+- Use the semantic UI contract in `src/app/globals.css` before adding one-off Tailwind values:
+  - Auth surfaces use `pb-auth-*` classes for headings, provider buttons, labels, controls, and footer copy.
+  - Workspace geometry uses `pb-workspace-*` and `pb-chat-content` classes for rails, panels, and chat width.
+  - Chat surfaces use `pb-chat-*` classes for empty-state titles, message body text, composer inputs, and user bubbles.
+  - Dashboard/admin surfaces use `pb-dashboard-*`, `pb-admin-table-*`, `pb-admin-menu*`, and `pb-admin-nav-*` classes for dense text and control rhythm.
+- Use `pb-focus-control` or `pb-focus-item` whenever an interactive element suppresses browser outlines. Do not add `outline-none` without an equivalent visible focus state.
+- Repeated exact dimensions belong in Tailwind v4 `@theme` spacing tokens or named `pb-*` classes. Single-use arbitrary values are allowed only when they directly reflect the design handoff.
+- Admin chrome uses shared globals such as `pb-admin-header-control`, `pb-admin-nav-item`, and `pb-admin-nav-icon` so Insights, Knowledge base, and Users & roles keep the same compact rhythm.
+- Dense admin tables use shared globals such as `pb-admin-table-text`, `pb-admin-table-meta`, `pb-admin-table-action`, `pb-admin-menu`, and `pb-admin-menu-item`; avoid generic `text-sm`/`text-base` row controls that overpower table content.
+- The palette is Playbook orange on warm charcoal. Avoid blue/purple AI gradients.
+- Use local Playbook primitives in `src/components/ui/`.
+- `Button`, `IconButton`, `Input`, `Textarea`, and Radix wrappers own default focus and sizing behavior. Use `Button size="sm"` as the canonical 36px compact app control for toolbar/header actions, and use `IconButton size="sm" variant="ghost"` for compact panel close/action buttons.
+- `/login` and `/profile` live under the `src/app/(auth)/` route group, preserving their public URLs while sharing the auth layout, horizon background, warm vignette, and reduced-motion-safe stage. Their feature screens own only the raised auth card content.
+- Generic app-entry loading uses the minimal centered Playbook mark and `Loading ...` on a plain `bg-page` background for `/` auth redirect resolution and the `/login` route fallback before the login page renders. Once a page is mounted, data loading stays in the relevant shaped skeleton, such as the login auth-card provider tiles.
+- `/chat` and `/admin` live under the `src/app/(workspace)/` route group, preserving their public URLs while sharing the left/main/right workspace geometry through `WorkspaceShell`. Admin and super-admin users default to `/admin`, but account-menu switchers use real links so they can explicitly move between `/admin` and `/chat`.
+- Admin Insights reads real Phase 4 analytics APIs through TanStack Query hooks: summary aggregates feed KPI/topic/risk/volume modules, anonymized query rows feed Query review, `/admin/dashboard-insights/current` feeds the AI summary, the MVP time-window selector exposes Last 7 days and Last 30 days only, and manual Regenerate posts a concrete UTC `window_start`/`window_end` before polling the returned run ID until completion or failure. While generation is active, Regenerate stays disabled with its normal label/icon, and the AI summary card owns the visible generating loader.
+- Admin Insights Query review renders only anonymized rows from `/api/v1/admin/analytics/queries`. Topic and risk chips send repeatable `topic_labels` and `risk_labels` params and are included in TanStack Query keys. Query review requests `limit=11` with `offset=page * 10`, renders 10 rows, and uses the extra row only as the next-page sentinel. Query detail rows may show anonymous owner key, message ID, labels, answer type, response status, unanswered reason, timestamp, and query text; do not render athlete names, emails, raw user IDs, teams, provider subjects, storage keys, or tokens.
+- Athlete chat and admin analytics chat share the same streaming UI contract: submitted user text appears immediately, an empty assistant placeholder renders one static agent mark plus `pb-thinking-shimmer`, streamed content replaces the shimmer as chunks arrive, the thread auto-follows only while pinned near the bottom, and the shared rounded composer shell owns the focus ring. Admin analytics chat keeps backend references internal for now: do not render source chips, UUID references, or a jump-to-latest control in that side panel.
+- Admin pages share `AdminPageScaffold` for the Claude header, grid layer, toolbar band, content padding, and max-width rhythm across Insights, Knowledge base, and Users & roles.
+- Admin and super-admin users can manage KB documents from the Knowledge base view. Upload starts from an inline `pb-admin-kb-upload-panel` with a visible title and centered drag/drop tile powered by `react-dropzone`; the tile includes accepted file type guidance, and selecting a supported file opens the metadata review dialog, where admins edit title, choose preset metadata tags, and optionally set a `YYYY-MM-DD` source date. The browser then requests a JSON upload intent, posts the file directly to storage, and completes the backend upload.
+- Admin KB document rows must visibly represent every persisted ingestion status: `upload_pending` as Pending upload, `uploaded` as Queued, `processing` as Processing, `ready` as Ready, and `failed` as Failed. Failed rows show the backend failure reason when available and expose retry; local direct-upload failures show a safe error plus Try again with the original metadata.
+- KB collections and metadata tag presets are backend resources fetched through TanStack Query. Document upload and metadata update requests send `collection_id` and `tag_slugs`; frontend code must not author arbitrary `metadata_tags` for admin KB documents.
+- Super-admins additionally see Users & roles, New collection, collection delete actions, and Manage tags. New collection captures required title, required description, and icon. Empty collections can be archived after confirmation; collections with documents show a greyed-out delete action with a tooltip explaining that documents must be deleted first. Manage tags creates, renames, archives, unarchives, and permanently deletes unused archived global preset tags. Department admins can upload, retry, edit metadata, and delete documents in existing collections, but do not see Users & roles or catalog-management actions.
+- Super-admin Users & roles uses the design-backed table surface with search, role pills, locked current-user state, and Radix role-change menus wired to the existing admin user mutation.
+- Radix powers accessible dialog, dropdown menu, tabs, tooltip, and switch behavior.
+- Inline SVG is allowed only for the Playbook mark and SSO provider logos; use `lucide-react` for normal icons.
 
-**Rules:**
+## Data And State
 
-- Always use token-backed utilities. **No arbitrary values** (`text-[13px]`, `bg-[#abc]`, `p-[7px]`). If a value is missing, add it to the `@theme` block as a named token.
-- One value = one token. Don't create duplicate tokens for the same value.
-- Use `cn()` (`lib/utils/cn.ts`, clsx + tailwind-merge) for all conditional classes — never string-concatenate class names.
+- Server state belongs in TanStack Query hooks in `src/hooks/`.
+- API calls live in `src/lib/api/endpoints/` and use `apiClient`.
+- `apiClient` sends cookie credentials, preserves multipart `FormData`, parses structured API errors, emits the shared auth-expired event for 401 session failures, and handles `204`.
+- Athlete chat first-send uses `POST /api/v1/conversations`; follow-ups use
+  `POST /api/v1/conversations/{conversation_id}/messages`. Both return
+  `task_id` stream metadata, and the browser opens the returned SSE
+  `stream_url` with cookies included.
+- Zustand stores only client UI state, such as selected conversation, sources panel, admin tab, and settings modal state.
+- Planned API gaps should use typed endpoint clients and explicit loading/empty/error states; do not add hidden server-state mocks to production feature components.
 
-Replace the neutral tokens in `globals.css` with your design system.
+## Structure
 
-## Where things live
-
+```text
+src/app/                  App Router routes, grouped layouts, providers
+src/components/ui/         Shared Playbook primitives
+src/components/features/auth/ Shared auth/profile stage and card components
+src/components/features/workspace/ Shared chat/admin workspace shell components
+src/components/features/   Route/feature-specific components
+src/hooks/                 TanStack Query hooks
+src/lib/api/               Fetch client and endpoint modules
+src/lib/fixtures/          Static UI suggestions and view adapters
+src/lib/store/             Zustand UI stores
+src/lib/constants/         Route, query-key, and UI constants
+src/lib/utils/             Pure helpers
+src/types/                 Shared TypeScript contracts
 ```
-app/                      Routes, layouts, pages (server components by default)
-  layout.tsx              Root layout — wraps children in <Providers>
-  providers.tsx           'use client' — QueryClientProvider
-  page.tsx                Home route (server component)
-  ExampleList.tsx         'use client' child consuming the data hook + store
-components/
-  ui/                     Reusable, stateless UI primitives
-features/                 One folder per domain feature (components/hooks/index.ts)
-lib/
-  api/client.ts           Typed fetch wrapper (apiClient)
-  api/endpoints/          One file per API domain
-  store/                  Zustand stores
-  constants/              Named constants / config (no magic values in components)
-  utils/                  Pure utility functions (no hooks, no JSX)
-hooks/                    App-wide shared hooks (TanStack Query hooks)
-types/                    Global TypeScript interfaces
+
+## Testing
+
+Use Vitest and React Testing Library. Components that use TanStack Query must be wrapped in a `QueryClientProvider`.
+
+Core checks:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
 ```
 
-## State management
+For local Phase 4 dashboard validation, seed deterministic analytics rows and trigger a dashboard insight run from the backend workspace:
 
-- **Server state → TanStack Query.** All data fetching goes through a query/mutation hook in `hooks/` that calls an endpoint in `lib/api/endpoints/`. Never fetch in a component body or `useEffect`. See `hooks/useExample.ts`.
-- **Client state → Zustand.** Ephemeral UI state (selections, toggles, modals) lives in a store under `lib/store/`. Don't store server data here. See `lib/store/exampleStore.ts`.
+```bash
+cd ../backend
+DEBUG=true ENVIRONMENT=local uv run python scripts/phase4_dashboard_seed.py --poll
+```
 
-## How to add things
-
-**A page/route:** create `app/<route>/page.tsx` (server component). If it needs interactivity, render a small `'use client'` child component.
-
-**A feature:** create `features/<feature>/` with `components/`, `hooks/`, and an `index.ts` that re-exports the public surface. Components used by 2+ features go in `components/ui/`.
-
-**An API endpoint:**
-1. Add/extend the type in `types/<domain>.ts`.
-2. Add a function in `lib/api/endpoints/<domain>.ts` that calls `apiClient<T>(...)`.
-3. Add a TanStack Query hook in `hooks/use<Domain>.ts`.
-4. Register the query key in `lib/constants/config.ts`.
-
-## Testing — Vitest + React Testing Library
-
-- Config: `vitest.config.ts` (jsdom environment, `@` alias, globals enabled).
-- Setup: `vitest.setup.ts` registers `@testing-library/jest-dom` matchers.
-- Co-locate tests as `*.test.tsx` / `*.test.ts`. Components that use TanStack Query must be wrapped in a `QueryClientProvider` in the test — see `app/page.test.tsx`.
-- Run with `npm run test`.
-
-## Code conventions
-
-- TypeScript **strict**, no `any`.
-- Component props typed with `interface XxxProps {}`.
-- **Named exports** everywhere except Next.js route files (`page.tsx`/`layout.tsx`).
-- Functional components only.
-- `@/` import alias for all internal imports.
-- ES6+: arrow functions, destructuring, template literals, `?.`, `??`.
+The script seeds the Phase 1 dev users, replaces prior `[phase4-demo]` conversations for the local seeded athlete, inserts synthetic NIL/compliance/recruiting/process/unanswered turns, and starts a manual dashboard insight run. LLM/provider failures still leave the seeded analytics data available for `/admin` summary and Query review validation.

@@ -15,18 +15,42 @@ the scaffold's knowledgebase feature; the main `backend/` calls it over HTTP via
 ## Pipeline
 
 ```
-POST /api/kb/ingest/url ─▶ IngestionService ─▶ Celery chain
-                                                  parse_task   (docling + native parsers, complexity-routed)
-                                                    │  └─ stages page text to S3 (NDJSON)
-                                                  chunk_task   (tiktoken recursive splitter)
-                                                    │  └─ stages chunks to S3 (NDJSON)
-                                                  embed_task   (fan-out dispatcher)
-                                                    └─▶ group(embed_batch_task)  (OpenAI / LiteLLM embeddings)
-                                                          └─ writes vectors → pgvector (kb.langchain_pg_embedding)
-                                                          └─ last batch dispatches load_vector_task (finalize)
+POST /api/kb/configuration/resolve ─▶ automatic idempotent default config
 
-POST /api/kb/embed/search ─▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ ranked chunks
+POST /api/kb/ingest/document ───────▶ IngestionService ─▶ Celery chain
+                                                          parse_task   (docling + native parsers, complexity-routed)
+                                                            │  └─ stages page text to S3 (NDJSON)
+                                                          chunk_task   (tiktoken recursive splitter)
+                                                            │  └─ stages chunks to S3 (NDJSON)
+                                                          summarize_task (playbook-fast source summary)
+                                                            │  └─ persists kb.documents.summary
+                                                          embed_task   (fan-out dispatcher)
+                                                            └─▶ group(embed_batch_task)  (OpenAI / LiteLLM embeddings)
+                                                                  └─ writes vectors → pgvector (kb.langchain_pg_embedding)
+                                                                  └─ last batch dispatches load_vector_task (finalize)
+
+POST /api/kb/search ────────────────▶ SearchService ─▶ embed query ─▶ pgvector cosine search ─▶ semantic results
+                                                                  └─▶ optional PostgreSQL FTS lexical candidates
+                                                                      + RRF hybrid merge
+                                                                      + optional LiteLLM rerank
 ```
+
+`/configuration/resolve` owns the singleton Playbook defaults
+(`Playbook KB Pipeline` + `playbook-kb`) and is safe to call on a fresh local
+database. Search resolves that default internally before vector lookup, so a
+new database returns zero results instead of requiring manual configuration
+seeding.
+
+Search defaults to semantic-only. Setting `KB_SEARCH_STRATEGY=hybrid` enables
+hybrid candidate search: PostgreSQL full-text lexical candidates are merged
+with pgvector semantic candidates by reciprocal-rank fusion. Setting
+`KB_RERANK_ENABLED=true` in hybrid mode sends the bounded hybrid candidate list
+through the LiteLLM `playbook-rerank` alias and applies the request `limit`
+after reranking. In semantic mode, `score` is pgvector cosine similarity
+(`1 - distance`); in hybrid mode without reranking, `score` is the RRF
+`hybrid_score`; in hybrid rerank mode, `score` is the reranker relevance score
+when one is returned. The semantic `score_threshold` is used during semantic
+candidate generation and is not re-applied to RRF or rerank scores.
 
 ## Stack
 
@@ -35,11 +59,13 @@ POST /api/kb/embed/search ─▶ SearchService ─▶ embed query ─▶ pgvecto
 | API | FastAPI (port 8001), Bearer service-to-service auth |
 | Async pipeline | Celery + Valkey (multi-queue: cpu / io / notify) |
 | Parsing | Docling (PDF/DOCX/PPTX) + native (python-docx / openpyxl / python-pptx); complexity router |
-| OCR | **stub** (`NullOCRProvider`) — plug Textract/VLM back in (see `app/infrastructure/STUBS.md`) |
+| OCR | Opt-in scanned PDF OCR via LiteLLM VLM alias (`OCR_PROVIDER=vlm`); default is `NullOCRProvider` |
 | Chunking | tiktoken `RecursiveCharacterTextSplitter` (400 tokens / 40 overlap) |
-| Embeddings | OpenAI direct or LiteLLM gateway (`EmbedProviderMode`), `text-embedding-3-small`, 1536-dim |
-| Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) in the `kb` schema |
-| Storage | S3 / LocalStack (boto3), streamed to tempfiles |
+| Embeddings | OpenAI direct or LiteLLM mode (`EmbedProviderMode`), 1536-dim |
+| Search | Semantic pgvector by default; optional internal hybrid mode with PostgreSQL FTS + RRF |
+| Reranking | Optional hybrid-mode reranking through LiteLLM alias `playbook-rerank`, backed by self-hosted Infinity and the reusable `infrastructure/rerankers/` provider |
+| Vector store | pgvector (`vector(1536)`, HNSW `vector_cosine_ops`) plus generated FTS `search_vector` in the `kb` schema |
+| Storage | S3-compatible storage / MinIO locally (boto3), streamed to tempfiles |
 
 ## Layout
 
@@ -52,14 +78,16 @@ app/
   repositories/            CRUD + vector similarity search
   services/                ingestion / search / configuration orchestration
   api/                     routers + deps (service_auth, services)
-  workers/                 Celery app, tasks, per-thread state, rate limiter
+  workers/                 Celery app, task package, per-thread state, rate limiter
+    tasks/                 parse/chunk/embed/finalize/notify/watchdog modules
   infrastructure/
     db/session.py          thread-local async engine + NullPool (Celery-thread safe)
-    parsers/               contracts + extractors + complexity routing + OCR stub
+    parsers/               contracts + extractors + complexity routing + opt-in VLM OCR
     chunkers/              token-based recursive splitter
-    embedders/             ABC + direct + gateway + factory
+    embedders/             ABC + direct + litellm + factory
+    rerankers/             ABC + LiteLLM /rerank provider + factory
     vectorstore/           pgvector cosine search / bulk insert wrappers
-    llm/                   embed client builders (lru_cache)
+    llm/                   embed + rerank client builders
     io/                    S3 streaming tempfile helpers
 alembic/                   pgvector extension + kb schema migrations
 tests/                     pgvector / celery / splitter shims; repo + worker contract tests
@@ -69,18 +97,44 @@ tests/                     pgvector / celery / splitter shims; repo + worker con
 
 ```bash
 cd kb-service
-pip install -r requirements.txt
-alembic upgrade head                 # needs Postgres with the pgvector extension
-python run_dev.py                    # uvicorn on :8001
+uv sync
+uv run alembic upgrade head          # needs Postgres with the pgvector extension
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8001
 # workers (separate terminals):
-celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2
-celery -A app.workers.app worker -Q kb-io  --pool=threads  --concurrency=50
+uv run celery -A app.workers.app worker -Q kb-cpu --pool=prefork --concurrency=2
+uv run celery -A app.workers.app worker -Q kb-io  --pool=threads  --concurrency=50
 ```
 
 See `deploy/compose/base.yml` (+ `--profile worker`) to run the whole stack with Docker.
 
+## Smoke test
+
+Once the API, Postgres, Valkey, S3/MinIO, LiteLLM, and KB workers are running:
+
+```bash
+cd kb-service
+uv run python scripts/smoke_kb_service.py
+uv run python scripts/smoke_kb_service.py --include-conversation-file
+uv run python scripts/smoke_kb_service.py --check-litellm-rerank
+```
+
+The script creates a tiny DOCX, uploads it to the configured bucket, ingests it,
+waits for the worker pipeline, runs retrieval, and deletes the test artifact by
+default. The optional `--include-conversation-file` flag also ingests a private
+conversation-file DOCX and verifies shared search excludes it while private
+conversation-scoped search can retrieve it. Use `--keep` to preserve uploaded
+objects and KB documents while debugging.
+
+When reranked retrieval is enabled with `KB_SEARCH_STRATEGY=hybrid` and
+`KB_RERANK_ENABLED=true`, add `--check-litellm-rerank` to validate the LiteLLM
+`/rerank` alias before ingestion. To validate the intentional fail-open path,
+run with the reranker unavailable and add `--expect-rerank-fail-open`; the smoke
+then expects hybrid result metadata with `rerank_score=null` instead of
+`ranking_strategy=hybrid_rerank`.
+
 ## Extending
 
-Read `app/infrastructure/STUBS.md` for: adding a parser/extractor, plugging a real
-OCR provider (Textract / VLM), and changing the embedding model or vector dimension
-(requires a migration — the `vector(N)` column dimension is fixed).
+Read `../backstage/guides/kb_service_extension_points.md` for: adding a
+parser/extractor, enabling the LiteLLM-routed VLM OCR path, and changing the
+embedding model or vector dimension (requires a migration — the `vector(N)`
+column dimension is fixed).

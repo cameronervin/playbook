@@ -1,9 +1,9 @@
 """Context policies defining what each agent chain receives.
 
-Pattern: each chain has a ``PhaseContextPolicy`` listing the state fields to
-inject and the serialization *tier* for each. The middleware reads the policy
-rather than hardcoding context-assembly logic per chain, so adding context to a
-chain is a data change (edit the policy) not a code change.
+Pattern: workflow middleware can use ``PhaseContextPolicy`` rows to list the
+state fields to inject and the serialization *tier* for each. Athlete chat uses
+custom middleware today, so this registry is intentionally empty until another
+workflow needs declarative context injection.
 
 Serialization tiers:
     compact -> minimal, high-level (cheapest)
@@ -20,7 +20,7 @@ class ContextField:
     """A single context field to include for a chain.
 
     Attributes:
-        name: The state key name (e.g. 'loaded_context', 'result').
+        name: The state key name.
         serialization: One of 'compact', 'full', or 'json'.
         required: Whether the field must be present (informational).
         description: Why this field is included.
@@ -43,31 +43,8 @@ class PhaseContextPolicy:
     description: str = ""
 
 
-EXAMPLE_POLICY = PhaseContextPolicy(
-    phase="example",
-    description="Generic chain - receives loaded context and prior result (edit mode)",
-    fields=(
-        ContextField(
-            name="loaded_context",
-            serialization="json",
-            required=False,
-            description="Context hydrated from persistence by load_state",
-        ),
-        ContextField(
-            name="result",
-            serialization="json",
-            required=False,
-            description="Existing result if re-running / editing",
-            edit_field=True,
-        ),
-    ),
-)
-
-
 # All policies indexed by chain name.
-CONTEXT_POLICIES = {
-    "example": EXAMPLE_POLICY,
-}
+CONTEXT_POLICIES: dict[str, PhaseContextPolicy] = {}
 
 
 def get_policy(phase: str) -> PhaseContextPolicy:

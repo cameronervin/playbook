@@ -161,5 +161,5 @@ Key rules:
 
 ## Additional Resources
 
-- For the full best-practices knowledge base, see [reference.md](.\references\reference.md)
-- For before/after prompt rewrite examples, see [examples.md](.\references\examples.md)
+- For the full best-practices knowledge base, see [reference.md](references/reference.md)
+- For before/after prompt rewrite examples, see [examples.md](references/examples.md)

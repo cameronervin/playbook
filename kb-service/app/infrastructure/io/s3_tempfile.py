@@ -38,7 +38,7 @@ def extract_s3_parts(presigned_url: str) -> tuple[str, str]:
         bucket = hostname.split(".s3.")[0]
         key = path
     else:
-        # Path-style (LocalStack or path-style AWS): /{bucket}/{key}
+        # Path-style (MinIO or path-style AWS): /{bucket}/{key}
         bucket, _, key = path.partition("/")
     if not bucket or not key:
         raise ValueError(f"Could not parse S3 bucket/key from URL: {presigned_url}")
@@ -77,12 +77,13 @@ def _sync_stream_to_path(
                             f"S3 object exceeds size limit: {settings.S3_STREAM_MAX_FILE_SIZE_MB} MB"
                         )
                     f.write(chunk)
-            return bytes_read
         except ClientError as exc:
             if exc.response["Error"]["Code"] in ("ExpiredToken", "InvalidClientTokenId") and attempt == 0:
                 invalidate_s3_client()
                 continue
             raise
+        else:
+            return bytes_read
         finally:
             if body is not None:
                 body.close()

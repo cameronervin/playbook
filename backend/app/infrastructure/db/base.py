@@ -5,7 +5,42 @@ Importing this module guarantees that all ORM models are registered on
 imports here as the data layer grows.
 """
 
-from app.models.base import Base  # noqa: F401
-from app.models.example import Example  # noqa: F401
+from app.models import (  # noqa: F401
+    AdminChatMessage,
+    AdminChatSession,
+    AuditLog,
+    Base,
+    Conversation,
+    ConversationFile,
+    ConversationMessage,
+    DashboardInsight,
+    DashboardInsightRun,
+    KBCollection,
+    KBDocument,
+    KBDocumentEvent,
+    KBDocumentTag,
+    KBMetadataTag,
+    MessageCitation,
+    Organization,
+    User,
+)
 
-__all__ = ["Base", "Example"]
+__all__ = [
+    "AdminChatMessage",
+    "AdminChatSession",
+    "AuditLog",
+    "Base",
+    "Conversation",
+    "ConversationFile",
+    "ConversationMessage",
+    "DashboardInsight",
+    "DashboardInsightRun",
+    "KBCollection",
+    "KBDocument",
+    "KBDocumentEvent",
+    "KBDocumentTag",
+    "KBMetadataTag",
+    "MessageCitation",
+    "Organization",
+    "User",
+]

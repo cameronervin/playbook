@@ -1,18 +1,35 @@
-"""Builders compose chains -> nodes -> graph and compile it.
+"""Builders compose chains -> nodes -> graph and compile it."""
 
-``compile_example_graph`` is the public entry point wired by main.py.
-"""
-
-from app.agents.builders.chains_builder import create_example_chain_set
-from app.agents.builders.graphs_builder import (
-    build_example_graph,
-    compile_example_graph,
+from app.agents.builders.chains_builder import (
+    create_admin_chat_chain_set,
+    create_athlete_chat_chain_set,
+    create_conversation_title_chain_set,
+    create_dashboard_insights_chain_set,
 )
-from app.agents.builders.nodes_builder import create_example_node_set
+from app.agents.builders.graphs_builder import (
+    compile_admin_chat_graph,
+    compile_athlete_chat_graph,
+    compile_conversation_title_graph,
+    compile_dashboard_insights_graph,
+)
+from app.agents.builders.nodes_builder import (
+    create_admin_chat_node_set,
+    create_athlete_chat_node_set,
+    create_conversation_title_node_set,
+    create_dashboard_insights_node_set,
+)
 
 __all__ = [
-    "build_example_graph",
-    "compile_example_graph",
-    "create_example_chain_set",
-    "create_example_node_set",
+    "compile_conversation_title_graph",
+    "compile_admin_chat_graph",
+    "compile_dashboard_insights_graph",
+    "compile_athlete_chat_graph",
+    "create_admin_chat_chain_set",
+    "create_admin_chat_node_set",
+    "create_athlete_chat_chain_set",
+    "create_athlete_chat_node_set",
+    "create_conversation_title_chain_set",
+    "create_conversation_title_node_set",
+    "create_dashboard_insights_chain_set",
+    "create_dashboard_insights_node_set",
 ]

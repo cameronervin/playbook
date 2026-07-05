@@ -1,7 +1,7 @@
 """Base embedding provider interface.
 
 Pattern overview:
-  * ``EmbedProviderMode`` is a ``StrEnum`` (GATEWAY/DIRECT) selecting how
+  * ``EmbedProviderMode`` is a ``StrEnum`` (LITELLM/DIRECT) selecting how
     embeddings are produced.
   * ``BaseEmbedProvider`` is an ABC holding the shared sync ``embed()`` loop;
     subclasses only supply the injected ``OpenAI`` client + model name and the
@@ -21,6 +21,7 @@ from __future__ import annotations
 import time
 import uuid
 from abc import ABC, abstractmethod
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -36,7 +37,7 @@ logger = structlog.get_logger(__name__)
 
 
 class EmbedProviderMode(StrEnum):
-    GATEWAY = "gateway"
+    LITELLM = "litellm"
     DIRECT = "direct"
 
 
@@ -138,7 +139,7 @@ class BaseEmbedProvider(ABC):
             )
         except Exception as exc:
             elapsed_ms = int((time.perf_counter() - request_started_at) * 1000)
-            logger.error(
+            logger.exception(
                 "embed_request_failed",
                 call_id=call_id,
                 provider=self.provider_name,
@@ -205,10 +206,8 @@ def normalize_embed_exception(exc: Exception) -> Exception:
         if isinstance(headers, dict):
             header_val = headers.get("retry-after")
             if header_val is not None:
-                try:
+                with suppress(TypeError, ValueError):
                     retry_after = float(header_val)
-                except (TypeError, ValueError):
-                    pass
         return EmbedRateLimitError(str(exc), retry_after)
 
     if isinstance(exc, APITimeoutError):

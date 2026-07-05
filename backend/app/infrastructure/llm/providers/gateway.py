@@ -1,72 +1,78 @@
-"""Gateway LLM provider implementation.
-
-Routes all LLM requests through a LiteLLM gateway (settings.LLM_GATEWAY_BASE_URL)
-using the OpenAI-compatible ChatOpenAI client. This is the recommended mode for
-production: unified API access, centralized rate limiting, cost tracking, and
-observability. Model aliases (e.g. Claude ids) are registered on the gateway.
-"""
+"""LiteLLM provider implementation."""
 
 from functools import lru_cache
 
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
-from app.core.config import settings
+from app.core.config import Settings
 from app.infrastructure.llm.providers.base import BaseLLMProvider
 
-_ERR_GATEWAY_KEY_REQUIRED = "LLM_GATEWAY_API_KEY must be set when using gateway mode"
+_ERR_LITELLM_KEY_REQUIRED = "LITELLM_API_KEY must be set when using LiteLLM mode"
+DEFAULT_LITELLM_TITLE_MODEL = "playbook-fast"
 
 
-class GatewayLLMProvider(BaseLLMProvider):
-    """LLM provider that routes requests through a LiteLLM gateway."""
+class LiteLLMProvider(BaseLLMProvider):
+    """LLM provider that routes requests through a LiteLLM proxy."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
 
     def get_chat_model(self) -> BaseChatModel:
-        """Get the chat model via the gateway."""
-        return _get_gateway_chat_model()
+        """Get the configured chat model via LiteLLM."""
+        return _get_litellm_chat_model(
+            model=self.settings.LLM_CHAT_MODEL,
+            base_url=self.settings.LITELLM_BASE_URL,
+            api_key=self.settings.LITELLM_API_KEY,
+            temperature=self.settings.LLM_TEMPERATURE,
+            max_tokens=self.settings.LLM_MAX_TOKENS,
+            timeout=self.settings.LLM_TIMEOUT,
+        )
 
-    def get_research_model(self) -> BaseChatModel:
-        """Get the advanced/research model via the gateway (stub)."""
-        return _get_gateway_research_model()
+    def get_title_model(self) -> BaseChatModel:
+        """Get the LiteLLM-routed model for lightweight conversation titles."""
+        return _get_litellm_chat_model(
+            model=self.settings.LLM_TITLE_MODEL or DEFAULT_LITELLM_TITLE_MODEL,
+            base_url=self.settings.LITELLM_BASE_URL,
+            api_key=self.settings.LITELLM_API_KEY,
+            temperature=0,
+            max_tokens=256,
+            timeout=self.settings.LLM_TIMEOUT,
+        )
 
     @property
     def provider_name(self) -> str:
-        return "gateway"
+        return "litellm"
 
 
 # =============================================================================
-# Cached model factories (module-level for singleton behavior)
+# Cached model factories
 # =============================================================================
 
 
 @lru_cache
-def _get_gateway_chat_model() -> BaseChatModel:
-    if not settings.LLM_GATEWAY_API_KEY:
-        raise ValueError(_ERR_GATEWAY_KEY_REQUIRED)
+def _get_litellm_chat_model(
+    *,
+    model: str,
+    base_url: str,
+    api_key: str,
+    temperature: float,
+    max_tokens: int,
+    timeout: int,
+) -> BaseChatModel:
+    if not api_key:
+        raise ValueError(_ERR_LITELLM_KEY_REQUIRED)
 
     return ChatOpenAI(
-        model=settings.LLM_CHAT_MODEL,
-        base_url=settings.LLM_GATEWAY_BASE_URL,
-        api_key=settings.LLM_GATEWAY_API_KEY,
-        temperature=settings.LLM_TEMPERATURE,
-        max_tokens=settings.LLM_MAX_TOKENS,
-        timeout=settings.LLM_TIMEOUT,
-    )
-
-
-@lru_cache
-def _get_gateway_research_model() -> BaseChatModel:
-    """Stub — implementation pending.
-
-    Will instantiate ChatOpenAI with settings.LLM_RESEARCH_MODEL once a
-    research/advanced-tier consumer is wired up.
-    """
-    raise NotImplementedError(
-        "Gateway research model is a stub — implementation pending. "
-        f"Configured model: {settings.LLM_RESEARCH_MODEL}"
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
     )
 
 
 def clear_caches() -> None:
     """Clear all cached model instances (useful for tests / config changes)."""
-    _get_gateway_chat_model.cache_clear()
-    _get_gateway_research_model.cache_clear()
+    _get_litellm_chat_model.cache_clear()

@@ -1,1 +1,1 @@
-"""Background worker helpers (session management, etc.)."""
+"""Background worker app, tasks, and helpers."""

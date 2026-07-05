@@ -157,7 +157,7 @@ and add a brief note after the draft: *"Replace the recording filename with the 
 
 - **Branch names:** inline, no backticks: `fix/r2-rbac`, `feat/voice-persistence`
 - **Commands/env vars:** inline: `.env variable`, `self.retry()`
-- **File paths:** inline, sometimes partial: `open-items.md`, `prd/03-implementation/`
+- **File paths:** inline, sometimes partial: `open-items.md`, `backstage/prd/03-implementation/`
 - **URLs:** pasted directly
 - **API endpoints:** with paths: `POST /api/v1/files`
 - **Metrics:** specific numbers with units: `p95 120ms`, `9.09 RPS`, `2,724 requests`

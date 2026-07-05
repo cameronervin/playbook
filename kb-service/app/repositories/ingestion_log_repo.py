@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -20,6 +20,23 @@ class IngestionLogRepository:
     async def create(self, document_id: uuid.UUID) -> IngestionLog:
         log = IngestionLog(document_id=document_id)
         self._session.add(log)
+        await self._session.commit()
+        await self._session.refresh(log)
+        return log
+
+    async def reset_for_retry(self, document_id: uuid.UUID) -> IngestionLog | None:
+        """Clear stale stage state before dispatching a fresh retry pipeline."""
+        log = await self.get_by_document(document_id)
+        if not log:
+            return None
+        log.pipeline_task_id = None
+        for stage in ("parse", "chunk", "summarize", "embed", "load_vector"):
+            setattr(log, f"{stage}_task_id", None)
+            setattr(log, f"{stage}_status", "PENDING")
+        log.parse_result = None
+        log.error_message = None
+        log.retry_count += 1
+        log.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(log)
         return log
@@ -50,8 +67,8 @@ class IngestionLogRepository:
             "text_segment_count": text_segment_count or 0,
             "warnings": warnings or [],
         }
-        setattr(log, "parse_result", payload)
-        log.updated_at = datetime.utcnow()
+        log.parse_result = payload
+        log.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(log)
         return log
@@ -66,8 +83,8 @@ class IngestionLogRepository:
         log = await self.get_by_document(document_id)
         if not log:
             return None
-        setattr(log, "pipeline_task_id", root_task_id)
-        log.updated_at = datetime.utcnow()
+        log.pipeline_task_id = root_task_id
+        log.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(log)
         return log
@@ -79,6 +96,7 @@ class IngestionLogRepository:
                 (IngestionLog.pipeline_task_id == task_id)
                 | (IngestionLog.parse_task_id == task_id)
                 | (IngestionLog.chunk_task_id == task_id)
+                | (IngestionLog.summarize_task_id == task_id)
                 | (IngestionLog.embed_task_id == task_id)
                 | (IngestionLog.load_vector_task_id == task_id)
             )
@@ -102,7 +120,7 @@ class IngestionLogRepository:
         setattr(log, f"{stage}_status", status)
         if error_message:
             log.error_message = error_message
-        log.updated_at = datetime.utcnow()
+        log.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(log)
         return log

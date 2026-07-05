@@ -4,7 +4,7 @@ Start all required development services for local development.
 ## Services Started
 
 1. **PostgreSQL** — container (`postgres-local`) on port 5432
-2. **LocalStack** — container (`localstack-local`) on port 4566 — S3 emulation
+2. **MinIO** — container (`minio`) on ports 9000/9001 — S3-compatible local storage
 3. **Valkey** — container (`valkey-local`) on port 6379 — Celery broker / cache (optional)
 4. **Backend** — FastAPI server (uvicorn) on http://127.0.0.1:8000
 5. **Frontend** — Next.js dev server on http://localhost:3000
@@ -16,9 +16,7 @@ The agent should execute these steps in order. Examples use `docker`; substitute
 
 ### 1. Start Containers
 ```powershell
-docker start postgres-local
-docker start localstack-local
-docker start valkey-local   # optional, only if using background tasks
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml up -d db minio minio-bootstrap valkey
 ```
 
 > If a container doesn't exist yet, create it once. Example for Valkey:
@@ -28,7 +26,7 @@ docker start valkey-local   # optional, only if using background tasks
 
 ### 2. Wait for Containers to be Healthy
 ```powershell
-docker ps --filter "name=postgres-local" --filter "name=localstack-local" --filter "name=valkey-local"
+docker compose -f deploy/compose/base.yml -f deploy/compose/local.yml ps db minio valkey
 ```
 
 ### 3. Start Backend Server (in background)
@@ -48,23 +46,28 @@ npm run dev
 ### 5. Start Celery Workers (optional, in background)
 ```bash
 # Working directory: backend/
-celery -A app.workers.celery_app worker -c 2 --loglevel=info
+celery -A app.workers.app:backend_worker worker -Q backend-agent,backend-files,backend-insights,backend-maintenance --concurrency=2 --loglevel=info
 ```
 
-> Only needed if the project uses background tasks. Start additional workers per queue as your project defines them.
+> Only needed if the project uses background tasks. The backend worker scaffold
+> routes interactive agents, conversation files, dashboard insights, and
+> maintenance tasks to named queues. Worker verbosity is controlled by
+> `CELERY_WORKER_LOG_LEVEL` separately from API `LOG_LEVEL`; restart existing
+> worker processes after changing it.
 
 ### 6. Verify All Services Running
 - Backend: "Uvicorn running on http://127.0.0.1:8000"
 - Frontend: "ready - started server on http://localhost:3000"
-- Containers: `postgres-local`, `localstack-local` (and `valkey-local` if used) show "running"
+- Containers: `db`, `minio`, and `valkey` show "running"
 - Celery workers (if started): each shows "ready"
 
 ## Service URLs
 - Frontend: http://localhost:3000
 - Backend API: http://127.0.0.1:8000
 - API Docs: http://127.0.0.1:8000/docs
-- PostgreSQL: localhost:5432
-- LocalStack (S3): localhost:4566
+- PostgreSQL: localhost:5433
+- MinIO API (S3-compatible): localhost:9000
+- MinIO console: localhost:9001
 - Valkey: localhost:6379
 
 ## Notes

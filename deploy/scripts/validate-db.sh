@@ -12,7 +12,7 @@ NC='\033[0m'
 
 CONTAINER_NAME="${DB_CONTAINER:-agentic-app-db-1}"
 DB_USER="${DB_USER:-app}"
-DB_NAME="${DB_NAME:-appdb}"
+DB_NAME="${DB_NAME:-playbook}"
 
 print_status() {
     if [ "$1" -eq 0 ]; then
@@ -48,7 +48,7 @@ else
 fi
 
 # 2. PostgreSQL accepting connections
-if $CONTAINER_CMD exec "$CONTAINER_NAME" pg_isready -U "$DB_USER" &> /dev/null; then
+if $CONTAINER_CMD exec "$CONTAINER_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME" &> /dev/null; then
     print_status 0 "PostgreSQL is accepting connections"
 else
     print_status 1 "PostgreSQL is not ready"

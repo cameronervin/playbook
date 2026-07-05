@@ -160,7 +160,7 @@ If removal causes issues:
 
 ## Tech Debt Tracking
 
-For items that can't be removed now, add to `docs/tech-debt-tracker.md`:
+For items that can't be removed now, add to `backstage/development/tech-debt-tracker.md`:
 
 ```markdown
 | ID | Area | Description | Priority | Created | Owner |
