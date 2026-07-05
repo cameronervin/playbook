@@ -24,6 +24,13 @@ class FakeDatasetItem:
         raise AssertionError("legacy item.run should not be called")
 
 
+@dataclass
+class FakeDatasetItemWithExpectedOutputAlias:
+    id: str
+    input: dict[str, str]
+    expectedOutput: dict[str, str]
+
+
 class FakeExperimentResult:
     summary: dict[str, float] = {}
 
@@ -82,13 +89,17 @@ class FakeLangfuseClient:
                     self.evaluations_by_item[item.id] = evaluators[0](
                         input=item.input,
                         output=output,
-                        expected_output=item.expected_output,
+                        expected_output=_fake_expected_output(item),
                     )
 
             await asyncio.gather(*(_run_one(item) for item in data))
 
         asyncio.run(_run_items())
         return FakeExperimentResult()
+
+
+def _fake_expected_output(item: Any) -> Any:
+    return getattr(item, "expected_output", getattr(item, "expectedOutput", None))
 
 
 class FakeJudge:
@@ -267,3 +278,101 @@ async def test_run_spec_supports_legacy_langfuse_dataset_keyword(
 
     assert result.passed is True
     assert client.run_experiment_calls[0]["dataset"] is client.dataset
+
+
+@pytest.mark.asyncio
+async def test_run_spec_reads_langfuse_expected_output_alias(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    item = FakeDatasetItemWithExpectedOutputAlias(
+        id="alias-item",
+        input={"question": "Q1"},
+        expectedOutput={"answer_type": "grounded_answer"},
+    )
+    client = FakeLangfuseClient([item])  # type: ignore[list-item]
+    _install_fake_langfuse(monkeypatch, client)
+    _patch_runner_io(monkeypatch, tmp_path)
+
+    async def adapter(*, item: FakeDatasetItemWithExpectedOutputAlias) -> GraphRun:
+        return GraphRun(input=item.input, output=f"answer-{item.id}")
+
+    spec = EvalSpec(
+        name="example",
+        dataset_path="evals/datasets/example.yaml",
+        adapter=adapter,
+        rubrics=["rubrics/quality.yaml"],
+        judge=FakeJudge(),
+        thresholds={"quality_score": 0.5},
+    )
+
+    result = await runner.run_spec(spec, run_name="alias-run", max_concurrency=1)
+
+    assert result.per_item[0].scores["quality_score"]["reasoning"] == (
+        "judged answer-alias-item against {'answer_type': 'grounded_answer'}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_spec_prefers_task_expected_output_kwarg(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class KwargExpectedOutputClient(FakeLangfuseClient):
+        def run_experiment(
+            self,
+            *,
+            name: str,
+            data: list[FakeDatasetItem],
+            task: Any,
+            evaluators: list[Any],
+            max_concurrency: int,
+            description: str,
+        ) -> FakeExperimentResult:
+            self.run_experiment_calls.append(
+                {
+                    "name": name,
+                    "data": data,
+                    "task": task,
+                    "evaluators": evaluators,
+                    "max_concurrency": max_concurrency,
+                    "description": description,
+                }
+            )
+
+            async def _run_items() -> None:
+                for item in data:
+                    self.current_item_id = item.id
+                    expected_output = {"answer_type": "unsupported"}
+                    output = await task(item=item, expected_output=expected_output)
+                    self.evaluations_by_item[item.id] = evaluators[0](
+                        input=item.input,
+                        output=output,
+                        expected_output=expected_output,
+                    )
+
+            asyncio.run(_run_items())
+            return FakeExperimentResult()
+
+    item = FakeDatasetItem("kwarg-item", {"question": "Q1"}, "stale")
+    client = KwargExpectedOutputClient([item])
+    _install_fake_langfuse(monkeypatch, client)
+    _patch_runner_io(monkeypatch, tmp_path)
+
+    async def adapter(*, item: FakeDatasetItem) -> GraphRun:
+        return GraphRun(input=item.input, output=f"answer-{item.id}")
+
+    spec = EvalSpec(
+        name="example",
+        dataset_path="evals/datasets/example.yaml",
+        adapter=adapter,
+        rubrics=["rubrics/quality.yaml"],
+        judge=FakeJudge(),
+        thresholds={"quality_score": 0.5},
+    )
+
+    result = await runner.run_spec(spec, run_name="kwarg-run", max_concurrency=1)
+
+    assert result.per_item[0].scores["quality_score"]["reasoning"] == (
+        "judged answer-kwarg-item against {'answer_type': 'unsupported'}"
+    )

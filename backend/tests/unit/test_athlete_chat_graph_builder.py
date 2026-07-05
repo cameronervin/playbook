@@ -10,6 +10,7 @@ from app.agents.chains import (
 from app.agents.context.prompt_composers.athlete_chat_prompt_composer import (
     build_athlete_chat_prompt,
 )
+from app.agents.nodes.athlete_chat import _sources_for_keys
 from app.agents.prompts.conversation_title_prompt import (
     CONVERSATION_TITLE_SYSTEM_PROMPT,
 )
@@ -21,6 +22,7 @@ from app.agents.runtime_context import (
 from app.agents.states.athlete_chat_state import AthleteChatState
 from app.agents.states.conversation_title_state import ConversationTitleState
 from app.agents.states.dashboard_insights_state import DashboardInsightsState
+from app.agents.tools.knowledgebase import KnowledgebaseSource
 
 
 class FakeChain:
@@ -92,6 +94,36 @@ def test_athlete_kb_prompt_requires_returned_and_fresh_source_keys() -> None:
     assert "do not cite stale conflict sources" in prompt
     assert "After this tool returns relevant official guidance" in compact
     assert "Do not call this tool again with equivalent arguments" in compact
+
+
+def test_athlete_citation_selection_drops_stale_conflict_source() -> None:
+    old_source = KnowledgebaseSource(
+        source_key="S-old",
+        source_title="Archived NIL Disclosure FAQ",
+        text="Archived guidance should not be used when newer guidance applies.",
+        metadata={
+            "source_id": "src:nil-conflict-old-2025#chunk-1",
+            "source_date": "2025-08-10",
+            "metadata": {"category": "conflict_old"},
+        },
+    )
+    new_source = KnowledgebaseSource(
+        source_key="S-new",
+        source_title="May 2026 NIL Disclosure Timing Update",
+        text="This timing update supersedes prior FAQs.",
+        metadata={
+            "source_id": "src:nil-conflict-new-2026#chunk-1",
+            "source_date": "2026-05-01",
+            "metadata": {"category": "conflict_newer_source"},
+        },
+    )
+
+    selected = _sources_for_keys(
+        ["S-old", "S-new"],
+        {"S-old": old_source, "S-new": new_source},
+    )
+
+    assert selected == [new_source]
 
 
 def test_athlete_file_prompt_stops_when_no_ready_files_or_no_results() -> None:

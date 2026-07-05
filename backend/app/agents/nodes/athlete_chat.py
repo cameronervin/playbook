@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -404,7 +405,74 @@ def _sources_for_keys(
             continue
         seen.add(source_key)
         sources.append(source)
-    return sources
+    return _drop_stale_conflict_sources(sources)
+
+
+def _drop_stale_conflict_sources(
+    sources: list[KnowledgebaseSource],
+) -> list[KnowledgebaseSource]:
+    """Avoid persisting archived citations when a newer source supersedes them."""
+    if len(sources) < 2 or not any(_source_supersedes_prior_guidance(source) for source in sources):
+        return sources
+    dated_sources = [
+        (source, source_date)
+        for source in sources
+        if (source_date := _source_date(source)) is not None
+    ]
+    if len(dated_sources) < 2:
+        return sources
+    newest_date = max(source_date for _, source_date in dated_sources)
+    return [
+        source
+        for source in sources
+        if not (
+            _source_is_archived_or_stale(source)
+            and (source_date := _source_date(source)) is not None
+            and source_date < newest_date
+        )
+    ]
+
+
+def _source_supersedes_prior_guidance(source: KnowledgebaseSource) -> bool:
+    text = _source_search_text(source)
+    return any(term in text for term in ("supersede", "newer", "timing update"))
+
+
+def _source_is_archived_or_stale(source: KnowledgebaseSource) -> bool:
+    text = _source_search_text(source)
+    return any(term in text for term in ("archived", "stale", "older", "conflict_old"))
+
+
+def _source_search_text(source: KnowledgebaseSource) -> str:
+    return " ".join(
+        [
+            source.source_title,
+            source.text,
+            _flatten_metadata_text(source.metadata),
+        ]
+    ).lower()
+
+
+def _flatten_metadata_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return " ".join(_flatten_metadata_text(item) for item in value.values())
+    if isinstance(value, list):
+        return " ".join(_flatten_metadata_text(item) for item in value)
+    return str(value)
+
+
+def _source_date(source: KnowledgebaseSource) -> date | None:
+    value = source.metadata.get("source_date")
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except ValueError:
+        return None
 
 
 def _normalize_source_key(source_key: str) -> str:

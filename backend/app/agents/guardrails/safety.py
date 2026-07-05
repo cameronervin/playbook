@@ -53,7 +53,10 @@ _MEDICAL_TERMS = (
 _LEGAL_TERMS = (
     "legal advice",
     "legally binding",
+    "landlord",
+    "lease",
     "sue",
+    "sublet",
     "lawsuit",
     "contract law",
     "lawyer",

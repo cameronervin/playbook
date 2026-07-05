@@ -22,12 +22,13 @@ workers can attach runtime traces. The `evals` dependency group adds `ragas` and
 ## Run
 
 Set in `.env`: `LANGFUSE_ENABLED=true`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
-`LANGFUSE_BASE_URL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `KB_PROVIDER_MODE`
-(`local` for real RAG scoring; `mock` only smoke-tests the pipe). For strict
-RAG scoring, prefer a scoped `EVAL_LITELLM_API_KEY` with access to
-`playbook-chat`, `playbook-fast`, and `playbook-embed`; the harness falls back
-to `LITELLM_API_KEY` when the eval key is blank. `EVAL_EMBEDDINGS_MODEL`
-defaults to the LiteLLM alias `playbook-embed`.
+`LANGFUSE_BASE_URL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`,
+`EVAL_LITELLM_API_KEY`, and `KB_PROVIDER_MODE` (`local` for real RAG scoring;
+`mock` only smoke-tests the pipe). `EVAL_LITELLM_API_KEY` must be a scoped eval
+LiteLLM virtual key with access to `playbook-chat`, `playbook-fast`, and
+`playbook-embed`, and it must be distinct from the backend `LITELLM_API_KEY`.
+The harness refuses to use the backend runtime key for eval judge/embedding
+calls. `EVAL_EMBEDDINGS_MODEL` defaults to the LiteLLM alias `playbook-embed`.
 
 Author or update the dataset + rubric YAMLs first (see `datasets/README.md`,
 `rubrics/README.md`). Offline dataset validation does not require Langfuse:

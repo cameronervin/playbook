@@ -125,6 +125,10 @@ async def test_athlete_chat_middleware_appends_runtime_context() -> None:
     assert "### Tool Guidance Reminder" in context
     assert "Requires KB support" not in context
     assert "Policy/process claims should use official KB evidence" in context
+    assert "academic support" in context
+    assert "team travel" in context
+    assert "extra-benefit" in context
+    assert "before finalizing an answer" in context
     assert "If Ready conversation file count is 0, do not call search_conversation_files" in context
     assert "After a relevant tool result, produce the final structured response" in context
     assert "Do not call the same search tool with equivalent arguments twice" in context

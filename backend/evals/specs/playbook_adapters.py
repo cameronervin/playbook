@@ -9,6 +9,7 @@ session doubles.
 from __future__ import annotations
 
 import inspect
+from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -542,14 +543,15 @@ def make_admin_chat_executor_adapter(
                 }
             stream_recorder = _recording_stream_service(stream_service)
             executor_type = executor_cls or _admin_chat_executor_cls()
-            executor = executor_type(
-                session=active_session,
-                chat_model=chat_model or _default_chat_model(resolved_settings),
-                stream_service=stream_recorder,
-                settings=resolved_settings,
-                checkpointer=checkpointer,
-                graph_provider=graph_provider,
-            )
+            executor_kwargs: dict[str, Any] = {
+                "session": active_session,
+                "chat_model": chat_model or _default_chat_model(resolved_settings),
+                "stream_service": stream_recorder,
+                "settings": resolved_settings,
+                "checkpointer": checkpointer,
+                "graph_provider": graph_provider,
+            }
+            executor = executor_type(**executor_kwargs)
             output = await executor.execute(**_admin_execute_kwargs(run_input))
             return build_graph_run(
                 input_data=run_input,
@@ -969,16 +971,18 @@ async def seed_admin_chat_eval_item(
         window_end=window_end,
         snapshot=_mapping_or_empty(item_input.get("snapshot")),
     )
+    insight_item_input = _with_comparison_dashboard_insight(item_input)
     insight_refs = await _seed_dashboard_insight_refs(
         session=session,
         organization_id=organization.id,
         admin_user_id=admin.id,
         window_start=window_start,
         window_end=window_end,
-        item_input=item_input,
+        item_input=insight_item_input,
     )
     allowed_references = [
         {"type": "metric", "id": "analytics.summary"},
+        *_reference_dicts(item_input.get("allowed_references")),
         *analytics_refs,
         *insight_refs,
     ]
@@ -1036,6 +1040,142 @@ def _prompt_text(item_input: Mapping[str, Any]) -> str:
     return "Evaluation prompt"
 
 
+def _with_comparison_dashboard_insight(
+    item_input: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    insight = _comparison_dashboard_insight(item_input)
+    if not insight:
+        return item_input
+    explicit_insights = _explicit_dashboard_insights(
+        item_input.get("completed_dashboard_insights")
+    )
+    return {
+        **item_input,
+        "completed_dashboard_insights": [*explicit_insights, insight],
+    }
+
+
+def _comparison_dashboard_insight(
+    item_input: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    context = _comparison_snapshot_context(item_input)
+    if not context:
+        return None
+    return {
+        "id": "insight-eval-window-comparison",
+        "summary": context,
+        "headline_cards": _comparison_headline_cards(item_input),
+        "topic_breakdown": _comparison_topic_breakdown(item_input),
+        "risk_breakdown": _comparison_risk_breakdown(item_input),
+        "recommended_attention_areas": [
+            "Use this stored comparison record for exact window-level counts.",
+        ],
+        "source_message_ids": [],
+    }
+
+
+def _comparison_snapshot_context(item_input: Mapping[str, Any]) -> str:
+    snapshots = _mapping_or_empty(item_input.get("snapshots"))
+    if not snapshots:
+        return ""
+    lines = ["Analytics comparison snapshots:"]
+    for label, raw_snapshot in snapshots.items():
+        snapshot = _mapping_or_empty(raw_snapshot)
+        if not snapshot:
+            continue
+        label_text = str(label).strip()
+        lines.extend(
+            [
+                f"### {label_text}",
+                f"Window label: {label_text}",
+                f"Query volume: {_positive_int(snapshot.get('query_volume'))}",
+                f"Unanswered count: {_positive_int(snapshot.get('unanswered_count'))}",
+                "Top topics: " + _format_snapshot_label_counts(snapshot.get("top_topics")),
+                "Risk counts: " + _format_snapshot_risk_counts(snapshot.get("risk_counts")),
+            ]
+        )
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _comparison_headline_cards(item_input: Mapping[str, Any]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for label, snapshot in _comparison_snapshots(item_input):
+        cards.append(
+            {
+                "title": f"{label} query volume",
+                "value": _positive_int(snapshot.get("query_volume")),
+                "severity": "info",
+            }
+        )
+    return cards
+
+
+def _comparison_topic_breakdown(item_input: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "window": label,
+            "top_topics": _format_snapshot_label_counts(snapshot.get("top_topics")),
+        }
+        for label, snapshot in _comparison_snapshots(item_input)
+    ]
+
+
+def _comparison_risk_breakdown(item_input: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "window": label,
+            "risk_counts": _format_snapshot_risk_counts(snapshot.get("risk_counts")),
+        }
+        for label, snapshot in _comparison_snapshots(item_input)
+    ]
+
+
+def _comparison_snapshots(
+    item_input: Mapping[str, Any],
+) -> list[tuple[str, Mapping[str, Any]]]:
+    snapshots = _mapping_or_empty(item_input.get("snapshots"))
+    items: list[tuple[str, Mapping[str, Any]]] = []
+    for label, raw_snapshot in snapshots.items():
+        snapshot = _mapping_or_empty(raw_snapshot)
+        if snapshot:
+            items.append((str(label).strip(), snapshot))
+    return items
+
+
+def _format_snapshot_label_counts(value: Any) -> str:
+    if not isinstance(value, Sequence) or isinstance(value, bytes | bytearray | str):
+        return "none"
+    labels: list[str] = []
+    for item in value:
+        mapping = _mapping_or_empty(item)
+        label = _string_or_none(mapping.get("label"))
+        count = _positive_int(mapping.get("count"))
+        if label:
+            labels.append(f"{label}={count}")
+    return ", ".join(labels) or "none"
+
+
+def _format_snapshot_risk_counts(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return "none"
+    labels = [
+        f"{str(label).strip()}={_positive_int(count)}"
+        for label, count in value.items()
+        if str(label).strip()
+    ]
+    return ", ".join(labels) or "none"
+
+
+def _reference_dicts(value: Any) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    for reference in _reference_strings(value):
+        reference_type, separator, reference_id = reference.partition(":")
+        if not separator or not reference_type.strip() or not reference_id.strip():
+            continue
+        refs.append({"type": reference_type.strip(), "id": reference_id.strip()})
+    return refs
+
+
 def _provisional_title(question: str) -> str:
     words = [word.strip(".,?!:;()[]{}\"'").title() for word in question.split()]
     kept = [word for word in words if word][:6]
@@ -1082,7 +1222,8 @@ async def _seed_admin_snapshot_rows(
     window_end: datetime,
     snapshot: Mapping[str, Any],
 ) -> list[dict[str, str]]:
-    query_volume = _positive_int(snapshot.get("query_volume"))
+    explicit_queries = _explicit_admin_queries(snapshot.get("anonymized_queries"))
+    query_volume = max(_positive_int(snapshot.get("query_volume")), len(explicit_queries))
     if query_volume <= 0:
         return []
 
@@ -1107,38 +1248,96 @@ async def _seed_admin_snapshot_rows(
         title="Eval analytics source",
     )
     message_repo = ConversationMessageRepository(session)
-    topics = _label_slots(snapshot.get("top_topics"), query_volume, fallback="other")
-    risk_labels_by_index = _risk_labels_by_index(snapshot.get("risk_counts"), query_volume)
+    explicit_count = min(len(explicit_queries), query_volume)
+    remaining_count = query_volume - explicit_count
+    explicit_topic_counts = _query_label_counts(
+        explicit_queries[:explicit_count],
+        key="topic_labels",
+    )
+    explicit_risk_counts = _query_label_counts(
+        explicit_queries[:explicit_count],
+        key="risk_labels",
+    )
+    topics = _label_slots(
+        snapshot.get("top_topics"),
+        remaining_count,
+        fallback="other",
+        consumed=explicit_topic_counts,
+    )
+    risk_labels_by_index = _risk_labels_by_index(
+        snapshot.get("risk_counts"),
+        remaining_count,
+        consumed=explicit_risk_counts,
+    )
     unanswered_count = min(_positive_int(snapshot.get("unanswered_count")), query_volume)
+    explicit_unanswered_count = sum(
+        1
+        for query in explicit_queries[:explicit_count]
+        if _query_unanswered_reason(query)
+    )
+    remaining_unanswered_count = min(
+        max(unanswered_count - explicit_unanswered_count, 0),
+        remaining_count,
+    )
     created_at = window_start + ((window_end - window_start) / 2)
 
     refs: list[dict[str, str]] = []
     for index in range(query_volume):
-        topic = topics[index]
-        question = f"Synthetic {topic} eval question {index + 1}"
+        explicit_query = explicit_queries[index] if index < explicit_count else None
+        remaining_index = index - explicit_count
+        if explicit_query is not None:
+            topic_labels = _string_items(explicit_query.get("topic_labels"))
+            risk_labels = _string_items(explicit_query.get("risk_labels"))
+            topic = topic_labels[0] if topic_labels else "other"
+            message_alias = _string_or_none(explicit_query.get("message_id"))
+            question = _string_or_none(explicit_query.get("text")) or (
+                f"Synthetic {topic} eval question {index + 1}"
+            )
+            unanswered_reason = _query_unanswered_reason(explicit_query)
+            answer_type = _string_or_none(explicit_query.get("answer_type")) or (
+                "unsupported" if unanswered_reason else "grounded_answer"
+            )
+        else:
+            topic = topics[remaining_index]
+            topic_labels = [topic] if topic != "other" else []
+            risk_labels = risk_labels_by_index[remaining_index]
+            message_alias = None
+            question = f"Synthetic {topic} eval question {index + 1}"
+            answer_type = (
+                "unsupported"
+                if remaining_index < remaining_unanswered_count
+                else "grounded_answer"
+            )
+            unanswered_reason = answer_type if answer_type == "unsupported" else None
+        metadata: dict[str, Any] = {}
+        if message_alias:
+            metadata["eval_message_id"] = message_alias
+        if explicit_query is None:
+            metadata["eval_synthetic"] = True
         user_message = await message_repo.create(
             conversation_id=conversation.id,
             role="user",
             content=question,
+            metadata=metadata or None,
             created_at=created_at,
         )
-        answer_type = "unsupported" if index < unanswered_count else "grounded_answer"
         await message_repo.create(
             conversation_id=conversation.id,
             role="assistant",
             content="" if answer_type == "unsupported" else "Synthetic eval response.",
             status="complete",
             safety_outcome=answer_type,
-            topic_labels=[topic] if topic != "other" else [],
-            risk_labels=risk_labels_by_index[index],
+            topic_labels=topic_labels,
+            risk_labels=risk_labels,
             metadata={
                 "answer_type": answer_type,
                 "user_message_id": str(user_message.id),
+                "unanswered_reason": unanswered_reason,
                 "source": "eval_seed",
             },
             created_at=created_at,
         )
-        refs.append({"type": "query", "id": str(user_message.id)})
+        refs.append({"type": "query", "id": message_alias or str(user_message.id)})
     return refs
 
 
@@ -1151,11 +1350,20 @@ async def _seed_dashboard_insight_refs(
     window_end: datetime,
     item_input: Mapping[str, Any],
 ) -> list[dict[str, str]]:
+    explicit_insights = _explicit_dashboard_insights(
+        item_input.get("completed_dashboard_insights")
+    )
     aliases = [
         ref
         for ref in _reference_strings(item_input.get("allowed_references"))
         if ref.startswith("dashboard_insight:")
     ]
+    if explicit_insights:
+        aliases = [
+            f"dashboard_insight:{_string_or_none(insight.get('id'))}"
+            for insight in explicit_insights
+            if _string_or_none(insight.get("id"))
+        ]
     if not aliases:
         return []
 
@@ -1166,6 +1374,7 @@ async def _seed_dashboard_insight_refs(
 
     refs: list[dict[str, str]] = []
     for alias in aliases:
+        insight_input = _find_dashboard_insight(explicit_insights, alias)
         run = await DashboardInsightRunRepository(session).create(
             organization_id=organization_id,
             requested_by=admin_user_id,
@@ -1176,13 +1385,26 @@ async def _seed_dashboard_insight_refs(
         )
         insight = await DashboardInsightRepository(session).create(
             run_id=run.id,
-            summary=f"Synthetic dashboard insight for {alias}.",
-            headline_cards=[{"label": "Eval insight", "value": 1}],
-            topic_breakdown=[],
-            unanswered_questions=[],
-            risk_breakdown=[],
-            recommended_attention_areas=["Review the seeded eval snapshot."],
-            source_message_ids=[],
+            summary=_string_or_none(insight_input.get("summary"))
+            or f"Synthetic dashboard insight for {alias}.",
+            headline_cards=_mapping_list(insight_input.get("headline_cards"))
+            or [{"label": "Eval insight", "value": 1}],
+            topic_breakdown=_mapping_list(insight_input.get("topic_breakdown")),
+            unanswered_questions=_mapping_list(
+                insight_input.get("unanswered_questions")
+            ),
+            risk_breakdown=_mapping_list(insight_input.get("risk_breakdown")),
+            recommended_attention_areas=_string_items(
+                insight_input.get("recommended_attention_areas")
+            )
+            or ["Review the seeded eval snapshot."],
+            source_message_ids=_string_items(insight_input.get("source_message_ids")),
+        )
+        refs.append(
+            {
+                "type": "dashboard_insight",
+                "id": _alias_id(alias) or str(insight.id),
+            }
         )
         refs.append({"type": "dashboard_insight", "id": str(insight.id)})
     return refs
@@ -1200,27 +1422,111 @@ def _positive_int(value: Any) -> int:
     return 0
 
 
-def _label_slots(value: Any, count: int, *, fallback: str) -> list[str]:
+def _explicit_admin_queries(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _explicit_dashboard_insights(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
+
+def _find_dashboard_insight(
+    insights: Sequence[Mapping[str, Any]],
+    alias: str,
+) -> Mapping[str, Any]:
+    alias_id = _alias_id(alias)
+    for insight in insights:
+        if _string_or_none(insight.get("id")) == alias_id:
+            return insight
+    return {}
+
+
+def _alias_id(value: str) -> str:
+    return value.split(":", 1)[1] if ":" in value else value
+
+
+def _mapping_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _query_label_counts(
+    queries: Sequence[Mapping[str, Any]],
+    *,
+    key: str,
+) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for query in queries:
+        counts.update(_string_items(query.get(key)))
+    return counts
+
+
+def _query_unanswered_reason(query: Mapping[str, Any]) -> str | None:
+    return _string_or_none(query.get("unanswered_reason"))
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _string_items(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()] if str(value).strip() else []
+
+
+def _label_slots(
+    value: Any,
+    count: int,
+    *,
+    fallback: str,
+    consumed: Mapping[str, int] | None = None,
+) -> list[str]:
     labels: list[str] = []
+    consumed_counts = consumed or {}
     if isinstance(value, Sequence) and not isinstance(value, str | bytes):
         for item in value:
             item_mapping = _mapping_or_empty(item)
             label = str(item_mapping.get("label") or "").strip().lower()
             if not label:
                 continue
-            labels.extend([label] * min(_positive_int(item_mapping.get("count")), count))
+            remaining = max(
+                _positive_int(item_mapping.get("count"))
+                - int(consumed_counts.get(label, 0)),
+                0,
+            )
+            labels.extend([label] * min(remaining, count))
     return (labels + [fallback] * count)[:count]
 
 
-def _risk_labels_by_index(value: Any, count: int) -> list[list[str]]:
+def _risk_labels_by_index(
+    value: Any,
+    count: int,
+    *,
+    consumed: Mapping[str, int] | None = None,
+) -> list[list[str]]:
     slots: list[list[str]] = [[] for _ in range(count)]
+    consumed_counts = consumed or {}
     if not isinstance(value, Mapping):
         return slots
     for label, raw_count in value.items():
         normalized = str(label).strip().lower()
         if not normalized:
             continue
-        for index in range(min(_positive_int(raw_count), count)):
+        remaining = max(_positive_int(raw_count) - int(consumed_counts.get(normalized, 0)), 0)
+        for index in range(min(remaining, count)):
             slots[index].append(normalized)
     return slots
 

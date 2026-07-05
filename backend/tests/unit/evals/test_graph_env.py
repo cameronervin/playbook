@@ -67,19 +67,31 @@ def test_eval_models_use_eval_litellm_key_when_configured(
     assert embedding_calls[0]["model"] == "playbook-embed"
 
 
-def test_eval_models_fall_back_to_backend_litellm_key(
+def test_eval_models_require_eval_litellm_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    chat_calls: list[dict[str, object]] = []
-
     class FakeChatOpenAI:
         def __init__(self, **kwargs: object) -> None:
-            chat_calls.append(kwargs)
+            raise AssertionError("ChatOpenAI should not be constructed")
 
     fake_langchain_openai = types.SimpleNamespace(ChatOpenAI=FakeChatOpenAI)
     monkeypatch.setitem(sys.modules, "langchain_openai", fake_langchain_openai)
     set_settings_override(_settings(EVAL_LITELLM_API_KEY=""))
 
-    graph_env.get_eval_chat_model()
+    with pytest.raises(RuntimeError, match="EVAL_LITELLM_API_KEY is required"):
+        graph_env.get_eval_chat_model()
 
-    assert chat_calls[0]["api_key"] == "backend-key"
+
+def test_eval_models_reject_backend_litellm_key_reuse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            raise AssertionError("ChatOpenAI should not be constructed")
+
+    fake_langchain_openai = types.SimpleNamespace(ChatOpenAI=FakeChatOpenAI)
+    monkeypatch.setitem(sys.modules, "langchain_openai", fake_langchain_openai)
+    set_settings_override(_settings(EVAL_LITELLM_API_KEY="backend-key"))
+
+    with pytest.raises(RuntimeError, match="must be distinct"):
+        graph_env.get_eval_chat_model()

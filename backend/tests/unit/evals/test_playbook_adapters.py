@@ -8,11 +8,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.agents.tools.knowledgebase import register_knowledgebase_sources
+from app.repositories.analytics import DashboardInsightRepository
 from app.repositories.conversations import (
     ConversationMessageRepository,
     MessageCitationRepository,
 )
 from app.schemas.knowledgebase import RetrievedChunk
+from app.services.admin_analytics import AdminAnalyticsService, format_snapshot_context
 from evals.specs import playbook_adapters
 from evals.specs.playbook_adapters import (
     RecordingKnowledgebaseProvider,
@@ -300,6 +302,142 @@ async def test_admin_chat_executor_adapter_auto_seeds_snapshot_references(
 
 
 @pytest.mark.asyncio
+async def test_admin_chat_eval_seeder_preserves_fixture_query_and_insight_context(
+    test_settings,
+    db_session,
+) -> None:
+    graph = AdminContextRecordingGraphDouble()
+    adapter = make_admin_chat_executor_adapter(
+        session=db_session,
+        settings=test_settings,
+        chat_model=object(),
+        graph_provider=SimpleNamespace(admin_chat_graph=lambda: graph),
+    )
+
+    run = await adapter(
+        item={
+            "input": {
+                "question": "Which unanswered item should we review?",
+                "window": "last_7_days",
+                "snapshot": {
+                    "query_volume": 3,
+                    "top_topics": [{"label": "nil", "count": 2}],
+                    "unanswered_count": 1,
+                    "risk_counts": {"compliance": 1},
+                    "anonymized_queries": [
+                        {
+                            "message_id": "admin-msg-gap-001",
+                            "text": "Can collective pay for my flight to a shoot?",
+                            "topic_labels": ["nil"],
+                            "risk_labels": ["compliance"],
+                            "unanswered_reason": "no approved travel-benefit guidance",
+                        }
+                    ],
+                },
+                "completed_dashboard_insights": [
+                    {
+                        "id": "insight-2026-07-01-nil",
+                        "summary": "NIL disclosure timing is the clearest support gap.",
+                        "headline_cards": [
+                            {
+                                "title": "Same-day NIL disclosures",
+                                "value": "12 related questions",
+                                "severity": "medium",
+                            }
+                        ],
+                        "recommended_attention_areas": [
+                            "Clarify same-day NIL disclosure before posts.",
+                        ],
+                        "source_message_ids": ["admin-msg-gap-001"],
+                    }
+                ],
+            }
+        }
+    )
+
+    assert run.output["answer_type"] == "analytics_answer"
+    assert "Can collective pay for my flight" in graph.snapshot_context
+    assert "Message ID: admin-msg-gap-001" in graph.snapshot_context
+    assert "Synthetic nil eval question" not in graph.snapshot_context
+    assert "no approved travel-benefit guidance" in graph.snapshot_context
+    assert "NIL disclosure timing is the clearest support gap." in graph.insight_context
+    assert "Clarify same-day NIL disclosure before posts." in graph.insight_context
+    assert {"type": "query", "id": "admin-msg-gap-001"} in run.input["allowed_references"]
+    assert {
+        "type": "dashboard_insight",
+        "id": "insight-2026-07-01-nil",
+    } in run.input["allowed_references"]
+    dashboard_insight_refs = [
+        ref
+        for ref in run.input["allowed_references"]
+        if ref["type"] == "dashboard_insight"
+    ]
+    assert any(
+        ref["id"] != "insight-2026-07-01-nil" and UUID(ref["id"])
+        for ref in dashboard_insight_refs
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_chat_eval_adapter_seeds_comparison_snapshot_as_insight_context(
+    test_settings,
+    db_session,
+) -> None:
+    graph = AdminContextRecordingGraphDouble()
+    adapter = make_admin_chat_executor_adapter(
+        session=db_session,
+        settings=test_settings,
+        chat_model=object(),
+        graph_provider=SimpleNamespace(admin_chat_graph=lambda: graph),
+    )
+
+    run = await adapter(
+        item={
+            "input": {
+                "question": "Compare 7d to 30d.",
+                "window": "comparison",
+                "snapshots": {
+                    "last_7_days": {
+                        "query_volume": 38,
+                        "top_topics": [{"label": "teamworks", "count": 14}],
+                        "unanswered_count": 4,
+                        "risk_counts": {"compliance": 5},
+                    },
+                    "last_30_days": {
+                        "query_volume": 142,
+                        "top_topics": [{"label": "nil", "count": 49}],
+                        "unanswered_count": 17,
+                        "risk_counts": {"compliance": 28},
+                    },
+                },
+                "allowed_references": [
+                    "metric:analytics.summary",
+                ],
+            }
+        }
+    )
+
+    assert "Analytics comparison snapshots:" in graph.insight_context
+    assert "### last_7_days" in graph.insight_context
+    assert "Query volume: 38" in graph.insight_context
+    assert "### last_30_days" in graph.insight_context
+    assert "Query volume: 142" in graph.insight_context
+    assert {
+        "type": "dashboard_insight",
+        "id": "insight-eval-window-comparison",
+    } in run.input["allowed_references"]
+    dashboard_insight_refs = [
+        ref
+        for ref in run.input["allowed_references"]
+        if ref["type"] == "dashboard_insight"
+    ]
+    assert any(
+        ref["id"] != "insight-eval-window-comparison" and UUID(ref["id"])
+        for ref in dashboard_insight_refs
+    )
+
+
+@pytest.mark.asyncio
 async def test_default_eval_session_factory_isolates_concurrent_engines(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -504,6 +642,80 @@ class AdminGraphDouble:
                         "answer_type": "analytics_answer",
                         "references": references,
                         "answer": "There were 12 NIL questions.",
+                    }
+                }
+            },
+        )
+
+
+class AdminContextRecordingGraphDouble:
+    def __init__(self) -> None:
+        self.snapshot_context = ""
+        self.insight_context = ""
+
+    async def astream(
+        self,
+        initial_state: dict[str, Any],
+        config: dict[str, Any] | None = None,
+        context: Any | None = None,
+        stream_mode: list[str] | None = None,
+        version: str | None = None,
+    ):
+        window_start = playbook_adapters._datetime_or_none(initial_state["window_start"])
+        window_end = playbook_adapters._datetime_or_none(initial_state["window_end"])
+        assert window_start is not None
+        assert window_end is not None
+        snapshot = await AdminAnalyticsService(
+            context.session,
+            settings=context.settings,
+        ).build_snapshot(
+            organization_id=UUID(initial_state["organization_id"]),
+            window_start=window_start,
+            window_end=window_end,
+            max_queries=10,
+        )
+        insights = await DashboardInsightRepository(
+            context.session
+        ).list_completed_for_window(
+            organization_id=UUID(initial_state["organization_id"]),
+            window_start=window_start,
+            window_end=window_end,
+        )
+        self.snapshot_context = format_snapshot_context(snapshot)
+        insight_lines: list[str] = []
+        for insight in insights:
+            insight_lines.extend(
+                [
+                    str(getattr(insight, "id", "")),
+                    str(getattr(insight, "summary", "")),
+                    *[
+                        str(area)
+                        for area in getattr(
+                            insight,
+                            "recommended_attention_areas",
+                            [],
+                        )
+                    ],
+                ]
+            )
+        self.insight_context = "\n".join(insight_lines)
+        references = [
+            {"type": "metric", "id": "analytics.summary"},
+            {"type": "query", "id": "admin-msg-gap-001"},
+            {"type": "dashboard_insight", "id": "insight-2026-07-01-nil"},
+        ]
+        yield (
+            "updates",
+            {
+                "save_response": {
+                    "completion_result": {
+                        "status": "complete",
+                        "task_id": initial_state["task_id"],
+                        "session_id": initial_state["session_id"],
+                        "assistant_message_id": initial_state["assistant_message_id"],
+                        "answer_type": "analytics_answer",
+                        "references": references,
+                        "answer": "Seeded admin context captured.",
                     }
                 }
             },

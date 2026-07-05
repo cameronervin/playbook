@@ -123,9 +123,14 @@ def _build_runtime_context(state: dict[str, Any]) -> str:
             ),
             (
                 "Policy/process claims should use official KB evidence from "
-                "search_playbook_knowledgebase. If no returned source supports "
-                'the answer, submit answer_type "unsupported" and direct the '
-                "athlete to the athletic department."
+                "search_playbook_knowledgebase, including NIL, compliance, "
+                "academic support, team travel, Teamworks, extra-benefit, "
+                "transportation, fees, meals, lodging, services, tutoring, "
+                "study hall, and absence-letter questions. Search the KB before "
+                "finalizing an answer to these official department-support "
+                "questions. If no returned source supports the answer, submit "
+                'answer_type "unsupported" and direct the athlete to the '
+                "athletic department."
             ),
             (
                 "If Ready conversation file count is 0, do not call "

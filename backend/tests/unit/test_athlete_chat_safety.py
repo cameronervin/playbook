@@ -27,6 +27,18 @@ def test_medical_and_legal_prompts_decline_without_agent() -> None:
     assert not hasattr(legal, "requires_kb_support")
 
 
+def test_lease_drafting_prompts_decline_as_legal_boundary() -> None:
+    decision = evaluate_athlete_message_safety(
+        "My lease says no sublet. What should I write to my landlord?"
+    )
+
+    assert decision.bypass_agent is True
+    assert decision.answer_type == "refusal"
+    assert decision.safety_outcome == "legal"
+    assert "legal advice" in decision.response_text
+    assert not hasattr(decision, "requires_kb_support")
+
+
 def test_nil_and_compliance_prompts_do_not_set_kb_guardrail_metadata() -> None:
     decision = evaluate_athlete_message_safety(
         "Can I accept this NIL deal under compliance rules?"

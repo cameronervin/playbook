@@ -141,7 +141,7 @@ class AdminAnalyticsService:
                 organization_id=organization_id,
                 settings=self.settings,
             )
-            for record in records[:resolved_max_queries]
+            for record in _visible_query_records(records)[:resolved_max_queries]
         ]
         return AdminAnalyticsSnapshot(
             summary=_summary_from_records(
@@ -150,8 +150,8 @@ class AdminAnalyticsService:
                 window_end=window_end,
             ),
             queries=query_responses,
-            source_message_ids=[record.message_id for record in records],
-        )
+        source_message_ids=[record.message_id for record in records],
+    )
 
     async def _filtered_records(
         self,
@@ -220,10 +220,11 @@ def format_snapshot_context(snapshot: AdminAnalyticsSnapshot) -> str:
     if snapshot.queries:
         lines.append("## Anonymized Query Examples")
         for query in snapshot.queries:
+            message_id = query.display_message_id or str(query.message_id)
             lines.append(
                 "\n".join(
                     [
-                        f"Message ID: {query.message_id}",
+                        f"Message ID: {message_id}",
                         f"Anonymous user: {query.anonymous_user_key}",
                         f"Question: {query.text}",
                         "Topics: " + (", ".join(query.topic_labels) or "none"),
@@ -270,6 +271,12 @@ def _summary_from_records(
     )
 
 
+def _visible_query_records(
+    records: list[AnalyticsQueryRecord],
+) -> list[AnalyticsQueryRecord]:
+    return [record for record in records if not record.is_synthetic]
+
+
 def _volume_series_from_records(
     records: list[AnalyticsQueryRecord],
     *,
@@ -309,6 +316,7 @@ def _query_response(
 ) -> AdminAnalyticsQueryResponse:
     return AdminAnalyticsQueryResponse(
         message_id=record.message_id,
+        display_message_id=record.display_message_id,
         anonymous_user_key=_anonymous_user_key(
             organization_id=organization_id,
             athlete_id=record.athlete_id,

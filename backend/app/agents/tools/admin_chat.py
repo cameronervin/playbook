@@ -347,7 +347,7 @@ def _snapshot_queries(snapshot: Any) -> list[Any]:
 
 
 def _format_query(query: Any) -> str:
-    message_id = _query_value(query, "message_id")
+    message_id = _query_reference_id(query)
     return "\n".join(
         [
             f"Message ID: {message_id}",
@@ -376,6 +376,13 @@ def _query_value(query: Any, key: str) -> Any:
     if isinstance(query, dict):
         return query.get(key)
     return getattr(query, key, None)
+
+
+def _query_reference_id(query: Any) -> str:
+    display_id = _query_value(query, "display_message_id")
+    if display_id is not None and str(display_id).strip():
+        return str(display_id).strip()
+    return str(_query_value(query, "message_id") or "")
 
 
 def _insight_value(insight: Any, key: str) -> Any:

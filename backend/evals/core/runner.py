@@ -80,10 +80,29 @@ def _item_input(item: Any) -> Any:
     return getattr(item, "input", None)
 
 
-def _expected_output(item: Any) -> Any:
+def _first_present_mapping(mapping: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in mapping:
+            return mapping[key]
+    return None
+
+
+def _first_present_attr(obj: Any, names: tuple[str, ...]) -> Any:
+    for name in names:
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return None
+
+
+def _expected_output(item: Any, kwargs: dict[str, Any] | None = None) -> Any:
+    keys = ("expected_output", "expectedOutput", "expected")
+    if kwargs:
+        value = _first_present_mapping(kwargs, keys)
+        if value is not None:
+            return value
     if isinstance(item, dict):
-        return item.get("expected_output")
-    return getattr(item, "expected_output", None)
+        return _first_present_mapping(item, keys)
+    return _first_present_attr(item, keys)
 
 
 def _input_cache_key(input_obj: Any) -> str:
@@ -223,7 +242,7 @@ async def run_spec(
 
         trace_id = langfuse.get_current_trace_id()
         graph_run.trace_id = trace_id
-        expected_output = _expected_output(item)
+        expected_output = _expected_output(item, kwargs)
         scores, item_errors = await score_run(spec, graph_run, expected_output)
 
         with state.lock:

@@ -190,8 +190,9 @@ def create_admin_chat_nodes(*, chains: dict[str, Any]) -> dict[str, Any]:
         context.dashboard_insights = insights
         allowed_references = _allowed_references(snapshot=snapshot, insights=insights)
         context.allowed_references = allowed_references
+        snapshot_context = format_snapshot_context(snapshot)
         return {
-            "snapshot_context": format_snapshot_context(snapshot),
+            "snapshot_context": snapshot_context,
             "dashboard_insight_context": _format_dashboard_insight_context(insights),
             "allowed_references": allowed_references,
         }
@@ -433,7 +434,11 @@ def _allowed_references(
 ) -> list[dict[str, str]]:
     allowed: list[dict[str, str]] = [{"type": "metric", "id": "analytics.summary"}]
     for query in getattr(snapshot, "queries", []):
-        message_id = getattr(query, "message_id", None)
+        message_id = getattr(query, "display_message_id", None) or getattr(
+            query,
+            "message_id",
+            None,
+        )
         if message_id is not None:
             allowed.append({"type": "query", "id": str(message_id)})
     for insight in insights:

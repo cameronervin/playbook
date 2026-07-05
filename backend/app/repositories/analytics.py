@@ -22,6 +22,7 @@ class AnalyticsQueryRecord:
     """Internal joined query row used by admin analytics services."""
 
     message_id: UUID
+    display_message_id: str | None
     conversation_id: UUID
     athlete_id: UUID
     text: str
@@ -31,6 +32,7 @@ class AnalyticsQueryRecord:
     topic_labels: list[str]
     risk_labels: list[str]
     unanswered_reason: str | None
+    is_synthetic: bool = False
 
 
 class AdminAnalyticsRepository:
@@ -89,6 +91,7 @@ class AdminAnalyticsRepository:
             records.append(
                 AnalyticsQueryRecord(
                     message_id=user_row.id,
+                    display_message_id=_display_message_id(user_row),
                     conversation_id=user_row.conversation_id,
                     athlete_id=athlete_id,
                     text=user_row.content,
@@ -102,6 +105,7 @@ class AdminAnalyticsRepository:
                         assistant_row.risk_labels if assistant_row else []
                     ),
                     unanswered_reason=_unanswered_reason(assistant_row),
+                    is_synthetic=_is_eval_synthetic(user_row),
                 )
             )
         return records
@@ -373,9 +377,30 @@ def _answer_type(assistant_row: ConversationMessage | None) -> str | None:
     return str(raw) if raw else None
 
 
+def _display_message_id(user_row: ConversationMessage) -> str | None:
+    metadata = user_row.message_metadata or {}
+    for key in ("display_message_id", "eval_message_id", "message_alias"):
+        value = metadata.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def _is_eval_synthetic(user_row: ConversationMessage) -> bool:
+    value = (user_row.message_metadata or {}).get("eval_synthetic")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes"}
+    return False
+
+
 def _unanswered_reason(assistant_row: ConversationMessage | None) -> str | None:
     if assistant_row is None:
         return "no_assistant_response"
+    metadata_reason = assistant_row.message_metadata.get("unanswered_reason")
+    if metadata_reason is not None and str(metadata_reason).strip():
+        return str(metadata_reason).strip()
     answer_type = _answer_type(assistant_row)
     if assistant_row.status in {"declined", "failed"}:
         return assistant_row.status

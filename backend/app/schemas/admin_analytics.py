@@ -43,6 +43,7 @@ class AdminAnalyticsQueryResponse(BaseModel):
     """An anonymized athlete query row for admin review."""
 
     message_id: UUID
+    display_message_id: str | None = None
     anonymous_user_key: str
     text: str
     created_at: datetime

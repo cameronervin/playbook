@@ -30,8 +30,20 @@ if TYPE_CHECKING:
 # Evaluator models — pinned to LiteLLM (OpenAI-compatible).
 # --------------------------------------------------------------------------- #
 def _eval_litellm_api_key(settings: Any) -> str:
-    """Return the scoped eval key, falling back to the backend LiteLLM key."""
-    return settings.EVAL_LITELLM_API_KEY or settings.LITELLM_API_KEY or "x"
+    """Return the scoped eval key and enforce separation from backend runtime keys."""
+    eval_key = str(settings.EVAL_LITELLM_API_KEY or "").strip()
+    backend_key = str(settings.LITELLM_API_KEY or "").strip()
+    if not eval_key:
+        raise RuntimeError(
+            "EVAL_LITELLM_API_KEY is required for eval judge and embedding calls. "
+            "Generate a scoped eval LiteLLM virtual key instead of falling back "
+            "to the backend runtime key."
+        )
+    if backend_key and eval_key == backend_key:
+        raise RuntimeError(
+            "EVAL_LITELLM_API_KEY must be distinct from LITELLM_API_KEY."
+        )
+    return eval_key
 
 
 @lru_cache

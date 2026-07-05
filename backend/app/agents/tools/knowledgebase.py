@@ -76,8 +76,11 @@ ATHLETE_KB_TOOL_PROFILE = KnowledgebaseToolProfile(
     tool_name="search_playbook_knowledgebase",
     description=(
         "Search official Playbook athletic department knowledge base sources for "
-        "athlete NIL, compliance, recruiting, reporting, and process guidance. "
-        "Use this before making unsupported policy or process claims. If no "
+        "athlete NIL, compliance, recruiting, reporting, academic support, team "
+        "travel, Teamworks, extra-benefit, and process guidance. Use this before "
+        "making unsupported policy or process claims, including questions about "
+        "tutoring, study hall, absence letters, per diem, rides, meals, fees, "
+        "memberships, lodging, services, or transportation benefits. If no "
         "returned source supports the answer, stop searching and answer "
         "unsupported."
     ),
@@ -108,9 +111,9 @@ class KnowledgebaseSearchInput(BaseModel):
     query: str = Field(
         description=(
             "focused official policy or process search terms for the athlete's "
-            "current NIL, compliance, recruiting, reporting, or department "
-            "process question. Do not repeat an equivalent query in the same "
-            "answer."
+            "current NIL, compliance, recruiting, reporting, academic-support, "
+            "team travel, Teamworks, extra-benefit, or department process "
+            "question. Do not repeat an equivalent query in the same answer."
         )
     )
     max_docs: int | None = Field(

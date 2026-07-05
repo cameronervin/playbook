@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 import structlog
 import yaml
@@ -34,6 +37,41 @@ _EXTERNALIZE_BUDGET_BYTES = 900_000
 
 BLOB_REF_KEY = "$blob_ref"
 _BLOB_DIRNAME = "_blobs"
+_SYNC_MAX_ATTEMPTS = 3
+_SYNC_RETRY_BACKOFF_SECONDS = 2.0
+_RETRYABLE_LANGFUSE_ERRORS = {
+    "ConnectError",
+    "ConnectTimeout",
+    "NetworkError",
+    "ReadError",
+    "ReadTimeout",
+    "RemoteProtocolError",
+    "TimeoutException",
+}
+
+_T = TypeVar("_T")
+
+
+def _is_retryable_langfuse_error(exc: Exception) -> bool:
+    return isinstance(exc, TimeoutError) or type(exc).__name__ in _RETRYABLE_LANGFUSE_ERRORS
+
+
+def _langfuse_call(operation: str, call: Callable[[], _T]) -> _T:
+    for attempt in range(1, _SYNC_MAX_ATTEMPTS + 1):
+        try:
+            return call()
+        except Exception as exc:  # noqa: BLE001 - retry only known transient transport errors
+            if attempt == _SYNC_MAX_ATTEMPTS or not _is_retryable_langfuse_error(exc):
+                raise
+            logger.warning(
+                "langfuse_sync_retry",
+                operation=operation,
+                attempt=attempt,
+                max_attempts=_SYNC_MAX_ATTEMPTS,
+                error=str(exc),
+            )
+            time.sleep(_SYNC_RETRY_BACKOFF_SECONDS * attempt)
+    raise RuntimeError(f"Langfuse operation did not complete: {operation}")
 
 
 def _stable_id(item: dict) -> str:
@@ -139,7 +177,10 @@ def sync_dataset_to_langfuse(yaml_path: str, dataset_name: str) -> int:
     from langfuse import get_client  # noqa: PLC0415
 
     langfuse = get_client()
-    langfuse.create_dataset(name=dataset_name)  # idempotent: no-op if it exists
+    _langfuse_call(
+        f"create_dataset:{dataset_name}",
+        lambda: langfuse.create_dataset(name=dataset_name),
+    )  # idempotent: no-op if it exists
 
     dataset_path = Path(yaml_path)
     blob_dir = dataset_path.parent / _BLOB_DIRNAME
@@ -149,13 +190,16 @@ def sync_dataset_to_langfuse(yaml_path: str, dataset_name: str) -> int:
     for item in items:
         item_id = _stable_id(item)  # from original input -> stable across syncs
         prepared, _ = externalize_oversized(item, blob_dir=blob_dir, item_id=item_id)
-        langfuse.create_dataset_item(
-            dataset_name=dataset_name,
-            id=item_id,  # stable id => upsert, not duplicate
-            input=prepared["input"],
-            expected_output=prepared.get("expected_output"),
-            metadata=prepared.get("metadata"),
+        _langfuse_call(
+            f"create_dataset_item:{dataset_name}:{item_id}",
+            lambda prepared=prepared, item_id=item_id: langfuse.create_dataset_item(
+                dataset_name=dataset_name,
+                id=item_id,  # stable id => upsert, not duplicate
+                input=prepared["input"],
+                expected_output=prepared.get("expected_output"),
+                metadata=prepared.get("metadata"),
+            ),
         )
-    langfuse.flush()
+    _langfuse_call(f"flush:{dataset_name}", langfuse.flush)
     logger.info("dataset_synced", dataset=dataset_name, items=len(items))
     return len(items)

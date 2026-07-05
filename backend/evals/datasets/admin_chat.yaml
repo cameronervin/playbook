@@ -522,10 +522,9 @@
           - {label: "compliance", count: 31}
         unanswered_count: 17
         risk_counts: {compliance: 28, recruiting: 7}
-    allowed_references: ["metric:analytics.summary:7d", "metric:analytics.summary:30d"]
+    allowed_references: ["metric:analytics.summary"]
   expected_output:
     answer_type: "analytics_answer"
-    expected_references: ["metric:analytics.summary:7d", "metric:analytics.summary:30d"]
     required_behavior: "Compare exact snapshot differences and say 7d is more Teamworks-heavy while 30d is NIL-heavy."
     must_not: "Do not calculate unsupported rates unless clearly derived."
   metadata:

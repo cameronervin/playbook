@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from evals.core.types import EvalSpec
-from evals.specs._judges import playbook_structural_release_judge
+from evals.specs._judges import admin_structural_release_judge
 from evals.specs.playbook_adapters import make_admin_chat_executor_adapter
 
 _NAME = "admin_chat"
@@ -17,7 +17,7 @@ SPEC = EvalSpec(
         f"evals/rubrics/{_NAME}.yaml",
         f"evals/rubrics/{_DETERMINISTIC_NAME}.yaml",
     ],
-    judge=playbook_structural_release_judge(
+    judge=admin_structural_release_judge(
         content_rubric_name=_NAME,
         deterministic_rubric_name=_DETERMINISTIC_NAME,
     ),

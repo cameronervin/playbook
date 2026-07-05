@@ -70,9 +70,11 @@ def _record(
     topic_labels: list[str] | None = None,
     risk_labels: list[str] | None = None,
     unanswered_reason: str | None = None,
+    is_synthetic: bool = False,
 ) -> AnalyticsQueryRecord:
     return AnalyticsQueryRecord(
         message_id=uuid4(),
+        display_message_id=None,
         conversation_id=uuid4(),
         athlete_id=athlete_id or uuid4(),
         text=text,
@@ -82,6 +84,7 @@ def _record(
         topic_labels=topic_labels or [],
         risk_labels=risk_labels or [],
         unanswered_reason=unanswered_reason,
+        is_synthetic=is_synthetic,
     )
 
 
@@ -280,6 +283,49 @@ async def test_build_snapshot_limits_examples_but_keeps_full_summary_and_sources
     assert snapshot.summary.query_volume == 3
     assert [query.text for query in snapshot.queries] == ["Question 1", "Question 2"]
     assert snapshot.source_message_ids == [record.message_id for record in records]
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_hides_synthetic_eval_examples_but_counts_them(
+    test_settings,
+) -> None:
+    organization_id = uuid4()
+    real_record = _record(
+        text="Can the collective pay for my travel?",
+        created_at=datetime(2026, 6, 5, tzinfo=UTC),
+        topic_labels=["nil"],
+        risk_labels=["compliance"],
+        unanswered_reason="unsupported",
+    )
+    synthetic_record = _record(
+        text="Synthetic nil eval question 2",
+        created_at=datetime(2026, 6, 4, tzinfo=UTC),
+        topic_labels=["nil"],
+        risk_labels=["compliance"],
+        is_synthetic=True,
+    )
+    service = AdminAnalyticsService(
+        None,  # type: ignore[arg-type]
+        analytics_repo=FakeAnalyticsRepository([real_record, synthetic_record]),  # type: ignore[arg-type]
+        settings=test_settings,
+    )
+
+    snapshot = await service.build_snapshot(
+        organization_id=organization_id,
+        window_start=datetime(2026, 6, 1, tzinfo=UTC),
+        window_end=datetime(2026, 6, 8, tzinfo=UTC),
+        max_queries=10,
+    )
+
+    assert snapshot.summary.query_volume == 2
+    assert snapshot.summary.risk_counts == {"compliance": 2}
+    assert [query.text for query in snapshot.queries] == [
+        "Can the collective pay for my travel?"
+    ]
+    assert snapshot.source_message_ids == [
+        real_record.message_id,
+        synthetic_record.message_id,
+    ]
 
 
 def test_resolve_analytics_window_accepts_explicit_naive_datetimes(test_settings) -> None:

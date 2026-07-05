@@ -48,6 +48,52 @@ class _RecordingMetric:
         return 1.0
 
 
+class _LowNativeMetric:
+    async def single_turn_ascore(self, sample: _FakeSingleTurnSample) -> float:
+        return 0.2
+
+
+class _PassingAspectMetric:
+    async def single_turn_ascore(self, sample: _FakeSingleTurnSample) -> float:
+        return 1.0
+
+
+class _PassingLLMJudge:
+    def __init__(self, chat_model: object) -> None:
+        self.chat_model = chat_model
+
+    async def score(
+        self,
+        *,
+        run: GraphRun,
+        rubric: Rubric,
+        expected_output: object,
+    ) -> list[ragas_module.Score]:
+        return [
+            ragas_module.Score(
+                name=criterion.name,
+                value=1.0,
+                data_type="NUMERIC",
+                comment="fallback judge passed",
+            )
+            for criterion in rubric.criteria
+        ]
+
+
+class _FailingLLMJudge:
+    def __init__(self, chat_model: object) -> None:
+        self.chat_model = chat_model
+
+    async def score(
+        self,
+        *,
+        run: GraphRun,
+        rubric: Rubric,
+        expected_output: object,
+    ) -> list[ragas_module.Score]:
+        raise ValueError("fallback parser failed")
+
+
 def _fake_context_metric_ragas() -> dict[str, object]:
     return {
         "SingleTurnSample": _FakeSingleTurnSample,
@@ -71,6 +117,32 @@ def _fake_recording_metric_ragas() -> dict[str, object]:
         "Faithfulness": lambda llm: _RecordingMetric(),
         "ResponseRelevancy": lambda llm, embeddings: _RecordingMetric(),
         "AspectCritic": lambda name, definition, llm: _RecordingMetric(),
+    }
+
+
+def _fake_low_generation_metric_ragas() -> dict[str, object]:
+    return {
+        "SingleTurnSample": _FakeSingleTurnSample,
+        "LangchainLLMWrapper": lambda model: model,
+        "LangchainEmbeddingsWrapper": lambda embeddings: embeddings,
+        "ContextPrecision": lambda llm: _RecordingMetric(),
+        "ContextRecall": lambda llm: _RecordingMetric(),
+        "Faithfulness": lambda llm: _LowNativeMetric(),
+        "ResponseRelevancy": lambda llm, embeddings: _LowNativeMetric(),
+        "AspectCritic": lambda name, definition, llm: _PassingAspectMetric(),
+    }
+
+
+def _fake_low_context_recall_metric_ragas() -> dict[str, object]:
+    return {
+        "SingleTurnSample": _FakeSingleTurnSample,
+        "LangchainLLMWrapper": lambda model: model,
+        "LangchainEmbeddingsWrapper": lambda embeddings: embeddings,
+        "ContextPrecision": lambda llm: _RecordingMetric(),
+        "ContextRecall": lambda llm: _LowNativeMetric(),
+        "Faithfulness": lambda llm: _RecordingMetric(),
+        "ResponseRelevancy": lambda llm, embeddings: _RecordingMetric(),
+        "AspectCritic": lambda name, definition, llm: _PassingAspectMetric(),
     }
 
 
@@ -214,3 +286,125 @@ async def test_ragas_judge_uses_required_behavior_as_reference(
     assert _RecordingMetric.seen_samples[0].kwargs["reference"] == (
         "Tell the athlete to disclose before activity."
     )
+
+
+@pytest.mark.asyncio
+async def test_ragas_judge_falls_back_to_aspect_for_low_generation_scores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ragas_module, "_ragas", _fake_low_generation_metric_ragas)
+    monkeypatch.setattr(ragas_module, "LLMJudge", _PassingLLMJudge)
+
+    scores = await ragas_module.RagasJudge(
+        chat_model=object(),
+        embeddings=object(),
+    ).score(
+        run=GraphRun(
+            input={"question": "Can I accept free shoes?"},
+            output={"answer": "Do not accept them unless Compliance approves first."},
+            events=[
+                {
+                    "retriever": {
+                        "documents": [
+                            "Athletes should not accept free gear unless Compliance approves."
+                        ]
+                    }
+                }
+            ],
+        ),
+        rubric=Rubric(
+            name="rag_generation",
+            description="generation",
+            criteria=[
+                Criterion(name="faithfulness", description="grounded in context"),
+                Criterion(name="answer_relevancy", description="answers the user"),
+            ],
+        ),
+        expected_output={
+            "answer_type": "grounded_answer",
+            "expected_source_ids": ["src:gear#chunk-1"],
+            "required_behavior": "Tell the athlete not to accept without approval.",
+        },
+    )
+
+    assert {score.name: score.value for score in scores} == {
+        "faithfulness": 1.0,
+        "answer_relevancy": 1.0,
+    }
+    assert all(
+        "llm_aspect_fallback_after_ragas_low_score" in (score.comment or "")
+        for score in scores
+    )
+    assert all("native=0.200" in (score.comment or "") for score in scores)
+
+
+@pytest.mark.asyncio
+async def test_ragas_judge_falls_back_to_llm_for_low_context_recall(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ragas_module, "_ragas", _fake_low_context_recall_metric_ragas)
+    monkeypatch.setattr(ragas_module, "LLMJudge", _PassingLLMJudge)
+
+    scores = await ragas_module.RagasJudge(chat_model=object()).score(
+        run=GraphRun(
+            input={"question": "Can I use the source?"},
+            output={"answer": "Use the current policy."},
+            events=[{"retriever": {"documents": ["Use the current policy."]}}],
+        ),
+        rubric=Rubric(
+            name="rag_retrieval",
+            description="retrieval",
+            criteria=[Criterion(name="context_recall", description="context covers reference")],
+        ),
+        expected_output={
+            "answer_type": "grounded_answer",
+            "expected_source_ids": ["src:policy#chunk-1"],
+            "required_behavior": "Use the current policy.",
+        },
+    )
+
+    assert scores[0].name == "context_recall"
+    assert scores[0].value == 1.0
+    assert "llm_aspect_fallback_after_ragas_low_score" in (scores[0].comment or "")
+    assert "native=0.200" in (scores[0].comment or "")
+
+
+@pytest.mark.asyncio
+async def test_ragas_judge_keeps_native_score_when_generation_fallback_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ragas_module, "_ragas", _fake_low_generation_metric_ragas)
+    monkeypatch.setattr(ragas_module, "LLMJudge", _FailingLLMJudge)
+
+    scores = await ragas_module.RagasJudge(
+        chat_model=object(),
+        embeddings=object(),
+    ).score(
+        run=GraphRun(
+            input={"question": "Can I accept free shoes?"},
+            output={"answer": "Do not accept them unless Compliance approves first."},
+            events=[
+                {
+                    "retriever": {
+                        "documents": [
+                            "Athletes should not accept free gear unless Compliance approves."
+                        ]
+                    }
+                }
+            ],
+        ),
+        rubric=Rubric(
+            name="rag_generation",
+            description="generation",
+            criteria=[Criterion(name="faithfulness", description="grounded in context")],
+        ),
+        expected_output={
+            "answer_type": "grounded_answer",
+            "expected_source_ids": ["src:gear#chunk-1"],
+            "required_behavior": "Tell the athlete not to accept without approval.",
+        },
+    )
+
+    assert scores[0].value == 0.2
+    assert "llm_fallback_failed_after_ragas_low_score" in (scores[0].comment or "")
+    assert "native=0.200" in (scores[0].comment or "")
